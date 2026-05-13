@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { generateVTPdf, generateDisciplinaryPdf } from '@/lib/utils/pdfGenerator'
 import type { Employee, VtRecord, DisciplinaryRecord } from '@/types'
 
-function formatDate(dateStr: string | null) {
+function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return null
   const parts = dateStr.split('-')
   if (parts.length !== 3) return dateStr

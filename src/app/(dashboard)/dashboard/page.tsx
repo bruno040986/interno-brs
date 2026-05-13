@@ -3,7 +3,7 @@ import {
   Users, UserX, Bus, AlertTriangle, TrendingUp, FileText, Clock, CheckCircle
 } from 'lucide-react'
 
-function formatDate(dateStr: string | null) {
+function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return '-'
   // Se for uma string ISO completa (TIMESTAMP), pegamos só a data
   const dateOnly = dateStr.split('T')[0]

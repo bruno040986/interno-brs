@@ -9,7 +9,7 @@ import {
 import Link from 'next/link'
 import type { Employee } from '@/types'
 
-function formatDate(dateStr: string | null) {
+function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return '-'
   const parts = dateStr.split('-')
   if (parts.length !== 3) return dateStr
