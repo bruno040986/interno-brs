@@ -148,7 +148,7 @@ export default function PerfilColaboradorPage() {
                   <InfoItem label="Nome de Registro" value={employee.registration_name} />
                   <InfoItem label="CPF" value={maskCpf(employee.cpf)} />
                   <InfoItem label="RG" value={`${employee.rg || ''} ${employee.rg_issuer || ''}`} />
-                  <InfoItem label="Data de Nascimento" value={formatDate(employee.birth_date)} />
+                  <InfoItem label="Data de Nascimento" value={formatDate(employee.birth_date || null)} />
                   <InfoItem label="Gênero" value={employee.gender} />
                   <InfoItem label="PIS" value={employee.pis} />
                   <InfoItem label="Estado Civil" value={employee.civil_status} />
@@ -165,7 +165,7 @@ export default function PerfilColaboradorPage() {
                 <div className="form-grid form-grid-2">
                   <InfoItem label="Cargo" value={employee.job_title} />
                   <InfoItem label="Setor" value={employee.department} />
-                  <InfoItem label="Data de Admissão" value={formatDate(employee.admission_date)} />
+                  <InfoItem label="Data de Admissão" value={formatDate(employee.admission_date || null)} />
                   <InfoItem label="Matrícula eSocial" value={employee.esocial_registration} />
                   <InfoItem label="Salário Bruto" value={employee.gross_salary ? `R$ ${employee.gross_salary.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : null} />
                   <InfoItem label="Gestor" value={employee.manager_name} />
