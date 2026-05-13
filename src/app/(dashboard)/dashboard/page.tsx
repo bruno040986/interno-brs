@@ -3,6 +3,15 @@ import {
   Users, UserX, Bus, AlertTriangle, TrendingUp, FileText, Clock, CheckCircle
 } from 'lucide-react'
 
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return '-'
+  // Se for uma string ISO completa (TIMESTAMP), pegamos só a data
+  const dateOnly = dateStr.split('T')[0]
+  const parts = dateOnly.split('-')
+  if (parts.length !== 3) return dateStr
+  return `${parts[2]}/${parts[1]}/${parts[0]}`
+}
+
 async function getDashboardStats(supabase: Awaited<ReturnType<typeof createClient>>) {
   const [
     { count: totalActive },
@@ -32,8 +41,8 @@ async function getDashboardStats(supabase: Awaited<ReturnType<typeof createClien
 async function getRecentDocs(supabase: Awaited<ReturnType<typeof createClient>>) {
   const [{ data: vtDocs }, { data: discDocs }] = await Promise.all([
     supabase.from('vt_records')
-      .select('id, type, generated_at, employee:employees(name, cpf)')
-      .order('generated_at', { ascending: false })
+      .select('id, type, option_date, employee:employees(name, cpf)')
+      .order('option_date', { ascending: false })
       .limit(5),
     supabase.from('disciplinary_records')
       .select('id, type, application_date, employee:employees(name, cpf), reason:disciplinary_reasons(name)')
@@ -138,7 +147,7 @@ export default async function DashboardPage() {
                       </td>
                       <td style={{ fontSize: '0.8rem', color: 'var(--brs-gray-400)' }}>
                         <Clock size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                        {doc.generated_at ? new Date(doc.generated_at).toLocaleDateString('pt-BR') : '-'}
+                        {formatDate(doc.option_date)}
                       </td>
                     </tr>
                   ))}
@@ -169,6 +178,7 @@ export default async function DashboardPage() {
                     <th>Colaborador</th>
                     <th>Tipo</th>
                     <th>Motivo</th>
+                    <th>Data</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -184,6 +194,9 @@ export default async function DashboardPage() {
                         </span>
                       </td>
                       <td style={{ fontSize: '0.8rem' }}>{doc.reason?.name ?? '-'}</td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--brs-gray-400)' }}>
+                        {formatDate(doc.application_date)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

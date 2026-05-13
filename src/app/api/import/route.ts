@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import {
-  QUARKRH_COLUMN_MAP, DATE_FIELDS, MONEY_FIELDS,
-  normalizeCpf, validateCpf, parseDate, parseMoney
+  QUARKRH_COLUMN_MAP, DATE_FIELDS, MONEY_FIELDS, BOOLEAN_FIELDS,
+  normalizeCpf, validateCpf, parseDate, parseMoney, parseBoolean
 } from '@/lib/import/columnMap'
 import * as XLSX from 'xlsx'
 
@@ -46,9 +46,12 @@ export async function POST(request: NextRequest) {
           const fieldName = QUARKRH_COLUMN_MAP[header]
           if (!fieldName) return
           let value: unknown = row[colIdx]
+          
           if (DATE_FIELDS.includes(fieldName)) value = parseDate(value)
           else if (MONEY_FIELDS.includes(fieldName)) value = parseMoney(value)
+          else if (BOOLEAN_FIELDS.includes(fieldName)) value = parseBoolean(value)
           else if (value !== null && value !== undefined) value = String(value).trim() || null
+          
           record[fieldName] = value ?? null
         })
 
@@ -76,15 +79,28 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (existing) {
-          await supabase.from('employees').update({ ...record, updated_at: new Date().toISOString() }).eq('cpf', cpf)
+          const { error: updateErr } = await supabase
+            .from('employees')
+            .update({ ...record, updated_at: new Date().toISOString() })
+            .eq('cpf', cpf)
+          
+          if (updateErr) throw new Error(`Erro ao atualizar: ${updateErr.message}`)
           updated++
         } else {
-          await supabase.from('employees').insert(record)
+          const { error: insertErr } = await supabase
+            .from('employees')
+            .insert(record)
+          
+          if (insertErr) throw new Error(`Erro ao inserir: ${insertErr.message}`)
           created++
         }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Erro desconhecido'
-        errors.push({ row: i + 2, cpf: String((dataRows[i] as unknown[])[headers.indexOf('CPF')] ?? ''), error: message })
+        errors.push({ 
+          row: i + 2, 
+          cpf: String((dataRows[i] as unknown[])[headers.indexOf('CPF')] ?? 'Desconhecido'), 
+          error: message 
+        })
         errorCount++
       }
     }

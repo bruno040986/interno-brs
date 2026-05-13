@@ -73,6 +73,9 @@ export const DATE_FIELDS = ['birth_date', 'rg_issue_date', 'admission_date', 'te
 /** Campos monetários — convertidos para número */
 export const MONEY_FIELDS = ['gross_salary']
 
+/** Campos booleanos — convertidos para true/false (Sim/Não) */
+export const BOOLEAN_FIELDS = ['pcd']
+
 /** Normaliza CPF removendo máscara e espaços */
 export function normalizeCpf(value: string): string {
   return String(value ?? '').replace(/\D/g, '').padStart(11, '0')
@@ -97,10 +100,14 @@ export function validateCpf(cpf: string): boolean {
 /** Converte data do QuarkRH (DD/MM/YYYY ou serial Excel) para YYYY-MM-DD */
 export function parseDate(value: unknown): string | null {
   if (!value) return null
+  
   if (typeof value === 'number') {
-    // Excel serial date
+    // Excel serial date: compensar o fuso horário local para garantir que a data seja interpretada como UTC 00:00
     const date = new Date(Math.round((value - 25569) * 86400 * 1000))
-    return date.toISOString().split('T')[0]
+    // Adicionamos as horas de diferença do fuso para não "voltar" um dia
+    const offset = date.getTimezoneOffset()
+    const adjustedDate = new Date(date.getTime() + (offset * 60 * 1000))
+    return adjustedDate.toISOString().split('T')[0]
   }
   const str = String(value).trim()
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
@@ -118,6 +125,13 @@ export function parseMoney(value: unknown): number | null {
   const str = String(value).replace(/[R$\s]/g, '').replace('.', '').replace(',', '.')
   const n = parseFloat(str)
   return isNaN(n) ? null : n
+}
+
+/** Converte Sim/Não ou True/False para booleano */
+export function parseBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  const str = String(value ?? '').trim().toLowerCase()
+  return str === 'sim' || str === 's' || str === 'yes' || str === 'true' || str === '1'
 }
 
 /** Similiaridade básica entre strings para sugestão de mapeamento */

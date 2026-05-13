@@ -7,7 +7,8 @@ import {
   AlertTriangle, ChevronLeft, Save, Loader2, 
   User, Calendar, Search, FileText, Info
 } from 'lucide-react'
-import type { Employee, DisciplinaryReason } from '@/types'
+import { generateVTPdf, generateDisciplinaryPdf } from '@/lib/utils/pdfGenerator'
+import type { Employee, DisciplinaryReason, DisciplinaryRecord } from '@/types'
 
 export default function NovaMedidaPage() {
   const router = useRouter()
@@ -119,10 +120,12 @@ export default function NovaMedidaPage() {
         status: 'active'
       }])
       .select()
-      .single()
-      
     if (!error && record) {
       const { data: { user } } = await supabase.auth.getUser()
+      const { data: profile } = await supabase.from('users').select('name').eq('id', user?.id).single()
+      const userName = profile?.name || user?.email || 'Sistema'
+      
+      // Log de Auditoria
       await supabase.from('audit_logs').insert({
         user_id: user?.id,
         action: 'generate_disciplinary_record',
@@ -130,7 +133,14 @@ export default function NovaMedidaPage() {
         entity_id: record.id,
         description: `Medida aplicada: ${type} para ${employees.find(e => e.id === selectedEmployeeId)?.name}`
       })
-      
+
+      // Gerar PDF imediatamente
+      generateDisciplinaryPdf({
+        ...record,
+        employee: employees.find(e => e.id === selectedEmployeeId),
+        generatedBy: userName
+      })
+
       router.push(`/colaboradores/${selectedEmployeeId}`)
     }
     
@@ -241,21 +251,29 @@ export default function NovaMedidaPage() {
                 <div className="form-grid form-grid-2">
                   <div className="form-group">
                     <label className="form-label">Supervisor Responsável</label>
-                    <input 
-                      type="text" 
+                    <select 
                       className="form-control" 
                       value={supervisor}
                       onChange={e => setSupervisor(e.target.value)}
-                    />
+                    >
+                      <option value="">Selecione o supervisor...</option>
+                      {employees.map(e => (
+                        <option key={e.id} value={e.name}>{e.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Testemunha</label>
-                    <input 
-                      type="text" 
+                    <select 
                       className="form-control" 
                       value={witness}
                       onChange={e => setWitness(e.target.value)}
-                    />
+                    >
+                      <option value="">Selecione a testemunha...</option>
+                      {employees.map(e => (
+                        <option key={e.id} value={e.name}>{e.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

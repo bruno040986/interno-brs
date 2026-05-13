@@ -9,7 +9,15 @@ import {
   FileText, Download, Trash2, History
 } from 'lucide-react'
 import Link from 'next/link'
+import { generateVTPdf, generateDisciplinaryPdf } from '@/lib/utils/pdfGenerator'
 import type { Employee, VtRecord, DisciplinaryRecord } from '@/types'
+
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return null
+  const parts = dateStr.split('-')
+  if (parts.length !== 3) return dateStr
+  return `${parts[2]}/${parts[1]}/${parts[0]}`
+}
 
 export default function PerfilColaboradorPage() {
   const { id } = useParams()
@@ -19,6 +27,7 @@ export default function PerfilColaboradorPage() {
   const [discRecords, setDiscRecords] = useState<DisciplinaryRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('dados')
+  const [currentUser, setCurrentUser] = useState<any>(null)
   
   const supabase = createClient()
 
@@ -26,15 +35,20 @@ export default function PerfilColaboradorPage() {
     if (!id) return
     setLoading(true)
     
-    const [empRes, vtRes, discRes] = await Promise.all([
+    const [empRes, vtRes, discRes, userRes] = await Promise.all([
       supabase.from('employees').select('*').eq('id', id).single(),
-      supabase.from('vt_records').select('*, unit:company_units(*)').eq('employee_id', id).order('generated_at', { ascending: false }),
-      supabase.from('disciplinary_records').select('*, reason:disciplinary_reasons(*)').eq('employee_id', id).order('occurrence_date', { ascending: false })
+      supabase.from('vt_records').select('*, unit:company_units(*), vt_routes(*)').eq('employee_id', id).order('option_date', { ascending: false }),
+      supabase.from('disciplinary_records').select('*, reason:disciplinary_reasons(*)').eq('employee_id', id).order('occurrence_date', { ascending: false }),
+      supabase.auth.getUser()
     ])
     
     if (empRes.data) setEmployee(empRes.data as Employee)
     if (vtRes.data) setVtRecords(vtRes.data as VtRecord[])
     if (discRes.data) setDiscRecords(discRes.data as DisciplinaryRecord[])
+    if (userRes.data?.user) {
+      const { data: profile } = await supabase.from('users').select('name').eq('id', userRes.data.user.id).single()
+      setCurrentUser(profile?.name || userRes.data.user.email)
+    }
     
     setLoading(false)
   }, [id, supabase])
@@ -80,7 +94,7 @@ export default function PerfilColaboradorPage() {
           </p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem' }}>
-          <Link href={`/vale-transporte/opcao/${employee.id}`} className="btn btn-primary">
+          <Link href={`/vale-transporte/novo/${employee.id}`} className="btn btn-primary">
             <Bus size={16} />
             Gerar Termo VT
           </Link>
@@ -134,7 +148,7 @@ export default function PerfilColaboradorPage() {
                   <InfoItem label="Nome de Registro" value={employee.registration_name} />
                   <InfoItem label="CPF" value={maskCpf(employee.cpf)} />
                   <InfoItem label="RG" value={`${employee.rg || ''} ${employee.rg_issuer || ''}`} />
-                  <InfoItem label="Data de Nascimento" value={employee.birth_date ? new Date(employee.birth_date).toLocaleDateString('pt-BR') : null} />
+                  <InfoItem label="Data de Nascimento" value={formatDate(employee.birth_date)} />
                   <InfoItem label="Gênero" value={employee.gender} />
                   <InfoItem label="PIS" value={employee.pis} />
                   <InfoItem label="Estado Civil" value={employee.civil_status} />
@@ -151,7 +165,7 @@ export default function PerfilColaboradorPage() {
                 <div className="form-grid form-grid-2">
                   <InfoItem label="Cargo" value={employee.job_title} />
                   <InfoItem label="Setor" value={employee.department} />
-                  <InfoItem label="Data de Admissão" value={employee.admission_date ? new Date(employee.admission_date).toLocaleDateString('pt-BR') : null} />
+                  <InfoItem label="Data de Admissão" value={formatDate(employee.admission_date)} />
                   <InfoItem label="Matrícula eSocial" value={employee.esocial_registration} />
                   <InfoItem label="Salário Bruto" value={employee.gross_salary ? `R$ ${employee.gross_salary.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : null} />
                   <InfoItem label="Gestor" value={employee.manager_name} />
@@ -205,10 +219,10 @@ export default function PerfilColaboradorPage() {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Data</th>
+                      <th>Data Opção</th>
                       <th>Tipo</th>
                       <th>Unidade</th>
-                      <th>Valor Mensal</th>
+                      <th>Vigência</th>
                       <th style={{ textAlign: 'right' }}>Documento</th>
                     </tr>
                   </thead>
@@ -222,18 +236,45 @@ export default function PerfilColaboradorPage() {
                     ) : (
                       vtRecords.map(record => (
                         <tr key={record.id}>
-                          <td>{new Date(record.generated_at!).toLocaleDateString('pt-BR')}</td>
+                          <td>{formatDate(record.option_date)}</td>
                           <td>
                             <span className={`badge ${record.type === 'option' ? 'badge-success' : 'badge-danger'}`}>
                               {record.type === 'option' ? 'Opção' : 'Recusa'}
                             </span>
                           </td>
                           <td>{record.unit?.name || '-'}</td>
-                          <td>{record.monthly_estimated_total ? `R$ ${record.monthly_estimated_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}</td>
-                          <td style={{ textAlign: 'right' }}>
-                            <button className="btn btn-ghost btn-sm">
+                          <td>{formatDate(record.effective_date)}</td>
+                          <td style={{ textAlign: 'right', display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
+                            <Link href={`/vale-transporte/visualizar/${record.id}`} className="btn btn-ghost btn-sm" title="Visualizar">
+                              <FileText size={14} />
+                            </Link>
+                            <button 
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => generateVTPdf({ ...record, employee, generatedBy: currentUser })}
+                              title="PDF"
+                            >
                               <Download size={14} />
-                              PDF
+                            </button>
+                            <button 
+                              className="btn btn-ghost btn-sm text-danger"
+                              onClick={async () => {
+                                if (!confirm('Deseja excluir este registro?')) return
+                                const { data: latest } = await supabase.from('vt_records').select('id').eq('employee_id', id).order('option_date', { ascending: false }).limit(1).single()
+                                if (latest?.id !== record.id) {
+                                  alert('Somente o último registro pode ser excluído.')
+                                  return
+                                }
+                                const { error } = await supabase.from('vt_records').delete().eq('id', record.id)
+                                if (!error) {
+                                  const { data: prev } = await supabase.from('vt_records').select('type').eq('employee_id', id).order('option_date', { ascending: false }).limit(1).single()
+                                  const newStatus = prev ? (prev.type === 'option' ? 'optante' : 'recusou') : 'pendente'
+                                  await supabase.from('employees').update({ vt_status: newStatus }).eq('id', id)
+                                  fetchData()
+                                }
+                              }}
+                              title="Excluir"
+                            >
+                              <Trash2 size={14} />
                             </button>
                           </td>
                         </tr>
@@ -273,7 +314,7 @@ export default function PerfilColaboradorPage() {
                     ) : (
                       discRecords.map(record => (
                         <tr key={record.id}>
-                          <td>{new Date(record.application_date).toLocaleDateString('pt-BR')}</td>
+                          <td>{formatDate(record.application_date)}</td>
                           <td>
                             <span className={`badge ${
                               record.type === 'suspension' ? 'badge-danger' : 
@@ -286,7 +327,11 @@ export default function PerfilColaboradorPage() {
                           <td>{record.reason?.name}</td>
                           <td>{record.recurrence_number_by_reason}ª vez</td>
                           <td style={{ textAlign: 'right' }}>
-                            <button className="btn btn-ghost btn-sm">
+                            <button 
+                              className="btn btn-ghost btn-sm text-primary"
+                              onClick={() => generateDisciplinaryPdf({ ...record, employee, generatedBy: currentUser })}
+                              title="Baixar PDF"
+                            >
                               <Download size={14} />
                               PDF
                             </button>
@@ -303,7 +348,6 @@ export default function PerfilColaboradorPage() {
 
         {activeTab === 'reincidencia' && (
           <div className="stat-grid">
-            {/* Lógica para agrupar e mostrar reincidências por motivo */}
             <div className="stat-card">
               <div className="stat-icon navy"><AlertTriangle size={20} /></div>
               <div className="stat-value">{discRecords.filter(r => r.type !== 'suspension').length}</div>
