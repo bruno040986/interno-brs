@@ -34,19 +34,21 @@ export async function inviteUser(formData: {
 
     if (authError) throw authError
 
-    // 2. Criar perfil na tabela 'users'
+    // 2. Criar ou atualizar perfil na tabela 'users'
     const { error: profileError } = await supabaseAdmin
       .from('users')
-      .insert([
+      .upsert(
         {
           id: authData.user.id,
           email: formData.email,
           name: formData.name,
           role: formData.role,
           department: formData.department,
-          active: true
-        }
-      ])
+          active: true,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'id' }
+      )
 
     if (profileError) {
       // Se falhar ao criar o perfil, removemos o usuário do Auth para não gerar inconsistência
