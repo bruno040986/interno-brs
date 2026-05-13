@@ -115,6 +115,9 @@ export interface VtRecord {
   document_pdf_url?: string
   generated_by?: string
   generated_at?: string
+  option_date?: string
+  effective_date?: string
+  end_date?: string
   revoked_record_id?: string
   active: boolean
   created_at: string
