@@ -101,7 +101,30 @@ export default function VTUnifiedPage() {
     setSaving(true)
     
     try {
-      // 1. Criar registro de VT
+      // 1. Encerrar termo vigente anterior se existir
+      const { data: prevActive } = await supabase
+        .from('vt_records')
+        .select('id, effective_date')
+        .eq('employee_id', employee.id)
+        .is('end_date', null)
+        .order('effective_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (prevActive) {
+        // Data de fim é um dia antes da nova vigência
+        const newEffDate = new Date(effectiveDate + 'T12:00:00')
+        const endDate = new Date(newEffDate)
+        endDate.setDate(endDate.getDate() - 1)
+        const endDateStr = format(endDate, 'yyyy-MM-dd')
+        
+        await supabase
+          .from('vt_records')
+          .update({ end_date: endDateStr })
+          .eq('id', prevActive.id)
+      }
+
+      // 2. Criar registro de VT
       const { data: vtRecord, error: vtError } = await supabase
         .from('vt_records')
         .insert([{

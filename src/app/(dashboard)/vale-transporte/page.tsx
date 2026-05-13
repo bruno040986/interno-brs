@@ -137,6 +137,9 @@ export default function ValeTransportePage() {
                 <th>Colaborador</th>
                 <th>Tipo</th>
                 <th>Data Gerado</th>
+                <th>Início</th>
+                <th>Fim</th>
+                <th>Status</th>
                 <th>Unidade</th>
                 <th>Custo Empresa</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
@@ -144,10 +147,10 @@ export default function ValeTransportePage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '3rem' }}><span className="spinner" /></td></tr>
+                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}><span className="spinner" /></td></tr>
               ) : filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '3rem' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '3rem' }}>
                     <div className="empty-state">
                       <Bus size={40} style={{ color: 'var(--brs-gray-200)', marginBottom: '1rem' }} />
                       <h3 style={{ color: 'var(--brs-gray-600)' }}>Nenhum registro encontrado</h3>
@@ -167,6 +170,13 @@ export default function ValeTransportePage() {
                       </span>
                     </td>
                     <td>{format(new Date(record.generated_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}</td>
+                    <td>{record.effective_date ? format(new Date(record.effective_date + 'T12:00:00'), "dd/MM/yyyy") : '-'}</td>
+                    <td>{record.end_date ? format(new Date(record.end_date + 'T12:00:00'), "dd/MM/yyyy") : '-'}</td>
+                    <td>
+                      <span className={`badge ${!record.end_date ? 'badge-navy' : 'badge-gray'}`}>
+                        {!record.end_date ? 'Vigente' : 'Histórico'}
+                      </span>
+                    </td>
                     <td>{record.unit?.name || '-'}</td>
                     <td>{record.type === 'option' ? `R$ ${record.company_estimated_cost?.toFixed(2)}` : '-'}</td>
                     <td style={{ textAlign: 'right', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>

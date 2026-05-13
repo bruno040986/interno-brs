@@ -35,6 +35,15 @@ export default function MedidasDisciplinaresPage() {
     fetchRecords()
   }, [fetchRecords])
 
+  const translateType = (type: string) => {
+    switch (type) {
+      case 'verbal_warning': return 'Advertência Verbal'
+      case 'written_warning': return 'Advertência Escrita'
+      case 'suspension': return 'Suspensão Disciplinar'
+      default: return type
+    }
+  }
+
   const filteredRecords = records.filter(r => 
     r.employee?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     r.employee?.cpf.includes(searchTerm)
@@ -105,9 +114,10 @@ export default function MedidasDisciplinaresPage() {
                     </td>
                     <td>
                       <span className={`badge ${
-                        record.type === 'Suspensão' ? 'badge-danger' : 'badge-warning'
+                        record.type === 'suspension' ? 'badge-danger' : 
+                        record.type === 'verbal_warning' ? 'badge-info' : 'badge-warning'
                       }`}>
-                        {record.type}
+                        {translateType(record.type)}
                       </span>
                     </td>
                     <td>{record.reason?.name}</td>

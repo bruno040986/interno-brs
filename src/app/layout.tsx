@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "BRS RH — Sistema Interno",
   description: "Sistema interno de RH — BRS 2 Promotora Ltda",
+  icons: {
+    icon: "/favicon/BRS-GESTAO-ICONE-FUNDO-TRANSPARENTE.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

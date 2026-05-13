@@ -34,10 +34,10 @@ export default function LoginPage() {
       <div className="login-card">
         <div className="login-logo">
           <Image
-            src="/logo-dark.png"
+            src="/logotipos/BRS-GESTAO-FUNDO-CLARO.png"
             alt="BRS Gestão"
-            width={160}
-            height={52}
+            width={150}
+            height={75}
             style={{ objectFit: 'contain' }}
             priority
           />

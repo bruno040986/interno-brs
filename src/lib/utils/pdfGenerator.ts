@@ -51,7 +51,7 @@ export async function generateVTPdf(data: any) {
   }
 
   try {
-    doc.addImage('/logo-brs.png', 'PNG', 155, 10, 35, 18, undefined, 'FAST')
+    doc.addImage('/logotipos/BRS-GESTAO-FUNDO-CLARO.png', 'PNG', 150, 8, 40, 20, undefined, 'FAST')
   } catch (e) {
     doc.setFontSize(10)
     doc.setTextColor(27, 58, 107)
@@ -241,7 +241,7 @@ export async function generateDisciplinaryPdf(data: any) {
   doc.text(getTitle(), 20, 21)
   
   try {
-    doc.addImage('/logo-brs.png', 'PNG', 150, 11, 40, 16, undefined, 'FAST')
+    doc.addImage('/logotipos/BRS-GESTAO-FUNDO-CLARO.png', 'PNG', 150, 8, 40, 20, undefined, 'FAST')
   } catch (e) {
     doc.text('BRS GESTÃO', 190, 21, { align: 'right' })
   }

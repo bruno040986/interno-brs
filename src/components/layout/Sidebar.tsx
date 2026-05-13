@@ -85,7 +85,7 @@ export default function Sidebar({ user }: { user: UserProfile | null }) {
 
       <aside className={`sidebar${open ? ' open' : ''}`}>
         <div className="sidebar-logo">
-          <Image src="/logo-white.png" alt="BRS" width={120} height={36} style={{ objectFit: 'contain' }} />
+          <Image src="/logotipos/BRS-GESTAO-FUNDO-ESCURO.png" alt="BRS" width={140} height={70} style={{ objectFit: 'contain' }} />
           <div className="sidebar-logo-text">
             <span className="sidebar-logo-sub">Sistema RH</span>
           </div>

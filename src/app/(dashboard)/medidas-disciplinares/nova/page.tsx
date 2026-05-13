@@ -120,7 +120,8 @@ export default function NovaMedidaPage() {
         status: 'active'
       }])
       .select()
-    if (!error && record) {
+    if (!error && record && record.length > 0) {
+      const newRecord = record[0]
       const { data: { user } } = await supabase.auth.getUser()
       const { data: profile } = await supabase.from('users').select('name').eq('id', user?.id).single()
       const userName = profile?.name || user?.email || 'Sistema'
@@ -130,14 +131,15 @@ export default function NovaMedidaPage() {
         user_id: user?.id,
         action: 'generate_disciplinary_record',
         entity_type: 'disciplinary_records',
-        entity_id: record.id,
+        entity_id: newRecord.id,
         description: `Medida aplicada: ${type} para ${employees.find(e => e.id === selectedEmployeeId)?.name}`
       })
 
-      // Gerar PDF imediatamente
+      // Gerar PDF imediatamente com dados completos
       generateDisciplinaryPdf({
-        ...record,
+        ...newRecord,
         employee: employees.find(e => e.id === selectedEmployeeId),
+        reason: reasons.find(r => r.id === reasonId),
         generatedBy: userName
       })
 

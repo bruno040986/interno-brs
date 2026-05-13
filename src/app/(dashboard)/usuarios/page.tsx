@@ -2,27 +2,30 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { UserCog, Plus, Mail, Shield, CheckCircle, X, Save, Loader2, Edit2 } from 'lucide-react'
+import { Plus, Mail, X, Save, Loader2, Edit2, AlertCircle } from 'lucide-react'
 import type { UserProfile, UserRole } from '@/types'
+import { inviteUser } from './actions'
 
 export default function UsuariosPage() {
   const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<Partial<UserProfile> | null>(null)
-  const [password, setPassword] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   
   const supabase = createClient()
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('users')
       .select('*')
       .order('name', { ascending: true })
     
-    if (!error && data) {
+    if (fetchError) {
+      setError('Falha ao carregar usuários. Verifique as permissões no Supabase.')
+    } else if (data) {
       setUsers(data as UserProfile[])
     }
     setLoading(false)
@@ -37,13 +40,10 @@ export default function UsuariosPage() {
     if (!editingUser?.email || !editingUser?.name || !editingUser?.role) return
     
     setSaving(true)
+    setError(null)
     
-    // Observação: No Supabase, criação de usuários Auth deve ser feita via API/Admin Client 
-    // ou o usuário deve se cadastrar. Aqui apenas atualizamos o perfil na tabela 'users'.
-    // Para criar novo usuário (Auth), precisaríamos de um Service Role Client no backend.
-    
-    let error
     if (editingUser.id) {
+      // ATUALIZAÇÃO DE PERFIL EXISTENTE
       const { error: err } = await supabase
         .from('users')
         .update({
@@ -54,21 +54,31 @@ export default function UsuariosPage() {
           updated_at: new Date().toISOString()
         })
         .eq('id', editingUser.id)
-      error = err
+      
+      if (err) {
+        setError(err.message)
+        setSaving(false)
+        return
+      }
     } else {
-      // Nota: Cadastro de novo usuário requer convite ou criação via Auth API
-      // Por brevidade, este formulário atualizará apenas a tabela pública.
-      // O ideal é usar o Supabase Auth Invite.
-      alert('Para novos usuários, use a aba Authentication do Supabase e depois atualize o perfil aqui.')
-      setSaving(false)
-      return
+      // NOVO CONVITE DE USUÁRIO
+      const result = await inviteUser({
+        email: editingUser.email,
+        name: editingUser.name,
+        role: editingUser.role,
+        department: editingUser.department
+      })
+
+      if (!result.success) {
+        setError(result.error || 'Erro ao convidar usuário')
+        setSaving(false)
+        return
+      }
     }
     
-    if (!error) {
-      setIsModalOpen(false)
-      setEditingUser(null)
-      fetchUsers()
-    }
+    setIsModalOpen(false)
+    setEditingUser(null)
+    fetchUsers()
     setSaving(false)
   }
 
@@ -92,7 +102,7 @@ export default function UsuariosPage() {
             Controle quem pode acessar e operar o sistema
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => alert('Crie o usuário no console do Supabase (Auth) primeiro.')}>
+        <button className="btn btn-primary" onClick={() => { setEditingUser({ role: 'consulta' as UserRole, active: true }); setIsModalOpen(true); setError(null); }}>
           <Plus size={16} />
           Convidar Usuário
         </button>
@@ -148,17 +158,24 @@ export default function UsuariosPage() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <form onSubmit={handleSave}>
               <div className="modal-header">
-                <h3 className="modal-title">Editar Perfil de Usuário</h3>
+                <h3 className="modal-title">{editingUser?.id ? 'Editar Perfil' : 'Convidar Novo Usuário'}</h3>
                 <button type="button" className="btn btn-ghost btn-icon" onClick={() => setIsModalOpen(false)}>
                   <X size={20} />
                 </button>
               </div>
               <div className="modal-body">
+                {error && (
+                  <div style={{ padding: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderRadius: 8, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+                    <AlertCircle size={16} />
+                    {error}
+                  </div>
+                )}
                 <div className="form-group">
                   <label className="form-label">Nome Completo</label>
                   <input 
                     type="text" 
                     className="form-control" 
+                    placeholder="Ex: João Silva"
                     value={editingUser?.name || ''}
                     onChange={e => setEditingUser({ ...editingUser, name: e.target.value })}
                     required
@@ -169,8 +186,11 @@ export default function UsuariosPage() {
                   <input 
                     type="email" 
                     className="form-control" 
+                    placeholder="email@brspromotora.com.br"
                     value={editingUser?.email || ''}
-                    disabled
+                    onChange={e => setEditingUser({ ...editingUser, email: e.target.value })}
+                    disabled={!!editingUser?.id}
+                    required
                   />
                 </div>
                 <div className="form-grid form-grid-2">
@@ -212,7 +232,7 @@ export default function UsuariosPage() {
                 <button type="button" className="btn btn-outline" onClick={() => setIsModalOpen(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? <Loader2 size={16} className="spinner" /> : <Save size={16} />}
-                  Salvar Alterações
+                  {editingUser?.id ? 'Salvar Alterações' : 'Enviar Convite'}
                 </button>
               </div>
             </form>
