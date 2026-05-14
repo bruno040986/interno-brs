@@ -13,48 +13,27 @@ import { useState, useEffect } from 'react'
 import type { UserProfile } from '@/types'
 
 const navItems = [
-  { label: 'Painel', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Painel RH', href: '/rh', icon: LayoutDashboard },
   { section: 'Colaboradores' },
-  { label: 'Colaboradores', href: '/colaboradores', icon: Users },
-  { label: 'Importações', href: '/importacoes', icon: Upload },
+  { label: 'Colaboradores', href: '/rh/colaboradores', icon: Users },
+  { label: 'Importações', href: '/rh/importacoes', icon: Upload },
   { section: 'Documentos' },
-  { label: 'Vale-Transporte', href: '/vale-transporte', icon: Bus },
-  { label: 'Medidas Disciplinares', href: '/medidas-disciplinares', icon: AlertTriangle },
-  { label: 'Motivos', href: '/motivos', icon: BookOpen },
+  { label: 'Vale-Transporte', href: '/rh/vale-transporte', icon: Bus },
+  { label: 'Medidas Disciplinares', href: '/rh/medidas-disciplinares', icon: AlertTriangle },
+  { label: 'Motivos', href: '/rh/motivos', icon: BookOpen },
   { section: 'Configurações' },
-  { label: 'Unidades', href: '/unidades', icon: Building2 },
-  { label: 'Relatórios', href: '/relatorios', icon: BarChart2 },
+  { label: 'Unidades', href: '/rh/unidades', icon: Building2 },
+  { label: 'Relatórios', href: '/rh/relatorios', icon: BarChart2 },
   { label: 'Usuários', href: '/usuarios', icon: UserCog },
-  { label: 'Auditoria', href: '/auditoria', icon: ClipboardList },
+  { label: 'Auditoria', href: '/rh/auditoria', icon: ClipboardList },
 ]
 
-const roleLabels: Record<string, string> = {
-  admin: 'Administrador',
-  rh: 'RH',
-  gestor: 'Gestor',
-  consulta: 'Consulta',
-}
-
-function getInitials(name: string) {
-  return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
-}
-
-export default function Sidebar({ user }: { user: UserProfile | null }) {
+export default function Sidebar() {
   const pathname = usePathname()
-  const router = useRouter()
-  const supabase = createClient()
   const [open, setOpen] = useState(false)
 
-  useEffect(() => { setOpen(false) }, [pathname])
-
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
-
   function isActive(href: string) {
-    if (href === '/dashboard') return pathname === '/dashboard'
+    if (href === '/rh') return pathname === '/rh'
     return pathname.startsWith(href)
   }
 
@@ -84,12 +63,7 @@ export default function Sidebar({ user }: { user: UserProfile | null }) {
       )}
 
       <aside className={`sidebar${open ? ' open' : ''}`}>
-        <div className="sidebar-logo">
-          <Image src="/logotipos/BRS-GESTAO-FUNDO-ESCURO.png" alt="BRS" width={140} height={70} style={{ objectFit: 'contain' }} />
-          <div className="sidebar-logo-text">
-            <span className="sidebar-logo-sub">Sistema RH</span>
-          </div>
-        </div>
+        <div style={{ height: '1.5rem' }} /> {/* Pequeno respiro no topo */}
 
         <nav className="sidebar-nav">
           {navItems.map((item, idx) => {
@@ -110,23 +84,6 @@ export default function Sidebar({ user }: { user: UserProfile | null }) {
           })}
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="user-info">
-            <div className="user-avatar">{user ? getInitials(user.name) : 'U'}</div>
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <div className="user-name">{user?.name ?? 'Usuário'}</div>
-              <div className="user-role-badge">{roleLabels[user?.role ?? ''] ?? ''}</div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="btn btn-ghost btn-icon btn-sm"
-              title="Sair"
-              style={{ color: 'rgba(255,255,255,0.5)', flexShrink: 0 }}
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </div>
       </aside>
     </>
   )

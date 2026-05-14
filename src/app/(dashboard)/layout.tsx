@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Sidebar from '@/components/layout/Sidebar'
+import HubHeader from '@/components/layout/HubHeader'
 import type { UserProfile } from '@/types'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="app-layout">
-      <Sidebar user={profile as UserProfile} />
+      <HubHeader user={profile as UserProfile} />
       <main className="main-content">
         {children}
       </main>

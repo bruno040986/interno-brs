@@ -24,7 +24,7 @@ export default function LoginPage() {
       setError('E-mail ou senha inválidos.')
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      router.push('/')
       router.refresh()
     }
   }
@@ -42,8 +42,8 @@ export default function LoginPage() {
             priority
           />
           <div className="login-logo-title">
-            <h1>Sistema Interno de RH</h1>
-            <p>BRS 2 Promotora Ltda — Acesso restrito</p>
+            <h1>BRS Gestão — HUB</h1>
+            <p>Acesse todas as ferramentas em um só lugar</p>
           </div>
         </div>
 
