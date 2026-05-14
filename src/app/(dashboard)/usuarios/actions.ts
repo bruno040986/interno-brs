@@ -110,6 +110,7 @@ export async function saveUserDirectly(userData: {
   permissions: any[]
   schedules?: any[]
   avatar_url?: string
+  temp_password?: string
 }) {
   try {
     let userId = userData.id
