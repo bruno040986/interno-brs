@@ -147,6 +147,13 @@ export async function saveUserDirectly(userData: {
     }
 
     if (userId) {
+      // 1.1 Atualizar senha no Auth se houver temp_password
+      if (userData.temp_password) {
+        await supabaseAdmin.auth.admin.updateUserById(userId, {
+          password: userData.temp_password
+        })
+      }
+
       const { error } = await supabaseAdmin
         .from('users')
         .update({
@@ -156,15 +163,27 @@ export async function saveUserDirectly(userData: {
           role: userData.role,
           profile_id: userData.profile_id || null,
           session_timeout: userData.session_timeout,
-          avatar_url: finalAvatarUrl
+          avatar_url: finalAvatarUrl,
+          temp_password: userData.temp_password
         })
         .eq('id', userId)
       if (error) throw error
     } else {
-      // Inserção de novo usuário (Simplificada para este exemplo, normalmente via Auth)
-      const { data, error } = await supabaseAdmin
+      // 1.2 Criar usuário no Auth primeiro
+      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: userData.email,
+        password: userData.temp_password || 'brs123456',
+        email_confirm: true
+      })
+
+      if (authErr) throw authErr
+      userId = authUser.user.id
+
+      // 1.3 Criar registro na tabela users com o ID do Auth
+      const { data: newUser, error: createErr } = await supabaseAdmin
         .from('users')
         .insert({
+          id: userId,
           name: userData.name,
           email: userData.email,
           cpf: userData.cpf,
@@ -172,12 +191,13 @@ export async function saveUserDirectly(userData: {
           profile_id: userData.profile_id || null,
           session_timeout: userData.session_timeout,
           avatar_url: finalAvatarUrl,
+          temp_password: userData.temp_password,
           active: true
         })
         .select()
         .single()
-      if (error) throw error
-      userId = data.id
+      
+      if (createErr) throw createErr
     }
 
     // 2. Salvar permissões customizadas (Upsert)
