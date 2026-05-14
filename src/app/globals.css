@@ -937,3 +937,77 @@ table.data-table {
 .status-active { color: var(--brs-success); }
 .status-terminated { color: var(--brs-danger); }
 .status-inactive { color: var(--brs-gray-400); }
+
+/* --- PERMISSIONS MATRIX & SCHEDULE --- */
+.permissions-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.permissions-matrix th {
+  text-align: center;
+  padding: 0.75rem;
+  font-size: 0.7rem;
+  color: var(--brs-gray-400);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--brs-gray-100);
+  vertical-align: middle;
+}
+
+.permissions-matrix th input[type="checkbox"] {
+  margin-top: 0.5rem;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.permissions-matrix td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--brs-gray-50);
+}
+
+.permissions-matrix .resource-name {
+  font-weight: 600;
+  color: var(--brs-gray-800);
+  font-size: 0.875rem;
+}
+
+.permissions-matrix .checkbox-cell {
+  text-align: center;
+}
+
+.permissions-matrix input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--brs-navy);
+}
+
+.schedule-grid {
+ display: grid;
+ grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+ gap: 1rem;
+ margin-top: 1rem;
+}
+
+.day-card {
+ padding: 1rem;
+ border: 1px solid var(--brs-gray-100);
+ border-radius: 8px;
+ display: flex;
+ flex-direction: column;
+ gap: 0.75rem;
+}
+
+.day-card.disabled {
+ opacity: 0.5;
+ background: var(--brs-gray-50);
+}
+
+.time-inputs {
+ display: grid;
+ grid-template-columns: 1fr 1fr;
+ gap: 0.5rem;
+}

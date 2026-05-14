@@ -147,8 +147,12 @@ export default function HubHeader({ user }: HubHeaderProps) {
             className="user-profile-button"
             onClick={() => setShowUserMenu(!showUserMenu)}
           >
-            <div className="user-avatar">
-              {user.name.charAt(0)}
+            <div className="user-avatar" style={{ overflow: 'hidden' }}>
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                user.name.charAt(0)
+              )}
             </div>
           </button>
 
@@ -156,25 +160,60 @@ export default function HubHeader({ user }: HubHeaderProps) {
             <div 
               style={{ 
                 position: 'absolute', 
-                top: '50px', 
+                top: '55px', 
                 right: '0', 
-                width: '200px',
+                width: '320px',
                 background: '#fff',
-                border: '1px solid var(--brs-gray-100)',
-                borderRadius: '0.75rem',
-                boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
-                padding: '0.5rem',
-                zIndex: 1000
+                borderRadius: '28px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                padding: '1.5rem',
+                zIndex: 1000,
+                textAlign: 'center',
+                border: '1px solid var(--brs-gray-100)'
               }}
             >
-              <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--brs-gray-50)' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{user.name}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>{user.email}</div>
+              <div style={{ marginBottom: '1rem', color: 'var(--brs-gray-600)', fontSize: '0.875rem' }}>
+                {user.email}
               </div>
-              <button className="sidebar-link" style={{ width: '100%', border: 'none', background: 'none', color: 'var(--brs-danger)' }}>
-                <LogOut size={16} />
-                Sair
-              </button>
+              
+              <div style={{ position: 'relative', width: '80px', height: '80px', margin: '0 auto 1rem', borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--brs-gray-100)' }}>
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--brs-navy)', color: '#fff', fontSize: '2rem', fontWeight: 600 }}>
+                    {user.name.charAt(0)}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ fontSize: '1.5rem', fontWeight: 500, color: 'var(--brs-navy)', marginBottom: '1.5rem' }}>
+                Olá, {user.name.split(' ')[0]}!
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <Link 
+                  href="/usuarios" 
+                  className="btn btn-outline" 
+                  style={{ borderRadius: '100px', padding: '0.6rem', fontSize: '0.875rem', fontWeight: 600, justifyContent: 'center' }}
+                  onClick={() => setShowUserMenu(false)}
+                >
+                  Gerenciar sua conta
+                </Link>
+                
+                <button 
+                  className="btn btn-ghost" 
+                  style={{ borderRadius: '100px', padding: '0.6rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--brs-danger)', justifyContent: 'center', marginTop: '1rem' }}
+                >
+                  <LogOut size={18} />
+                  Sair
+                </button>
+              </div>
+
+              <div style={{ marginTop: '1.5rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', fontSize: '0.7rem', color: 'var(--brs-gray-400)' }}>
+                <span>Privacidade</span>
+                <span>•</span>
+                <span>Termos</span>
+              </div>
             </div>
           )}
         </div>

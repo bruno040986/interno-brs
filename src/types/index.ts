@@ -4,11 +4,48 @@ export interface UserProfile {
   id: string
   name: string
   email: string
+  cpf?: string
+  avatar_url?: string
   role: UserRole
+  profile_id?: string
   department?: string
   active: boolean
+  temp_password_reset_required?: boolean
+  last_login?: string
+  session_timeout?: number
   created_at: string
   updated_at: string
+  access_profiles?: AccessProfile
+}
+
+export interface AccessProfile {
+  id: string
+  name: string
+  created_at: string
+}
+
+export interface ProfilePermission {
+  id: string
+  profile_id: string
+  resource_name: string
+  can_view: boolean
+  can_include: boolean
+  can_edit: boolean
+  can_delete: boolean
+  can_activate_inactivate: boolean
+  created_at: string
+}
+
+export interface AccessSchedule {
+  id: string
+  profile_id?: string
+  user_id?: string
+  day_of_week: number
+  start_time_1: string
+  end_time_1: string
+  start_time_2: string
+  end_time_2: string
+  enabled: boolean
 }
 
 export interface Employee {

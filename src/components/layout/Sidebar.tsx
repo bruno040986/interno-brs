@@ -13,7 +13,7 @@ import { useState, useEffect } from 'react'
 import type { UserProfile } from '@/types'
 
 const navItems = [
-  { label: 'Painel RH', href: '/rh', icon: LayoutDashboard },
+  { label: 'Painel RH', href: '/?sector=rh', icon: LayoutDashboard },
   { section: 'Colaboradores' },
   { label: 'Colaboradores', href: '/rh/colaboradores', icon: Users },
   { label: 'Importações', href: '/rh/importacoes', icon: Upload },

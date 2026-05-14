@@ -6,20 +6,33 @@ import {
   Users, Bus, AlertTriangle, TrendingUp, FileText, 
   Clock, CheckCircle, Calendar, MessageSquare, 
   Megaphone, ChevronRight, X, ExternalLink,
-  ShieldCheck, Briefcase, BarChart3, ShoppingCart, Key
+  ShieldCheck, Briefcase, BarChart3, ShoppingCart, Key, Loader2
 } from 'lucide-react'
+import { getLinksBySector } from './links/actions'
 
 export default function HubPage() {
   const searchParams = useSearchParams()
   const [activeSector, setActiveSector] = useState<string | null>(null)
   const [agendaTab, setAgendaTab] = useState<'user' | 'company'>('user')
+  const [sectorLinks, setSectorLinks] = useState<any[]>([])
+  const [loadingLinks, setLoadingLinks] = useState(false)
 
   useEffect(() => {
     const sector = searchParams.get('sector')
     if (sector) {
-      setActiveSector(sector)
+      handleSelectSector(sector)
     }
   }, [searchParams])
+
+  const handleSelectSector = async (sectorId: string) => {
+    setActiveSector(sectorId)
+    setLoadingLinks(true)
+    const result = await getLinksBySector(sectorId)
+    if (result.success) {
+      setSectorLinks(result.data || [])
+    }
+    setLoadingLinks(false)
+  }
 
   const sectors = [
     { 
@@ -148,7 +161,7 @@ export default function HubPage() {
               <div 
                 key={sector.id} 
                 className="sector-card"
-                onClick={() => setActiveSector(sector.id)}
+                onClick={() => handleSelectSector(sector.id)}
               >
                 <div className={`sector-icon ${sector.color}`}>
                   <sector.icon size={24} />
@@ -183,20 +196,48 @@ export default function HubPage() {
               </button>
             </div>
             <div className="card-body">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
-                {sectors.find(s => s.id === activeSector)?.links.map((link) => (
-                  <a 
-                    key={link.label} 
-                    href={link.href} 
-                    target={link.external ? '_blank' : '_self'}
-                    className="sector-card"
-                    style={{ padding: '1.25rem', textAlign: 'center', textDecoration: 'none' }}
-                  >
-                    <div style={{ fontWeight: 600, color: 'var(--brs-navy)' }}>{link.label}</div>
-                    {link.external && <div style={{ fontSize: '0.7rem', color: 'var(--brs-gray-400)' }}>Externo <ExternalLink size={10} /></div>}
-                  </a>
-                ))}
-              </div>
+              {loadingLinks ? (
+                <div style={{ textAlign: 'center', padding: '2rem' }}>
+                  <Loader2 className="spinner" />
+                  <p style={{ marginTop: '0.5rem', color: 'var(--brs-gray-400)', fontSize: '0.875rem' }}>Buscando ferramentas...</p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                  {/* Links Fixos (Base) */}
+                  {sectors.find(s => s.id === activeSector)?.links.map((link) => (
+                    <a 
+                      key={link.label} 
+                      href={link.href} 
+                      target={link.external ? '_blank' : '_self'}
+                      className="sector-card"
+                      style={{ padding: '1.25rem', textAlign: 'center', textDecoration: 'none' }}
+                    >
+                      <div style={{ fontWeight: 600, color: 'var(--brs-navy)' }}>{link.label}</div>
+                      {link.external && <div style={{ fontSize: '0.7rem', color: 'var(--brs-gray-400)' }}>Externo <ExternalLink size={10} /></div>}
+                    </a>
+                  ))}
+
+                  {/* Links Dinâmicos do Banco */}
+                  {sectorLinks.map((link) => (
+                    <a 
+                      key={link.id} 
+                      href={link.url} 
+                      target={link.is_external ? '_blank' : '_self'}
+                      className="sector-card"
+                      style={{ padding: '1.25rem', textAlign: 'center', textDecoration: 'none', borderColor: 'var(--brs-gold)' }}
+                    >
+                      <div style={{ fontWeight: 600, color: 'var(--brs-navy)' }}>{link.label}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--brs-gold)', fontWeight: 600 }}>Ferramenta Setorial</div>
+                    </a>
+                  ))}
+
+                  {sectorLinks.length === 0 && !sectors.find(s => s.id === activeSector)?.links.length && (
+                    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: 'var(--brs-gray-400)' }}>
+                      Nenhuma ferramenta cadastrada para este setor.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
