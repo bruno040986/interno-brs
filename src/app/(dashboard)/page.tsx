@@ -9,6 +9,7 @@ import {
   ShieldCheck, Briefcase, BarChart3, ShoppingCart, Key, Loader2
 } from 'lucide-react'
 import { getLinksBySector } from './links/actions'
+import { createClient } from '@/lib/supabase/client'
 
 export default function HubPage() {
   const searchParams = useSearchParams()
@@ -16,6 +17,63 @@ export default function HubPage() {
   const [agendaTab, setAgendaTab] = useState<'user' | 'company'>('user')
   const [sectorLinks, setSectorLinks] = useState<any[]>([])
   const [loadingLinks, setLoadingLinks] = useState(false)
+
+  const [userName, setUserName] = useState<string>('')
+  const [greeting, setGreeting] = useState<string>('Bom dia')
+  const [formattedDate, setFormattedDate] = useState<string>('')
+
+  useEffect(() => {
+    // 1. Saudação dinâmica baseada na hora
+    const hour = new Date().getHours()
+    if (hour >= 5 && hour < 12) {
+      setGreeting('Bom dia')
+    } else if (hour >= 12 && hour < 18) {
+      setGreeting('Boa tarde')
+    } else {
+      setGreeting('Boa noite')
+    }
+
+    // Formatar data com ano e Title Case nas palavras principais
+    const options: Intl.DateTimeFormatOptions = { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'long',
+      year: 'numeric'
+    }
+    const dateStr = new Date().toLocaleDateString('pt-BR', options)
+    const words = dateStr.split(' ').map(word => {
+      if (word.length > 2) {
+        return word.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('-')
+      }
+      return word
+    }).join(' ')
+    setFormattedDate(words.charAt(0).toUpperCase() + words.slice(1))
+
+    // 2. Buscar o primeiro nome do usuário logado
+    async function fetchUser() {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('name')
+            .eq('id', user.id)
+            .single()
+
+          if (profile?.name) {
+            setUserName(profile.name.split(' ')[0])
+          } else {
+            setUserName(user.email?.split('@')[0] || '')
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao buscar usuário logado:', err)
+      }
+    }
+    fetchUser()
+
+  }, [])
 
   useEffect(() => {
     const sector = searchParams.get('sector')
@@ -133,16 +191,37 @@ export default function HubPage() {
         {/* Coluna Principal */}
         <div className="hub-main">
           
-          {/* Saudação e Banner */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          {/* Saudação e Widget de Tempo nativo via iframe com srcDoc isolado */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem' }}>
             <div>
               <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--brs-gray-800)', margin: 0 }}>
-                Bom dia, Usuário!
+                {greeting}, {userName || 'Usuário'}!
               </h1>
               <p style={{ color: 'var(--brs-gray-400)', fontSize: '1rem', marginTop: '0.5rem' }}>
-                Hoje é dia 13 de Maio. Veja o que temos para hoje.
+                {formattedDate || 'Carregando data...'}
               </p>
             </div>
+
+            {/* Renderização 100% nativa em sandbox isolada, eliminando conflitos e perdas de nós DOM no React */}
+            <iframe 
+              srcDoc={`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      body { margin: 0; padding: 0; overflow: hidden; background: transparent; font-family: Arial, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div id="ww_eee39f6fea6fe" v='1.3' loc='auto' a='{"t":"horizontal","lang":"pt","sl_lpl":1,"ids":[],"font":"Arial","sl_ics":"one_a","sl_sot":"celsius","cl_bkg":"image","cl_font":"#FFFFFF","cl_cloud":"#FFFFFF","cl_persp":"#81D4FA","cl_sun":"#FFC107","cl_moon":"#FFC107","cl_thund":"#FF5722"}'>
+      Mais previsões: <a href="https://tempolongo.com/lisboa_tempo_25_dias/" id="ww_eee39f6fea6fe_u" target="_blank">Previsão do tempo em Lisboa</a>
+    </div>
+    <script async src="https://app3.weatherwidget.org/js/?id=ww_eee39f6fea6fe"></script>
+  </body>
+</html>`}
+              style={{ minWidth: '320px', maxWidth: '450px', flex: 1, height: '190px', border: 'none', borderRadius: '12px', overflow: 'hidden' }}
+              title="Previsão do Tempo"
+            />
           </div>
 
         <div className="hub-banner">
