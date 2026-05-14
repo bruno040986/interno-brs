@@ -77,8 +77,8 @@ export default function UsuariosPage() {
     setLoading(true)
     const result = await getAccessData()
     if (result.success) {
-      setProfiles(result.profiles)
-      setUsers(result.users)
+      setProfiles(result.profiles || [])
+      setUsers(result.users || [])
     } else {
       console.error('Erro ao buscar dados:', result.error)
     }
@@ -103,7 +103,7 @@ export default function UsuariosPage() {
         schedules: editingProfile.schedules
       });
 
-      if (!result.success) throw new Error(result.error);
+      if (!result.success) throw new Error(result.error || 'Erro ao salvar perfil');
 
       setIsProfileModalOpen(false)
       fetchData()
@@ -275,8 +275,8 @@ export default function UsuariosPage() {
 
                           setEditingUser({
                             ...user,
-                            permissions: perms,
-                            schedules: scheds.length > 0 ? scheds : DEFAULT_SCHEDULES
+                            permissions: perms || [],
+                            schedules: (scheds?.length || 0) > 0 ? scheds : DEFAULT_SCHEDULES
                           });
                           setIsModalOpen(true);
                         }}>
@@ -316,7 +316,7 @@ export default function UsuariosPage() {
                         const scheds = result.success ? result.schedules : []
                         
                         const mergedPerms = SYSTEM_MODULES.map(m => {
-                          const existing = perms.find((p: any) => p.resource_name === m.id)
+                          const existing = (perms || []).find((p: any) => p.resource_name === m.id)
                           return existing || {
                             resource_name: m.id,
                             can_view: false,
@@ -329,7 +329,7 @@ export default function UsuariosPage() {
 
                         // Merge schedules with default to ensure all days exist
                         const mergedScheds = DEFAULT_SCHEDULES.map(ds => {
-                          const existing = scheds.find((s: any) => s.day_of_week === ds.day_of_week)
+                          const existing = (scheds || []).find((s: any) => s.day_of_week === ds.day_of_week)
                           return existing || ds
                         })
 
@@ -528,7 +528,7 @@ export default function UsuariosPage() {
                   schedules: editingUser.schedules || []
                 });
 
-                if (!result.success) throw new Error(result.error);
+                if (!result.success) throw new Error(result.error || 'Erro ao salvar usuário');
 
                 setIsModalOpen(false);
                 fetchData();
@@ -626,8 +626,8 @@ export default function UsuariosPage() {
                             ...editingUser,
                             profile_id: profileId,
                             role: profile?.name,
-                            permissions: perms,
-                            schedules: scheds.length > 0 ? scheds : DEFAULT_SCHEDULES
+                            permissions: perms || [],
+                            schedules: (scheds?.length || 0) > 0 ? scheds : DEFAULT_SCHEDULES
                           });
                         }}
                         required

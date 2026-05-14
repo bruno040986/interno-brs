@@ -37,7 +37,7 @@ export default function LinksPage() {
     if (result.success) {
       setLinks(result.data || [])
     } else {
-      setError(result.error)
+      setError(result.error || 'Erro ao carregar links')
     }
     setLoading(false)
   }, [])

@@ -109,6 +109,7 @@ export async function saveUserDirectly(userData: {
   session_timeout?: number
   permissions: any[]
   schedules?: any[]
+  avatar_url?: string
 }) {
   try {
     let userId = userData.id
