@@ -94,11 +94,11 @@ export default function PerfilColaboradorPage() {
           </p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem' }}>
-          <Link href={`/vale-transporte/novo/${employee.id}`} className="btn btn-primary">
+          <Link href={`/rh/vale-transporte/novo/${employee.id}`} className="btn btn-primary">
             <Bus size={16} />
             Gerar Termo VT
           </Link>
-          <Link href={`/medidas-disciplinares/nova?employee=${employee.id}`} className="btn btn-danger">
+          <Link href={`/rh/medidas-disciplinares/nova?employee=${employee.id}`} className="btn btn-danger">
             <AlertTriangle size={16} />
             Aplicar Medida
           </Link>
@@ -245,7 +245,7 @@ export default function PerfilColaboradorPage() {
                           <td>{record.unit?.name || '-'}</td>
                           <td>{formatDate(record.effective_date)}</td>
                           <td style={{ textAlign: 'right', display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
-                            <Link href={`/vale-transporte/visualizar/${record.id}`} className="btn btn-ghost btn-sm" title="Visualizar">
+                            <Link href={`/rh/vale-transporte/visualizar/${record.id}`} className="btn btn-ghost btn-sm" title="Visualizar">
                               <FileText size={14} />
                             </Link>
                             <button 

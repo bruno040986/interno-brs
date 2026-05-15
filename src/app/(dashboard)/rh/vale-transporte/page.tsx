@@ -101,7 +101,7 @@ export default function ValeTransportePage() {
                 {filteredEmployees.map(emp => (
                   <Link 
                     key={emp.id} 
-                    href={`/vale-transporte/novo/${emp.id}`}
+                    href={`/rh/vale-transporte/novo/${emp.id}`}
                     className="sidebar-link"
                     style={{ color: 'var(--brs-gray-800)', padding: '0.75rem', borderRadius: '8px', marginBottom: '0.25rem', border: '1px solid var(--brs-gray-100)', display: 'block' }}
                   >
@@ -180,7 +180,7 @@ export default function ValeTransportePage() {
                     <td>{record.unit?.name || '-'}</td>
                     <td>{record.type === 'option' ? `R$ ${record.company_estimated_cost?.toFixed(2)}` : '-'}</td>
                     <td style={{ textAlign: 'right', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                      <Link href={`/vale-transporte/visualizar/${record.id}`} className="btn btn-ghost btn-sm">
+                      <Link href={`/rh/vale-transporte/visualizar/${record.id}`} className="btn btn-ghost btn-sm">
                         Visualizar
                         <ChevronRight size={14} />
                       </Link>

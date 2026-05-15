@@ -60,7 +60,7 @@ export default function MedidasDisciplinaresPage() {
             Controle de advertências e suspensões aplicadas
           </p>
         </div>
-        <Link href="/medidas-disciplinares/nova" className="btn btn-primary">
+        <Link href="/rh/medidas-disciplinares/nova" className="btn btn-primary">
           <Plus size={16} />
           Nova Medida
         </Link>
@@ -128,7 +128,7 @@ export default function MedidasDisciplinaresPage() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <Link href={`/colaboradores/${record.employee_id}`} className="btn btn-ghost btn-sm">
+                      <Link href={`/rh/colaboradores/${record.employee_id}`} className="btn btn-ghost btn-sm">
                         Ver Perfil
                         <ChevronRight size={14} />
                       </Link>

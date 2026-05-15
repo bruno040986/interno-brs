@@ -81,7 +81,7 @@ export default function ColaboradoresPage() {
             <Download size={16} />
             Exportar Lista
           </button>
-          <Link href="/importacoes" className="btn btn-primary">
+          <Link href="/rh/importacoes" className="btn btn-primary">
             <Upload size={16} />
             Importar QuarkRH
           </Link>
@@ -182,13 +182,13 @@ export default function ColaboradoresPage() {
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
-                        <Link href={`/colaboradores/${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Ver Perfil">
+                        <Link href={`/rh/colaboradores/${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Ver Perfil">
                           <Eye size={16} />
                         </Link>
-                        <Link href={`/vale-transporte/novo/${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Vale-Transporte">
+                        <Link href={`/rh/vale-transporte/novo/${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Vale-Transporte">
                           <Bus size={16} />
                         </Link>
-                        <Link href={`/medidas-disciplinares/nova?employee=${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Aplicar Medida">
+                        <Link href={`/rh/medidas-disciplinares/nova?employee=${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Aplicar Medida">
                           <AlertTriangle size={16} />
                         </Link>
                       </div>

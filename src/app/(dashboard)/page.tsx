@@ -122,9 +122,9 @@ export default function HubPage() {
       color: 'rh',
       links: [
         { label: 'Painel de Controle RH', href: '/rh' },
-        { label: 'Vale-Transporte', href: '/vale-transporte' },
-        { label: 'Medidas Disciplinares', href: '/medidas-disciplinares' },
-        { label: 'Colaboradores', href: '/colaboradores' },
+        { label: 'Vale-Transporte', href: '/rh/vale-transporte' },
+        { label: 'Medidas Disciplinares', href: '/rh/medidas-disciplinares' },
+        { label: 'Colaboradores', href: '/rh/colaboradores' },
         { label: 'QuarkRH', href: 'https://quarkrh.com.br', external: true },
       ]
     },
