@@ -1,41 +1,92 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Search, Bell, Grid, User, LogOut, Settings, 
   ShieldCheck, ExternalLink, HelpCircle, LayoutGrid,
-  Megaphone, Briefcase, BarChart3, Bus, ShoppingCart, Key, Users
+  Megaphone, Briefcase, Banknote, Monitor, UserCircle2, Key, Users
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { UserProfile } from '@/types'
+import { createClient } from '@/lib/supabase/client'
+import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
 
 interface HubHeaderProps {
   user: UserProfile
 }
 
 export default function HubHeader({ user }: HubHeaderProps) {
+  const router = useRouter()
   const [showApps, setShowApps] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [permissions, setPermissions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadPerms() {
+      if (!user?.id) return
+      try {
+        const res = await getEffectivePermissions(user.id)
+        if (res.success) {
+          setPermissions(res.permissions || [])
+        }
+      } catch (err) {
+        console.error('Erro ao carregar permissões no HubHeader:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadPerms()
+  }, [user?.id])
+
+  const hasPermission = (resourceId: string): boolean => {
+    if (loading) return true
+    const perm = permissions.find(p => p.resource_name === resourceId)
+    return perm ? !!perm.can_view : false
+  }
 
   const systemApps = [
-    { label: 'Home HUB', icon: LayoutGrid, href: '/', color: '#475569' },
-    { label: 'Usuários', icon: User, href: '/usuarios', color: '#7c3aed' },
-    { label: 'Configurações', icon: Settings, href: '#', color: '#475569' },
-    { label: 'Comunicados', icon: Megaphone, href: '#', color: '#dc2626' },
-    { label: 'Links', icon: ExternalLink, href: '/links', color: '#ea580c' },
-    { label: 'Ajuda', icon: HelpCircle, href: '#', color: '#db2777' },
+    { label: 'Home HUB', icon: LayoutGrid, href: '/', color: '#475569', id: 'home' },
+    { label: 'Usuários', icon: User, href: '/usuarios', color: '#7c3aed', id: 'sistema-usuarios-root' },
+    { label: 'Configurações', icon: Settings, href: '/rh/parceiros/config/provedores/email', color: '#475569', id: 'sistema-config-root' },
+    { label: 'Comunicados', icon: Megaphone, href: '#', color: '#dc2626', id: 'sistema-comunicados' },
+    { label: 'Links', icon: ExternalLink, href: '/links', color: '#ea580c', id: 'sistema-links' },
+    { label: 'Ajuda', icon: HelpCircle, href: '#', color: '#db2777', id: 'sistema-ajuda' },
   ]
 
   const sectorApps = [
-    { label: 'Adm', icon: Briefcase, href: '/?sector=adm', color: '#7c3aed' },
-    { label: 'Financeiro', icon: BarChart3, href: '/?sector=fin', color: '#16a34a' },
-    { label: 'RH', icon: Users, href: '/?sector=rh', color: '#2563eb' },
-    { label: 'Operacional', icon: Bus, href: '/?sector=ops', color: '#ea580c' },
-    { label: 'Marketing', icon: Megaphone, href: '/?sector=mkt', color: '#db2777' },
-    { label: 'Comercial', icon: ShoppingCart, href: '/?sector=com', color: '#ca8a04' },
-    { label: 'Acessos', icon: Key, href: '/?sector=acc', color: '#475569' },
+    { label: 'Adm', icon: UserCircle2, href: '/?sector=adm', color: '#7c3aed', id: 'workspace-adm' },
+    { label: 'Financeiro', icon: Banknote, href: '/?sector=fin', color: '#16a34a', id: 'workspace-fin' },
+    { label: 'RH', icon: Users, href: '/?sector=rh', color: '#2563eb', id: 'workspace-rh' },
+    { label: 'Operacional', icon: Monitor, href: '/?sector=ops', color: '#ea580c', id: 'workspace-ops' },
+    { label: 'Marketing', icon: Megaphone, href: '/?sector=mkt', color: '#db2777', id: 'workspace-mkt' },
+    { label: 'Comercial', icon: Briefcase, href: '/?sector=com', color: '#ca8a04', id: 'workspace-com' },
+    { label: 'Acessos', icon: Key, href: '/?sector=acc', color: '#475569', id: 'workspace-acc' },
   ]
+
+  const filteredSystemApps = systemApps.filter(app => {
+    if (app.id === 'home') return true
+    return hasPermission(app.id)
+  })
+
+  const filteredSectorApps = sectorApps.filter(app => {
+    return hasPermission(app.id)
+  })
+
+  async function handleLogout() {
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+    } catch (err) {
+      console.error('Erro ao sair:', err)
+    } finally {
+      setShowUserMenu(false)
+      router.push('/login')
+      router.refresh()
+    }
+  }
 
   return (
     <header className="hub-header">
@@ -91,53 +142,59 @@ export default function HubHeader({ user }: HubHeaderProps) {
               }}
             >
               {/* Bloco Sistema */}
-              <div style={{ padding: '1rem 1rem 0.5rem' }}>
-                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--brs-gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-                  Sistema
+              {filteredSystemApps.length > 0 && (
+                <div style={{ padding: '1rem 1rem 0.5rem' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--brs-gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+                    Sistema
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                    {filteredSystemApps.map((app) => (
+                      <Link 
+                        key={app.label} 
+                        href={app.href}
+                        className="app-item"
+                        onClick={() => setShowApps(false)}
+                        style={{ padding: '0.75rem 0.25rem' }}
+                      >
+                        <div className="app-icon" style={{ color: app.color, marginBottom: '4px' }}>
+                          <app.icon size={22} />
+                        </div>
+                        <span className="app-label" style={{ fontSize: '0.75rem', fontWeight: 500 }}>{app.label}</span>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
-                  {systemApps.map((app) => (
-                    <Link 
-                      key={app.label} 
-                      href={app.href}
-                      className="app-item"
-                      onClick={() => setShowApps(false)}
-                      style={{ padding: '0.75rem 0.25rem' }}
-                    >
-                      <div className="app-icon" style={{ color: app.color, marginBottom: '4px' }}>
-                        <app.icon size={22} />
-                      </div>
-                      <span className="app-label" style={{ fontSize: '0.75rem', fontWeight: 500 }}>{app.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              )}
 
               {/* Divisor */}
-              <div style={{ height: '1px', background: 'var(--brs-gray-50)', margin: '0.5rem 1rem' }} />
+              {filteredSystemApps.length > 0 && filteredSectorApps.length > 0 && (
+                <div style={{ height: '1px', background: 'var(--brs-gray-50)', margin: '0.5rem 1rem' }} />
+              )}
 
               {/* Bloco Ferramentas */}
-              <div style={{ padding: '0.5rem 1rem 1rem' }}>
-                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--brs-gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-                  Ferramentas
+              {filteredSectorApps.length > 0 && (
+                <div style={{ padding: '0.5rem 1rem 1rem' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--brs-gray-400)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+                    Ferramentas
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                    {filteredSectorApps.map((app) => (
+                      <Link 
+                        key={app.label} 
+                        href={app.href}
+                        className="app-item"
+                        onClick={() => setShowApps(false)}
+                        style={{ padding: '0.75rem 0.25rem' }}
+                      >
+                        <div className="app-icon" style={{ color: app.color, marginBottom: '4px' }}>
+                          <app.icon size={22} />
+                        </div>
+                        <span className="app-label" style={{ fontSize: '0.75rem', fontWeight: 500 }}>{app.label}</span>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
-                  {sectorApps.map((app) => (
-                    <Link 
-                      key={app.label} 
-                      href={app.href}
-                      className="app-item"
-                      onClick={() => setShowApps(false)}
-                      style={{ padding: '0.75rem 0.25rem' }}
-                    >
-                      <div className="app-icon" style={{ color: app.color, marginBottom: '4px' }}>
-                        <app.icon size={22} />
-                      </div>
-                      <span className="app-label" style={{ fontSize: '0.75rem', fontWeight: 500 }}>{app.label}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -191,18 +248,21 @@ export default function HubHeader({ user }: HubHeaderProps) {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <Link 
-                  href="/usuarios" 
-                  className="btn btn-outline" 
-                  style={{ borderRadius: '100px', padding: '0.6rem', fontSize: '0.875rem', fontWeight: 600, justifyContent: 'center' }}
-                  onClick={() => setShowUserMenu(false)}
-                >
-                  Gerenciar sua conta
-                </Link>
+                {hasPermission('sistema-usuarios-root') && (
+                  <Link 
+                    href="/usuarios" 
+                    className="btn btn-outline" 
+                    style={{ borderRadius: '100px', padding: '0.6rem', fontSize: '0.875rem', fontWeight: 600, justifyContent: 'center' }}
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    Gerenciar sua conta
+                  </Link>
+                )}
                 
                 <button 
                   className="btn btn-ghost" 
                   style={{ borderRadius: '100px', padding: '0.6rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--brs-danger)', justifyContent: 'center', marginTop: '1rem' }}
+                  onClick={handleLogout}
                 >
                   <LogOut size={18} />
                   Sair

@@ -19,24 +19,53 @@ const DEFAULT_SCHEDULES = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'S�
   end_time_2: '18:00'
 }))
 
-// Definição dos módulos do sistema para a matriz
+// Definição dos módulos do sistema para a matriz hierárquica
 const SYSTEM_MODULES = [
-  { id: 'colaboradores', name: 'Colaboradores (RH)' },
-  { id: 'vale-transporte', name: 'Vale-Transporte' },
-  { id: 'medidas-disciplinares', name: 'Medidas Disciplinares' },
-  { id: 'financeiro', name: 'Financeiro' },
-  { id: 'operacional', name: 'Operacional' },
-  { id: 'marketing', name: 'Marketing' },
-  { id: 'comercial', name: 'Comercial' },
-  { id: 'acessos', name: 'Acessos (Cofre)' },
-  { id: 'usuarios', name: 'Gestão de Usuários' },
-  { id: 'comunicados', name: 'Comunicados / Banner' },
+  // Workspace Category
+  { id: 'cat-workspace', name: 'Workspace', isHeader: true, level: 0 },
+  { id: 'workspace-adm', name: 'Administrativo', parentId: 'cat-workspace', level: 1 },
+  { id: 'workspace-fin', name: 'Financeiro', parentId: 'cat-workspace', level: 1 },
+  { id: 'workspace-rh', name: 'RH', parentId: 'cat-workspace', level: 1 },
+  { id: 'workspace-ops', name: 'Operacional', parentId: 'cat-workspace', level: 1 },
+  { id: 'workspace-mkt', name: 'Marketing', parentId: 'cat-workspace', level: 1 },
+  { id: 'workspace-com', name: 'Comercial', parentId: 'cat-workspace', level: 1 },
+  { id: 'workspace-acc', name: 'Acessos', parentId: 'cat-workspace', level: 1 },
+
+  // Subsistemas Category
+  { id: 'cat-subsistemas', name: 'Subsistemas', isHeader: true, level: 0 },
+  { id: 'scp', name: 'Sistema de Cadastro de Parceiros (SCP)', parentId: 'cat-subsistemas', level: 1 },
+  { id: 'scp-crm', name: 'CRM Parceiros', parentId: 'scp', level: 2 },
+  { id: 'scp-construtor', name: 'Construtor de Formulário', parentId: 'scp', level: 2 },
+  { id: 'scp-emails', name: 'Modelos e E-mails', parentId: 'scp', level: 2 },
+  { id: 'comercial-estrutura', name: 'Estrutura Comercial', parentId: 'cat-subsistemas', level: 1 },
+  { id: 'comercial-agentes', name: 'Agentes Comerciais', parentId: 'comercial-estrutura', level: 2 },
+
+  // Sistema Category
+  { id: 'cat-sistema', name: 'Sistema', isHeader: true, level: 0 },
+  { id: 'sistema-usuarios-root', name: 'Usuários', parentId: 'cat-sistema', level: 1 },
+  { id: 'sistema-usuarios-cadastro', name: 'Cadastro de Usuários', parentId: 'sistema-usuarios-root', level: 2 },
+  { id: 'sistema-usuarios-perfis', name: 'Perfis de Acesso', parentId: 'sistema-usuarios-root', level: 2 },
+  { id: 'sistema-config-root', name: 'Configurações', parentId: 'cat-sistema', level: 1 },
+  { id: 'sistema-config-email', name: 'API E-mail', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-whatsapp', name: 'API WhatsApp', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-assinatura', name: 'API Assinatura Eletrônica', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-google', name: 'Google', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-quarkrh', name: 'API QuarkRH', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-contaazul', name: 'API Conta Azul', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-arw', name: 'API ARW', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-instituicoes', name: 'API Instituições Financeiras', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-crm', name: 'API CRM', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-comunicados', name: 'Comunicados', parentId: 'cat-sistema', level: 1 },
+  { id: 'sistema-links', name: 'Links', parentId: 'cat-sistema', level: 1 },
+  { id: 'sistema-ajuda', name: 'Ajuda', parentId: 'cat-sistema', level: 1 },
 ]
 
 export default function UsuariosPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'profiles'>('users')
   const [users, setUsers] = useState<UserProfile[]>([])
   const [profiles, setProfiles] = useState<any[]>([])
+  const [commercialEntities, setCommercialEntities] = useState<any[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const formatCPF = (value: string) => {
@@ -79,6 +108,8 @@ export default function UsuariosPage() {
     if (result.success) {
       setProfiles(result.profiles || [])
       setUsers(result.users || [])
+      setCommercialEntities(result.commercialEntities || [])
+      setEmployees(result.employees || [])
     } else {
       console.error('Erro ao buscar dados:', result.error)
     }
@@ -114,32 +145,173 @@ export default function UsuariosPage() {
     }
   }
 
-  const togglePermission = (idx: number, field: string) => {
-    const newPerms = [...editingProfile.permissions]
-    newPerms[idx][field] = !newPerms[idx][field]
-    setEditingProfile({ ...editingProfile, permissions: newPerms })
+  const getDescendantIds = (resId: string): string[] => {
+    const descendants: string[] = []
+    const queue = [resId]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const children = SYSTEM_MODULES.filter(m => m.parentId === current)
+      for (const child of children) {
+        descendants.push(child.id)
+        queue.push(child.id)
+      }
+    }
+    return descendants
+  }
+
+  const getAncestors = (resId: string): string[] => {
+    const ancestors: string[] = []
+    let current = SYSTEM_MODULES.find(m => m.id === resId)
+    while (current && current.parentId) {
+      const parentId = current.parentId
+      ancestors.push(parentId)
+      current = SYSTEM_MODULES.find(m => m.id === parentId)
+    }
+    return ancestors
+  }
+
+  const handleTogglePermission = (target: 'profile' | 'user', resourceId: string, field: string) => {
+    if (target === 'profile') {
+      const perms = [...(editingProfile.permissions || [])]
+      let permIdx = perms.findIndex(p => p.resource_name === resourceId)
+      if (permIdx < 0) {
+        perms.push({
+          resource_name: resourceId,
+          can_view: false,
+          can_include: false,
+          can_edit: false,
+          can_delete: false,
+          can_activate_inactivate: false
+        })
+        permIdx = perms.length - 1
+      }
+      
+      const nextValue = !perms[permIdx][field]
+      perms[permIdx][field] = nextValue
+      
+      const descendants = getDescendantIds(resourceId)
+      descendants.forEach(descId => {
+        let dIdx = perms.findIndex(p => p.resource_name === descId)
+        if (dIdx < 0) {
+          perms.push({
+            resource_name: descId,
+            can_view: false,
+            can_include: false,
+            can_edit: false,
+            can_delete: false,
+            can_activate_inactivate: false
+          })
+          dIdx = perms.length - 1
+        }
+        perms[dIdx][field] = nextValue
+      })
+
+      if (nextValue) {
+        const ancestors = getAncestors(resourceId)
+        ancestors.forEach(ancId => {
+          let aIdx = perms.findIndex(p => p.resource_name === ancId)
+          if (aIdx < 0) {
+            perms.push({
+              resource_name: ancId,
+              can_view: false,
+              can_include: false,
+              can_edit: false,
+              can_delete: false,
+              can_activate_inactivate: false
+            })
+            aIdx = perms.length - 1
+          }
+          perms[aIdx][field] = true
+        })
+      }
+      
+      setEditingProfile({ ...editingProfile, permissions: perms })
+    } else {
+      const perms = [...(editingUser?.permissions || [])]
+      let permIdx = perms.findIndex(p => p.resource_name === resourceId)
+      if (permIdx < 0) {
+        perms.push({
+          resource_name: resourceId,
+          can_view: false,
+          can_include: false,
+          can_edit: false,
+          can_delete: false,
+          can_activate_inactivate: false
+        })
+        permIdx = perms.length - 1
+      }
+      
+      const nextValue = !perms[permIdx][field]
+      perms[permIdx][field] = nextValue
+      
+      const descendants = getDescendantIds(resourceId)
+      descendants.forEach(descId => {
+        let dIdx = perms.findIndex(p => p.resource_name === descId)
+        if (dIdx < 0) {
+          perms.push({
+            resource_name: descId,
+            can_view: false,
+            can_include: false,
+            can_edit: false,
+            can_delete: false,
+            can_activate_inactivate: false
+          })
+          dIdx = perms.length - 1
+        }
+        perms[dIdx][field] = nextValue
+      })
+
+      if (nextValue) {
+        const ancestors = getAncestors(resourceId)
+        ancestors.forEach(ancId => {
+          let aIdx = perms.findIndex(p => p.resource_name === ancId)
+          if (aIdx < 0) {
+            perms.push({
+              resource_name: ancId,
+              can_view: false,
+              can_include: false,
+              can_edit: false,
+              can_delete: false,
+              can_activate_inactivate: false
+            })
+            aIdx = perms.length - 1
+          }
+          perms[aIdx][field] = true
+        })
+      }
+      
+      setEditingUser({ ...editingUser, permissions: perms })
+    }
   }
 
   const toggleAllColumn = (field: string, target: 'profile' | 'user') => {
     if (target === 'profile') {
-      const allSelected = editingProfile.permissions.every((p: any) => p[field]);
-      const newPerms = editingProfile.permissions.map((p: any) => ({ ...p, [field]: !allSelected }));
+      const allSelected = SYSTEM_MODULES.every(m => {
+        const p = editingProfile.permissions.find((p: any) => p.resource_name === m.id);
+        return p?.[field];
+      });
+      const newPerms = SYSTEM_MODULES.map(m => ({
+        resource_name: m.id,
+        can_view: !allSelected,
+        can_include: !allSelected,
+        can_edit: !allSelected,
+        can_delete: !allSelected,
+        can_activate_inactivate: !allSelected
+      }));
       setEditingProfile({ ...editingProfile, permissions: newPerms });
     } else {
       const allSelected = SYSTEM_MODULES.every(m => {
         const p = editingUser?.permissions?.find((p: any) => p.resource_name === m.id);
         return p?.[field];
       });
-      
-      const newPerms = [...(editingUser?.permissions || [])];
-      SYSTEM_MODULES.forEach(m => {
-        const idx = newPerms.findIndex(p => p.resource_name === m.id);
-        if (idx >= 0) {
-          newPerms[idx][field] = !allSelected;
-        } else {
-          newPerms.push({ resource_name: m.id, [field]: !allSelected });
-        }
-      });
+      const newPerms = SYSTEM_MODULES.map(m => ({
+        resource_name: m.id,
+        can_view: !allSelected,
+        can_include: !allSelected,
+        can_edit: !allSelected,
+        can_delete: !allSelected,
+        can_activate_inactivate: !allSelected
+      }));
       setEditingUser({ ...editingUser, permissions: newPerms });
     }
   }
@@ -392,28 +564,79 @@ export default function UsuariosPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {editingProfile.permissions.map((perm: any, idx: number) => (
-                          <tr key={perm.resource_name}>
-                            <td className="resource-name">
-                              {SYSTEM_MODULES.find(m => m.id === perm.resource_name)?.name}
-                            </td>
-                            <td className="checkbox-cell">
-                              <input type="checkbox" checked={perm.can_view} onChange={() => togglePermission(idx, 'can_view')} />
-                            </td>
-                            <td className="checkbox-cell">
-                              <input type="checkbox" checked={perm.can_include} onChange={() => togglePermission(idx, 'can_include')} />
-                            </td>
-                            <td className="checkbox-cell">
-                              <input type="checkbox" checked={perm.can_edit} onChange={() => togglePermission(idx, 'can_edit')} />
-                            </td>
-                            <td className="checkbox-cell">
-                              <input type="checkbox" checked={perm.can_delete} onChange={() => togglePermission(idx, 'can_delete')} />
-                            </td>
-                            <td className="checkbox-cell">
-                              <input type="checkbox" checked={perm.can_activate_inactivate} onChange={() => togglePermission(idx, 'can_activate_inactivate')} />
-                            </td>
-                          </tr>
-                        ))}
+                        {SYSTEM_MODULES.map((module) => {
+                          const perm = editingProfile.permissions?.find((p: any) => p.resource_name === module.id) || {
+                            can_view: false, can_include: false, can_edit: false, can_delete: false, can_activate_inactivate: false
+                          };
+                          
+                          let rowStyle: React.CSSProperties = {};
+                          let labelPrefix = '';
+                          if (module.level === 0) {
+                            rowStyle = {
+                              backgroundColor: 'var(--brs-gray-50)',
+                              fontWeight: 700,
+                              color: 'var(--brs-navy)',
+                              borderBottom: '2px solid var(--brs-gray-200)'
+                            };
+                          } else if (module.level === 1) {
+                            rowStyle = {
+                              fontWeight: 600,
+                              backgroundColor: '#fff'
+                            };
+                          } else if (module.level === 2) {
+                            rowStyle = {
+                              color: 'var(--brs-gray-600)',
+                              backgroundColor: '#fcfcfc'
+                            };
+                            labelPrefix = '↳ ';
+                          }
+
+                          return (
+                            <tr key={module.id} style={rowStyle}>
+                              <td style={{ 
+                                paddingLeft: module.level === 0 ? '0.75rem' : module.level === 1 ? '1.75rem' : '2.75rem', 
+                                textAlign: 'left' 
+                              }}>
+                                {labelPrefix}{module.name}
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_view} 
+                                  onChange={() => handleTogglePermission('profile', module.id, 'can_view')} 
+                                />
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_include} 
+                                  onChange={() => handleTogglePermission('profile', module.id, 'can_include')} 
+                                />
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_edit} 
+                                  onChange={() => handleTogglePermission('profile', module.id, 'can_edit')} 
+                                />
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_delete} 
+                                  onChange={() => handleTogglePermission('profile', module.id, 'can_delete')} 
+                                />
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_activate_inactivate} 
+                                  onChange={() => handleTogglePermission('profile', module.id, 'can_activate_inactivate')} 
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -590,6 +813,29 @@ export default function UsuariosPage() {
 
                   {/* Lado Direito: Dados */}
                   <div className="form-grid form-grid-2">
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                      <label className="form-label">Vincular Colaborador (QuarkRH)</label>
+                      <select 
+                        className="form-control"
+                        value={editingUser?.employee_id || ''}
+                        onChange={(e) => {
+                          const empId = e.target.value;
+                          const emp = employees.find(x => x.id === empId);
+                          setEditingUser({
+                            ...editingUser,
+                            employee_id: empId || null,
+                            cpf: emp ? formatCPF(emp.cpf) : editingUser?.cpf || '',
+                            name: emp ? emp.name : editingUser?.name || '',
+                            birth_date: emp?.birth_date ? emp.birth_date : editingUser?.birth_date || ''
+                          });
+                        }}
+                      >
+                        <option value="">Nenhum colaborador vinculado...</option>
+                        {employees.map(emp => (
+                          <option key={emp.id} value={emp.id}>{emp.name} ({formatCPF(emp.cpf)})</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="form-group">
                       <label className="form-label">Nome Completo</label>
                       <input type="text" className="form-control" value={editingUser?.name ?? ''} onChange={e => setEditingUser({...editingUser, name: e.target.value})} required />
@@ -601,13 +847,34 @@ export default function UsuariosPage() {
                         className="form-control" 
                         placeholder="000.000.000-00" 
                         value={formatCPF(editingUser?.cpf ?? '')} 
-                        onChange={e => setEditingUser({...editingUser, cpf: formatCPF(e.target.value)})} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          const formatted = formatCPF(val);
+                          const cleanCpf = formatted.replace(/\D/g, '');
+                          const matchedEmp = employees.find(x => x.cpf.replace(/\D/g, '') === cleanCpf);
+                          setEditingUser({
+                            ...editingUser,
+                            cpf: formatted,
+                            employee_id: matchedEmp ? matchedEmp.id : null,
+                            name: matchedEmp ? matchedEmp.name : editingUser?.name || '',
+                            birth_date: matchedEmp?.birth_date ? matchedEmp.birth_date : editingUser?.birth_date || ''
+                          });
+                        }} 
                         required 
                       />
                     </div>
                     <div className="form-group">
                       <label className="form-label">E-mail</label>
                       <input type="email" className="form-control" value={editingUser?.email ?? ''} onChange={e => setEditingUser({...editingUser, email: e.target.value})} required />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Data de Nascimento</label>
+                      <input 
+                        type="date" 
+                        className="form-control" 
+                        value={editingUser?.birth_date ?? ''} 
+                        onChange={e => setEditingUser({...editingUser, birth_date: e.target.value})} 
+                      />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Perfil de Acesso</label>
@@ -654,8 +921,103 @@ export default function UsuariosPage() {
                         onChange={e => setEditingUser({...editingUser, session_timeout: parseInt(e.target.value)})}
                       />
                     </div>
+                    <div className="form-group">
+                      <label className="form-label">Cargo Comercial (SCP)</label>
+                      <select
+                        className="form-control"
+                        value={editingUser?.commercial_role || ''}
+                        onChange={e => setEditingUser({
+                          ...editingUser,
+                          commercial_role: e.target.value || null,
+                          superintendente_id: null,
+                          supervisor_id: null,
+                          gerente_id: null
+                        })}
+                      >
+                        <option value="">Nenhum (Administrativo / CLT)</option>
+                        <option value="superintendente">Superintendente</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="gerente">Gerente Comercial</option>
+                      </select>
+                    </div>
+
+                    {(editingUser?.commercial_role === 'supervisor' || editingUser?.commercial_role === 'gerente') && (
+                      <div className="form-group">
+                        <label className="form-label">Superintendente Responsável</label>
+                        <select
+                          className="form-control"
+                          value={editingUser?.superintendente_id || ''}
+                          onChange={e => setEditingUser({
+                            ...editingUser,
+                            superintendente_id: e.target.value || null,
+                            supervisor_id: null,
+                            gerente_id: null
+                          })}
+                        >
+                          <option value="">Selecione...</option>
+                          {commercialEntities
+                            .filter(ent => ent.role === 'superintendente')
+                            .map(ent => (
+                              <option key={ent.id} value={ent.id}>{ent.name}</option>
+                            ))
+                          }
+                        </select>
+                      </div>
+                    )}
+
+                    {editingUser?.commercial_role === 'gerente' && (
+                      <div className="form-group">
+                        <label className="form-label">Supervisor Responsável</label>
+                        <select
+                          className="form-control"
+                          value={editingUser?.supervisor_id || ''}
+                          onChange={e => setEditingUser({
+                            ...editingUser,
+                            supervisor_id: e.target.value || null,
+                            gerente_id: null
+                          })}
+                        >
+                          <option value="">Selecione...</option>
+                          {commercialEntities
+                            .filter(ent => ent.role === 'supervisor' && (!editingUser.superintendente_id || ent.parent_id === editingUser.superintendente_id))
+                            .map(ent => (
+                              <option key={ent.id} value={ent.id}>{ent.name}</option>
+                            ))
+                          }
+                        </select>
+                      </div>
+                    )}
+
+                    {editingUser?.commercial_role === 'gerente' && (
+                      <div className="form-group">
+                        <label className="form-label">Vaga de Gerente Ocupada</label>
+                        <select
+                          className="form-control"
+                          value={editingUser?.gerente_id || ''}
+                          onChange={e => setEditingUser({
+                            ...editingUser,
+                            gerente_id: e.target.value || null
+                          })}
+                        >
+                          <option value="">Selecione...</option>
+                          {commercialEntities
+                            .filter(ent => ent.role === 'gerente' && (!editingUser.supervisor_id || ent.parent_id === editingUser.supervisor_id))
+                            .map(ent => (
+                              <option key={ent.id} value={ent.id}>{ent.name}</option>
+                            ))
+                          }
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {editingUser?.employee_id && (
+                  <div style={{ marginTop: '1rem', background: '#F0FDF4', color: '#166534', padding: '0.75rem', borderRadius: '6px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <ShieldCheck size={16} />
+                    <span>Funcionário CLT vinculado de forma automática pelo CPF (QuarkRH)</span>
+                  </div>
+                )}
 
                 <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <input type="checkbox" checked={editingUser?.reset_on_first ?? true} onChange={e => setEditingUser({...editingUser, reset_on_first: e.target.checked})} />
@@ -681,31 +1043,77 @@ export default function UsuariosPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {SYSTEM_MODULES.map((module, idx) => {
+                        {SYSTEM_MODULES.map((module) => {
                           const permIdx = editingUser?.permissions?.findIndex((p: any) => p.resource_name === module.id);
                           const perm = permIdx >= 0 ? editingUser.permissions[permIdx] : {
                             can_view: false, can_include: false, can_edit: false, can_delete: false, can_activate_inactivate: false
                           };
                           
-                          const toggleUserPerm = (field: string) => {
-                            const newPerms = [...(editingUser?.permissions || [])];
-                            if (permIdx >= 0) {
-                              newPerms[permIdx][field] = !newPerms[permIdx][field];
-                            } else {
-                              const newPerm = { resource_name: module.id, [field]: true };
-                              newPerms.push(newPerm);
-                            }
-                            setEditingUser({ ...editingUser, permissions: newPerms });
-                          };
+                          let rowStyle: React.CSSProperties = {};
+                          let labelPrefix = '';
+                          if (module.level === 0) {
+                            rowStyle = {
+                              backgroundColor: 'var(--brs-gray-50)',
+                              fontWeight: 700,
+                              color: 'var(--brs-navy)',
+                              borderBottom: '2px solid var(--brs-gray-200)'
+                            };
+                          } else if (module.level === 1) {
+                            rowStyle = {
+                              fontWeight: 600,
+                              backgroundColor: '#fff'
+                            };
+                          } else if (module.level === 2) {
+                            rowStyle = {
+                              color: 'var(--brs-gray-600)',
+                              backgroundColor: '#fcfcfc'
+                            };
+                            labelPrefix = '↳ ';
+                          }
 
                           return (
-                            <tr key={module.id}>
-                              <td className="resource-name">{module.name}</td>
-                              <td className="checkbox-cell"><input type="checkbox" checked={perm.can_view} onChange={() => toggleUserPerm('can_view')} /></td>
-                              <td className="checkbox-cell"><input type="checkbox" checked={perm.can_include} onChange={() => toggleUserPerm('can_include')} /></td>
-                              <td className="checkbox-cell"><input type="checkbox" checked={perm.can_edit} onChange={() => toggleUserPerm('can_edit')} /></td>
-                              <td className="checkbox-cell"><input type="checkbox" checked={perm.can_delete} onChange={() => toggleUserPerm('can_delete')} /></td>
-                              <td className="checkbox-cell"><input type="checkbox" checked={perm.can_activate_inactivate} onChange={() => toggleUserPerm('can_activate_inactivate')} /></td>
+                            <tr key={module.id} style={rowStyle}>
+                              <td style={{ 
+                                paddingLeft: module.level === 0 ? '0.75rem' : module.level === 1 ? '1.75rem' : '2.75rem', 
+                                textAlign: 'left' 
+                              }}>
+                                {labelPrefix}{module.name}
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_view} 
+                                  onChange={() => handleTogglePermission('user', module.id, 'can_view')} 
+                                />
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_include} 
+                                  onChange={() => handleTogglePermission('user', module.id, 'can_include')} 
+                                />
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_edit} 
+                                  onChange={() => handleTogglePermission('user', module.id, 'can_edit')} 
+                                />
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_delete} 
+                                  onChange={() => handleTogglePermission('user', module.id, 'can_delete')} 
+                                />
+                              </td>
+                              <td className="checkbox-cell">
+                                <input 
+                                  type="checkbox" 
+                                  checked={perm.can_activate_inactivate} 
+                                  onChange={() => handleTogglePermission('user', module.id, 'can_activate_inactivate')} 
+                                />
+                              </td>
                             </tr>
                           );
                         })}

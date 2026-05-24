@@ -104,6 +104,7 @@ export async function saveUserDirectly(userData: {
   name: string
   email: string
   cpf: string
+  birth_date?: string
   role: string
   profile_id?: string
   session_timeout?: number
@@ -111,6 +112,11 @@ export async function saveUserDirectly(userData: {
   schedules?: any[]
   avatar_url?: string
   temp_password?: string
+  commercial_role?: string | null
+  superintendente_id?: string | null
+  supervisor_id?: string | null
+  gerente_id?: string | null
+  employee_id?: string | null
 }) {
   try {
     let userId = userData.id
@@ -161,11 +167,17 @@ export async function saveUserDirectly(userData: {
           name: userData.name,
           email: userData.email,
           cpf: userData.cpf,
+          birth_date: userData.birth_date || null,
           role: userData.role,
           profile_id: userData.profile_id || null,
           session_timeout: userData.session_timeout,
           avatar_url: finalAvatarUrl,
-          temp_password: userData.temp_password
+          temp_password: userData.temp_password,
+          commercial_role: userData.commercial_role || null,
+          superintendente_id: userData.superintendente_id || null,
+          supervisor_id: userData.supervisor_id || null,
+          gerente_id: userData.gerente_id || null,
+          employee_id: userData.employee_id || null
         })
         .eq('id', userId)
       if (error) throw error
@@ -188,12 +200,18 @@ export async function saveUserDirectly(userData: {
           name: userData.name,
           email: userData.email,
           cpf: userData.cpf,
+          birth_date: userData.birth_date || null,
           role: userData.role,
           profile_id: userData.profile_id || null,
           session_timeout: userData.session_timeout,
           avatar_url: finalAvatarUrl,
           temp_password: userData.temp_password,
-          active: true
+          active: true,
+          commercial_role: userData.commercial_role || null,
+          superintendente_id: userData.superintendente_id || null,
+          supervisor_id: userData.supervisor_id || null,
+          gerente_id: userData.gerente_id || null,
+          employee_id: userData.employee_id || null
         })
         .select()
         .single()
@@ -258,7 +276,33 @@ export async function getAccessData() {
       .order('name')
     if (uErr) throw uErr
 
-    return { success: true, profiles: profiles || [], users: users || [] }
+    let entities: any[] = []
+    try {
+      const { data, error: eErr } = await supabaseAdmin
+        .from('commercial_entities')
+        .select('id, name, role, parent_id')
+        .eq('status', 'ativo')
+      
+      // Se der erro de tabela não encontrada (PGRST205), ignoramos e usamos array vazio
+      if (eErr && eErr.code !== 'PGRST205') throw eErr
+      if (data) entities = data
+    } catch (err) {
+      console.warn('commercial_entities não existe ou não pôde ser carregado:', err)
+    }
+
+    const { data: employees, error: empErr } = await supabaseAdmin
+      .from('employees')
+      .select('id, name, cpf, birth_date')
+      .order('name')
+    if (empErr) throw empErr
+
+    return { 
+      success: true, 
+      profiles: profiles || [], 
+      users: users || [],
+      commercialEntities: entities,
+      employees: employees || []
+    }
   } catch (error: any) {
     return { success: false, error: error.message }
   }
@@ -312,6 +356,64 @@ export async function getUserPermissions(userId: string) {
       schedules: schedules || []
     }
   } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getEffectivePermissions(userId: string) {
+  try {
+    const { data: user, error: uErr } = await supabaseAdmin
+      .from('users')
+      .select('profile_id, role')
+      .eq('id', userId)
+      .single()
+    if (uErr) throw uErr
+
+    const { data: userPerms, error: upErr } = await supabaseAdmin
+      .from('user_permissions')
+      .select('*')
+      .eq('user_id', userId)
+    if (upErr) throw upErr
+
+    let finalPerms = (userPerms || []).map((p: any) => ({
+      resource_name: p.resource_name,
+      can_view: p.can_view,
+      can_include: p.can_include,
+      can_edit: p.can_edit,
+      can_delete: p.can_delete,
+      can_activate_inactivate: p.can_activate_inactivate
+    }))
+
+    if (user?.profile_id) {
+      const { data: profilePerms, error: ppErr } = await supabaseAdmin
+        .from('profile_permissions')
+        .select('*')
+        .eq('profile_id', user.profile_id)
+      if (ppErr) throw ppErr
+
+      const userPermResourceNames = new Set(finalPerms.map(p => p.resource_name))
+      if (profilePerms) {
+        profilePerms.forEach(pp => {
+          if (!userPermResourceNames.has(pp.resource_name)) {
+            finalPerms.push({
+              resource_name: pp.resource_name,
+              can_view: pp.can_view,
+              can_include: pp.can_include,
+              can_edit: pp.can_edit,
+              can_delete: pp.can_delete,
+              can_activate_inactivate: pp.can_activate_inactivate
+            })
+          }
+        })
+      }
+    }
+
+    return {
+      success: true,
+      permissions: finalPerms
+    }
+  } catch (error: any) {
+    console.error('Erro ao obter permissões efetivas:', error)
     return { success: false, error: error.message }
   }
 }

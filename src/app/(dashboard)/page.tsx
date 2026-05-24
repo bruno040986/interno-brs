@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { 
-  Users, Bus, AlertTriangle, TrendingUp, FileText, 
+  Users, AlertTriangle, TrendingUp, FileText, 
   Clock, CheckCircle, Calendar, MessageSquare, 
   Megaphone, ChevronRight, X, ExternalLink,
-  ShieldCheck, Briefcase, BarChart3, ShoppingCart, Key, Loader2
+  ShieldCheck, Briefcase, Banknote, Monitor, Key, Loader2, UserCircle2,
+  Bus, BarChart3, ShoppingCart
 } from 'lucide-react'
 import { getLinksBySector } from './links/actions'
 import { createClient } from '@/lib/supabase/client'
+import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
 
 export default function HubPage() {
   const searchParams = useSearchParams()
@@ -21,6 +23,10 @@ export default function HubPage() {
   const [userName, setUserName] = useState<string>('')
   const [greeting, setGreeting] = useState<string>('Bom dia')
   const [formattedDate, setFormattedDate] = useState<string>('')
+  const [birthdays, setBirthdays] = useState<any[]>([])
+
+  const [permissions, setPermissions] = useState<any[]>([])
+  const [loadingPerms, setLoadingPerms] = useState(true)
 
   useEffect(() => {
     // 1. Saudação dinâmica baseada na hora
@@ -49,7 +55,7 @@ export default function HubPage() {
     }).join(' ')
     setFormattedDate(words.charAt(0).toUpperCase() + words.slice(1))
 
-    // 2. Buscar o primeiro nome do usuário logado
+    // 2. Buscar o primeiro nome e permissões do usuário logado
     async function fetchUser() {
       try {
         const supabase = createClient()
@@ -66,12 +72,83 @@ export default function HubPage() {
           } else {
             setUserName(user.email?.split('@')[0] || '')
           }
+
+          const permsResult = await getEffectivePermissions(user.id)
+          if (permsResult.success) {
+            setPermissions(permsResult.permissions || [])
+          }
         }
       } catch (err) {
         console.error('Erro ao buscar usuário logado:', err)
+      } finally {
+        setLoadingPerms(false)
       }
     }
     fetchUser()
+
+    // 3. Buscar aniversariantes dos próximos 60 dias
+    async function fetchBirthdays() {
+      try {
+        const supabase = createClient()
+        const { data: usersData, error } = await supabase
+          .from('users')
+          .select('name, birth_date, avatar_url')
+          .not('birth_date', 'is', null)
+        
+        if (usersData) {
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          const todayYear = today.getFullYear()
+          const todayDay = today.getDate()
+          const todayMonth = today.getMonth() + 1
+
+          const months = [
+            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+          ]
+
+          const withDaysUntil = usersData
+            .map((u: any) => {
+              const dateParts = u.birth_date.split('-') // YYYY-MM-DD
+              const bDay = parseInt(dateParts[2], 10)
+              const bMonth = parseInt(dateParts[1], 10)
+
+              // Calcular aniversário neste ano ou no próximo
+              let nextBirthday = new Date(todayYear, bMonth - 1, bDay)
+              nextBirthday.setHours(0, 0, 0, 0)
+              if (nextBirthday < today) {
+                nextBirthday = new Date(todayYear + 1, bMonth - 1, bDay)
+              }
+
+              const diffMs = nextBirthday.getTime() - today.getTime()
+              const daysUntil = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+              let dayLabel = `${bDay} de ${months[bMonth - 1]}`
+              if (daysUntil === 0) {
+                dayLabel = 'Hoje 🎉'
+              } else if (daysUntil === 1) {
+                dayLabel = 'Amanhã 🎂'
+              }
+
+              return {
+                name: u.name,
+                avatar_url: u.avatar_url || null,
+                day: dayLabel,
+                daysUntil,
+                bDay,
+                bMonth
+              }
+            })
+            .filter((u: any) => u.daysUntil <= 60)
+            .sort((a: any, b: any) => a.daysUntil - b.daysUntil)
+
+          setBirthdays(withDaysUntil)
+        }
+      } catch (err) {
+        console.error('Erro ao buscar aniversariantes:', err)
+      }
+    }
+    fetchBirthdays()
 
   }, [])
 
@@ -92,27 +169,35 @@ export default function HubPage() {
     setLoadingLinks(false)
   }
 
+  const hasPermission = (resourceId: string): boolean => {
+    if (loadingPerms) return true
+    const perm = permissions.find(p => p.resource_name === resourceId)
+    return perm ? !!perm.can_view : false
+  }
+
   const sectors = [
     { 
       id: 'adm', 
       name: 'Administrativo', 
-      icon: Briefcase, 
+      icon: UserCircle2, 
       color: 'adm',
       links: [
-        { label: 'Políticas Internas', href: '#' },
-        { label: 'Documentos Oficiais', href: '#' },
-        { label: 'Gestão de Contratos', href: '#' },
+        { label: 'Documentos da Empresa', href: '#', disabled: true },
+        { label: 'Documentos do Sócio', href: '#', disabled: true },
+        { label: 'Correios', href: 'https://empresas.correios.com.br/#/login', external: true },
       ]
     },
     { 
       id: 'fin', 
       name: 'Financeiro', 
-      icon: BarChart3, 
+      icon: Banknote, 
       color: 'fin',
       links: [
-        { label: 'Reembolsos', href: '#' },
-        { label: 'Notas Fiscais', href: '#' },
-        { label: 'Relatórios de Custos', href: '#' },
+        { label: 'Conta Azul', href: 'https://login.contaazul.com/#/', external: true },
+        { label: 'BluePay', href: 'https://app.bluepaysolutions.com.br/auth/users/sign_in?_gl=1*3n59ks*_gcl_au*MTQyNTExODg5Ny4xNzQxNjE0Nzky*_ga*Mzc0NjY5NTMzLjE3NDE2MTQ3OTE.*_ga_3GXPGWJ0SL*czE3NDc2NTY1NjckbzMkZzEkdDE3NDc2NTgzMzAkajAkbDAkaDA&utm_source=site&utm_medium=menu&utm_campaign=inb', external: true },
+        { label: 'Portal Nacional da NFSe', href: 'https://www.nfse.gov.br/EmissorNacional/Login?ReturnUrl=%2fEmissorNacional', external: true },
+        { label: 'Reembolsos', href: '#', disabled: true },
+        { label: 'Portho Contabilidade', href: 'https://vip.acessorias.com/porthocontabil', external: true },
       ]
     },
     { 
@@ -122,21 +207,28 @@ export default function HubPage() {
       color: 'rh',
       links: [
         { label: 'Painel de Controle RH', href: '/rh' },
-        { label: 'Vale-Transporte', href: '/rh/vale-transporte' },
-        { label: 'Medidas Disciplinares', href: '/rh/medidas-disciplinares' },
-        { label: 'Colaboradores', href: '/rh/colaboradores' },
-        { label: 'QuarkRH', href: 'https://quarkrh.com.br', external: true },
+        { label: 'QuarkRH Gestão', href: 'https://rh-colaborador.quark.tec.br/', external: true },
+        { label: 'QuarkRH Portal do Colaborador', href: 'https://rh-colaborador.quark.tec.br/', external: true },
+        { label: 'Regimento Interno', href: 'https://drive.google.com/drive/folders/1cbLHQJdTUMOQkPS91YTXP4Ul_KL_Ib4H?usp=sharing', external: true },
+        { label: 'Quadro de Cargos e Salários', href: 'https://docs.google.com/spreadsheets/d/1NzUXmVycP4jZ6-IVlNe839nzODsy5vJ7/edit?usp=sharing&ouid=102020987086611987742&rtpof=true&sd=true', external: true },
+        { label: 'Portho Contabilidade', href: 'https://vip.acessorias.com/porthocontabil', external: true },
       ]
     },
     { 
       id: 'ops', 
       name: 'Operacional', 
-      icon: Bus, 
+      icon: Monitor, 
       color: 'ops',
       links: [
-        { label: 'Controle de Frota', href: '#' },
-        { label: 'Logística', href: '#' },
-        { label: 'Manutenção', href: '#' },
+        { label: 'Sistema de Cadastro de Parceiros (SCP)', href: '/rh/parceiros' },
+        { label: 'Links de Bancos', href: '#', disabled: true },
+        { label: 'Links de Promotoras', href: '#', disabled: true },
+        { label: 'Assinafy', href: 'https://www.assinafy.com.br/', external: true },
+        { label: 'Sistema ARW', href: 'https://brspromotora.arwconsig.com.br/', external: true },
+        { label: 'Nuvidio Gestão', href: 'https://empresa.nuvidio.com/login', external: true },
+        { label: 'Nuvidio Atendimento', href: 'https://atendimento.nuvidio.com/login', external: true },
+        { label: 'Digisac', href: 'https://brspromotora.digisac.chat/login', external: true },
+        { label: 'Lemit', href: 'https://lemitti.com/', external: true },
       ]
     },
     { 
@@ -145,20 +237,27 @@ export default function HubPage() {
       icon: Megaphone, 
       color: 'mkt',
       links: [
-        { label: 'Brandbook', href: '#' },
-        { label: 'Solicitar Artes', href: '#' },
-        { label: 'Redes Sociais', href: '#' },
+        { label: 'BRS Promotora', href: 'https://drive.google.com/drive/folders/15gePuWUSUQpDPG-0MVLjbw3TsBu0hD3Z?usp=sharing', external: true },
+        { label: 'BRS Gestão', href: 'https://drive.google.com/drive/folders/17Zo6_d-1Q9z-If3boE_ln2fAB07j54OP?usp=sharing', external: true },
+        { label: 'Logotipo de Instituições Financeiras', href: 'https://drive.google.com/drive/folders/1Q74oHJKsj6kWGGsesHqMHV5uuZbO_rNZ?usp=sharing', external: true },
+        { label: 'Instagram', href: 'https://www.instagram.com/brspromotora', external: true },
+        { label: 'Facebook', href: 'https://www.facebook.com/brspromotora', external: true },
+        { label: 'Solicitar Arte', href: '#', disabled: true },
       ]
     },
     { 
       id: 'com', 
       name: 'Comercial', 
-      icon: ShoppingCart, 
+      icon: Briefcase, 
       color: 'com',
       links: [
-        { label: 'CRM', href: '#' },
-        { label: 'Metas de Vendas', href: '#' },
-        { label: 'Pipeline', href: '#' },
+        { label: 'Estrutura Comercial', href: '/rh/parceiros/config/comercial' },
+        { label: 'Análise de Rentabilidade Gerente', href: '#', disabled: true },
+        { label: 'Análise de Rentabilidade Supervisor', href: '#', disabled: true },
+        { label: 'Análise de Rentabilidade Superintendente', href: '#', disabled: true },
+        { label: 'Mailing Higienizado Drive', href: '#', disabled: true },
+        { label: 'Mailing com Filtro', href: '#', disabled: true },
+        { label: 'Fechamento Mensal', href: '#', disabled: true },
       ]
     },
     { 
@@ -167,23 +266,28 @@ export default function HubPage() {
       icon: Key, 
       color: 'acc',
       links: [
-        { label: 'Cofre de Senhas', href: '#' },
-        { label: 'Solicitar Acesso', href: '#' },
+        { label: 'Cofre de Senhas', href: '#', disabled: true },
       ]
     }
   ]
 
-  const birthdays = [
-    { name: 'Mariana Silva', dept: 'Marketing', day: 'Hoje' },
-    { name: 'Carlos Eduardo', dept: 'TI', day: '15 de Maio' },
-    { name: 'Beatriz Costa', dept: 'Financeiro', day: '22 de Maio' },
-  ]
-
-  const announcements = [
-    { title: 'Novo Benefício Saúde', date: 'Há 2 horas', priority: 'high' },
-    { title: 'Reunião Geral Trimestral', date: 'Ontem', priority: 'medium' },
-    { title: 'Manutenção no Ar-condicionado', date: '12 Mai', priority: 'low' },
-  ]
+  const allowedSectors = sectors
+    .filter(sec => hasPermission(`workspace-${sec.id}`))
+    .map(sec => ({
+      ...sec,
+      links: sec.links.filter(link => {
+        if (link.href === '/rh') {
+          return hasPermission('workspace-rh')
+        }
+        if (link.href === '/rh/parceiros') {
+          return hasPermission('scp')
+        }
+        if (link.href === '/rh/parceiros/config/comercial') {
+          return hasPermission('comercial-agentes')
+        }
+        return true
+      })
+    }))
 
   return (
     <div className="hub-container">
@@ -226,9 +330,9 @@ export default function HubPage() {
 
         <div className="hub-banner">
           <div style={{ maxWidth: '500px' }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem' }}>Campanha Agasalho 2026</h2>
-            <p style={{ opacity: 0.9, marginBottom: '1.5rem' }}>Participe da nossa campanha anual de doação. Os pontos de coleta estão em todas as unidades.</p>
-            <button className="btn btn-primary" style={{ background: '#fff', color: 'var(--brs-navy)' }}>Saiba Mais</button>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem' }}>BRS Promotora - Rumo aos R$ 9 Milhões!</h2>
+            <p style={{ opacity: 0.9, marginBottom: '1.5rem' }}>Juntos somos mais fortes. Acompanhe nossas metas e produções diárias rumo aos R$ 9 milhões de produção.</p>
+            <button className="btn btn-primary" style={{ background: '#fff', color: 'var(--brs-navy)' }}>Ver Metas</button>
           </div>
           {/* Aqui entraria a galeria de imagens futuramente */}
         </div>
@@ -236,7 +340,7 @@ export default function HubPage() {
         {/* Grid de Setores ou Detalhe do Setor */}
         {!activeSector ? (
           <div className="hub-sections-grid">
-            {sectors.map((sector) => (
+            {allowedSectors.map((sector) => (
               <div 
                 key={sector.id} 
                 className="sector-card"
@@ -256,15 +360,15 @@ export default function HubPage() {
           <div className="card" style={{ animation: 'slideIn 0.3s ease' }}>
             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <div className={`sector-icon ${sectors.find(s => s.id === activeSector)?.color}`} style={{ marginBottom: 0 }}>
-                  {sectors.find(s => s.id === activeSector)?.icon && (
+                <div className={`sector-icon ${allowedSectors.find(s => s.id === activeSector)?.color}`} style={{ marginBottom: 0 }}>
+                  {allowedSectors.find(s => s.id === activeSector)?.icon && (
                     <div style={{ color: 'inherit' }}>
                       {/* @ts-ignore */}
-                      {(() => { const Icon = sectors.find(s => s.id === activeSector)!.icon; return <Icon size={24} /> })()}
+                      {(() => { const Icon = allowedSectors.find(s => s.id === activeSector)!.icon; return <Icon size={24} /> })()}
                     </div>
                   )}
                 </div>
-                <h2 className="card-title" style={{ margin: 0 }}>Portal {sectors.find(s => s.id === activeSector)?.name}</h2>
+                <h2 className="card-title" style={{ margin: 0 }}>Portal {allowedSectors.find(s => s.id === activeSector)?.name}</h2>
               </div>
               <button 
                 className="icon-button" 
@@ -283,18 +387,33 @@ export default function HubPage() {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                   {/* Links Fixos (Base) */}
-                  {sectors.find(s => s.id === activeSector)?.links.map((link) => (
-                    <a 
-                      key={link.label} 
-                      href={link.href} 
-                      target={link.external ? '_blank' : '_self'}
-                      className="sector-card"
-                      style={{ padding: '1.25rem', textAlign: 'center', textDecoration: 'none' }}
-                    >
-                      <div style={{ fontWeight: 600, color: 'var(--brs-navy)' }}>{link.label}</div>
-                      {link.external && <div style={{ fontSize: '0.7rem', color: 'var(--brs-gray-400)' }}>Externo <ExternalLink size={10} /></div>}
-                    </a>
-                  ))}
+                  {allowedSectors.find(s => s.id === activeSector)?.links.map((link) => {
+                    if (link.disabled) {
+                      return (
+                        <div 
+                          key={link.label}
+                          className="sector-card"
+                          style={{ padding: '1.25rem', textAlign: 'center', opacity: 0.6, cursor: 'not-allowed', background: 'var(--brs-gray-50)' }}
+                        >
+                          <div style={{ fontWeight: 600, color: 'var(--brs-gray-400)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                            🚫 {link.label}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return (
+                      <a 
+                        key={link.label} 
+                        href={link.href} 
+                        target={link.external ? '_blank' : '_self'}
+                        className="sector-card"
+                        style={{ padding: '1.25rem', textAlign: 'center', textDecoration: 'none' }}
+                      >
+                        <div style={{ fontWeight: 600, color: 'var(--brs-navy)' }}>{link.label}</div>
+                        {link.external && <div style={{ fontSize: '0.7rem', color: 'var(--brs-gray-400)' }}>Externo <ExternalLink size={10} /></div>}
+                      </a>
+                    )
+                  })}
 
                   {/* Links Dinâmicos do Banco */}
                   {sectorLinks.map((link) => (
@@ -310,7 +429,7 @@ export default function HubPage() {
                     </a>
                   ))}
 
-                  {sectorLinks.length === 0 && !sectors.find(s => s.id === activeSector)?.links.length && (
+                  {sectorLinks.length === 0 && !allowedSectors.find(s => s.id === activeSector)?.links.length && (
                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '2rem', color: 'var(--brs-gray-400)' }}>
                       Nenhuma ferramenta cadastrada para este setor.
                     </div>
@@ -325,25 +444,55 @@ export default function HubPage() {
       {/* Coluna Lateral (Widgets) */}
       <div className="hub-sidebar">
         
-        {/* Widget de Aniversariantes (Subiu para o topo conforme solicitado) */}
+        {/* Widget de Próximos Aniversariantes */}
         <div className="widget-card">
           <div className="widget-header">
             <h3 className="widget-title">
               <Calendar size={18} style={{ color: 'var(--brs-gold)' }} />
-              Aniversariantes do Mês
+              Próximos Aniversariantes
             </h3>
           </div>
           <div className="widget-content">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {birthdays.map((person) => (
-                <div key={person.name} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div className="user-avatar" style={{ width: '36px', height: '36px' }}>{person.name.charAt(0)}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{person.name}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>{person.dept} • {person.day}</div>
+              {birthdays.length > 0 ? (
+                birthdays.map((person: any, idx: number) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      background: 'var(--brs-navy)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontSize: '1.75rem',
+                      fontWeight: 700,
+                      border: person.daysUntil === 0 ? '3px solid var(--brs-gold)' : '2px solid var(--brs-gray-100)'
+                    }}>
+                      {person.avatar_url ? (
+                        <img
+                          src={person.avatar_url}
+                          alt={person.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        person.name.charAt(0)
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--brs-navy)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person.name.split(' ')[0]}</div>
+                      <div style={{ fontSize: '0.8rem', color: person.daysUntil === 0 ? 'var(--brs-gold)' : 'var(--brs-gray-400)', fontWeight: person.daysUntil <= 1 ? 700 : 400 }}>{person.day}</div>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--brs-gray-400)', fontSize: '0.8125rem' }}>
+                  Nenhum aniversariante nos próximos 60 dias.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -353,7 +502,7 @@ export default function HubPage() {
           <div className="widget-header">
             <h3 className="widget-title">
               <Clock size={18} style={{ color: 'var(--brs-navy)' }} />
-              Sua Agenda
+              Agenda
             </h3>
           </div>
           <div className="tab-nav">
@@ -370,18 +519,10 @@ export default function HubPage() {
               Empresa
             </div>
           </div>
-          <div className="widget-content">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div style={{ borderLeft: '3px solid #2563eb', paddingLeft: '0.75rem' }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2563eb' }}>10:00 - Hoje</div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 700 }}>Alinhamento Q3</div>
-                <button className="btn btn-sm btn-primary" style={{ marginTop: '0.5rem', padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}>Entrar no Meet</button>
-              </div>
-              <div style={{ borderLeft: '3px solid var(--brs-gray-200)', paddingLeft: '0.75rem' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>14:30 - Hoje</div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--brs-gray-600)' }}>Revisão de Metas</div>
-              </div>
-            </div>
+          <div className="widget-content" style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--brs-gray-400)', margin: 0 }}>
+              Nenhum compromisso agendado.
+            </p>
           </div>
         </div>
 
@@ -407,15 +548,10 @@ export default function HubPage() {
               Comunicados
             </h3>
           </div>
-          <div className="widget-content">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {announcements.map((news) => (
-                <div key={news.title} style={{ paddingBottom: '0.75rem', borderBottom: '1px solid var(--brs-gray-50)' }}>
-                  <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--brs-gray-800)' }}>{news.title}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--brs-gray-400)', marginTop: '0.25rem' }}>{news.date}</div>
-                </div>
-              ))}
-            </div>
+          <div className="widget-content" style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--brs-gray-400)', margin: 0 }}>
+              Nenhum comunicado no momento.
+            </p>
           </div>
         </div>
 
