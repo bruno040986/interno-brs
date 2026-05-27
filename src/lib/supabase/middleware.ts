@@ -2,6 +2,14 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  // Não interceptar endpoints internos do Next.js (RSC/Flight/Server Actions),
+  // senão podemos quebrar navegação e ações com "unexpected response from server".
+  if (pathname.startsWith('/_next')) {
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -25,10 +33,15 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
-
   // Rotas públicas que não precisam de autenticação
-  const publicRoutes = ['/login', '/auth/callback', '/cadastro-parceiro']
+  const publicRoutes = [
+    '/login',
+    '/auth/callback',
+    '/cadastro-parceiro',
+    // APIs públicas usadas no formulário público
+    '/api/lookups',
+    '/api/cpfhub',
+  ]
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
 
   if (!user && !isPublicRoute) {

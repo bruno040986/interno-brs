@@ -1,0 +1,1766 @@
+'use client'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  archiveProcessModel,
+  deleteProcessModel,
+  duplicateProcessModel,
+  getCompanyProfiles,
+  getContractTemplates,
+  getPartnerForms,
+  getProcessModels,
+  getProcessStages,
+  isProcessSlugAvailable,
+  saveProcessModel,
+  validateProcessModel,
+} from '../../actions'
+import {
+  AlertCircle,
+  Archive,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  ExternalLink,
+  Files,
+  Loader2,
+  Pencil,
+  Plus,
+  Save,
+  ShieldCheck,
+  Trash,
+} from 'lucide-react'
+
+type PartnerFormRow = {
+  id: string
+  title: string
+  is_active: boolean
+  schema?: any[]
+}
+
+type ProcessModelRow = {
+  id?: string
+  name: string
+  type: string
+  is_active: boolean
+  is_public: boolean
+  public_slug?: string | null
+  form_id?: string | null
+  company_profile_id?: string | null
+  entry_config?: any
+  config?: any
+}
+
+type CompanyProfileRow = {
+  id: string
+  nickname: string
+  cnpj?: string | null
+  is_active: boolean
+  company_data?: any
+  partner_primary_data?: any
+  partner_secondary_data?: any
+  witness_data?: any
+}
+
+type StageRow = {
+  id?: string
+  client_key: string
+  name: string
+  position: number
+  color?: string | null
+  bg?: string | null
+  config?: any
+}
+
+type ContractTemplateRow = {
+  id: string
+  name: string
+  body: string
+  placeholders?: Array<{
+    id: string
+    token: string
+    label: string
+    required?: boolean
+  }>
+}
+
+type Health = {
+  blocking: string[]
+  warnings: string[]
+}
+
+type ProcessTab = 'formulario' | 'etapas' | 'campos' | 'documentos' | 'emails' | 'whatsapp' | 'regras'
+
+const TAB_LABELS: Array<{ id: ProcessTab; label: string }> = [
+  { id: 'formulario', label: 'Formulário' },
+  { id: 'etapas', label: 'Etapas (Kanban)' },
+  { id: 'campos', label: 'Campos do Processo' },
+  { id: 'documentos', label: 'Documentos / Assinatura' },
+  { id: 'emails', label: 'E-mails' },
+  { id: 'whatsapp', label: 'WhatsApp' },
+  { id: 'regras', label: 'Regras & SLA' },
+]
+
+const IDENTIFIER_OPTION_MAX_CHARS = 100
+const SIGNATURE_LINK_TRIGGER = 'signature_link_ready'
+const SIGNER_ROLE_OPTIONS = [
+  { value: 'contratante', label: 'Contratante' },
+  { value: 'contratado', label: 'Contratado' },
+  { value: 'test1', label: 'Testemunha 1' },
+  { value: 'test2', label: 'Testemunha 2' },
+]
+
+function normalizeSlug(input: string): string {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function parseCommaList(raw: string): string[] {
+  return String(raw || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+function stringifyPretty(value: any): string {
+  try {
+    return JSON.stringify(value ?? {}, null, 2)
+  } catch {
+    return '{}'
+  }
+}
+
+function truncateText(value: string, maxChars: number) {
+  const normalized = String(value || '').trim()
+  if (normalized.length <= maxChars) return normalized
+  return `${normalized.slice(0, maxChars - 1)}…`
+}
+
+function normalizeFieldKey(raw: string) {
+  const normalized = String(raw || '')
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+
+  return normalized || 'campo'
+}
+
+function makeClientKey(seed?: string) {
+  if (seed) return seed
+  return `stage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export default function ProcessBuilderPage() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
+  const [archivingId, setArchivingId] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const [forms, setForms] = useState<PartnerFormRow[]>([])
+  const [processes, setProcesses] = useState<ProcessModelRow[]>([])
+  const [companies, setCompanies] = useState<CompanyProfileRow[]>([])
+  const [contractTemplates, setContractTemplates] = useState<ContractTemplateRow[]>([])
+  const [view, setView] = useState<'list' | 'edit'>('list')
+
+  const [selected, setSelected] = useState<ProcessModelRow | null>(null)
+  const [stages, setStages] = useState<StageRow[]>([])
+  const [activeTab, setActiveTab] = useState<ProcessTab>('formulario')
+  const [expandedStageIndex, setExpandedStageIndex] = useState<number | null>(null)
+
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const [health, setHealth] = useState<Health>({ blocking: [], warnings: [] })
+  const initialSnapshotRef = useRef<string>('')
+
+  const selectedForm = useMemo(() => {
+    if (!selected?.form_id) return null
+    return forms.find((f) => f.id === selected.form_id) || null
+  }, [forms, selected?.form_id])
+
+  const formTags = useMemo(() => {
+    const schema = Array.isArray(selectedForm?.schema) ? selectedForm.schema : []
+    return schema
+      .map((f: any) => ({
+        key: String(f?.key || f?.id || ''),
+        label: String(f?.label || f?.key || f?.id || ''),
+        display_label: truncateText(String(f?.label || f?.key || f?.id || ''), IDENTIFIER_OPTION_MAX_CHARS),
+        system_key: String(f?.system_key || ''),
+        type: String(f?.type || 'text'),
+        required: !!f?.required,
+        mask: String(f?.mask || ''),
+      }))
+      .filter((o) => o.key)
+  }, [selectedForm?.schema])
+
+  const identifierOptions = useMemo(() => formTags, [formTags])
+
+  const selectedCompany = useMemo(() => {
+    if (!selected?.company_profile_id) return null
+    return companies.find((company) => company.id === selected.company_profile_id) || null
+  }, [companies, selected?.company_profile_id])
+
+  const companyGlobalTagOptions = useMemo(() => {
+    if (!selectedCompany) return []
+
+    const p1 = selectedCompany.partner_primary_data || {}
+    const w = selectedCompany.witness_data || {}
+
+    const rows = [
+      { key: '{{contratante.cpf}}', label: 'Contratante CPF', value: String(p1.cpf || '') },
+      { key: '{{contratante.nome}}', label: 'Contratante Nome', value: String(p1.name || '') },
+      { key: '{{contratante.email}}', label: 'Contratante E-mail', value: String(p1.email_signature || p1.email_professional || '') },
+      { key: '{{contratante.whatsapp}}', label: 'Contratante WhatsApp', value: String(p1.whatsapp || '') },
+      { key: '{{test1.cpf}}', label: 'Testemunha 1 CPF', value: String(w.cpf || '') },
+      { key: '{{test1.nome}}', label: 'Testemunha 1 Nome', value: String(w.name || '') },
+      { key: '{{test1.email}}', label: 'Testemunha 1 E-mail', value: String(w.email_signature || w.email_professional || '') },
+      { key: '{{test1.whatsapp}}', label: 'Testemunha 1 WhatsApp', value: String(w.whatsapp || '') },
+    ]
+
+    return rows.map((row) => ({
+      key: row.key,
+      label: row.label,
+      value: row.value,
+      display_text: truncateText(`${row.label} (${row.key})${row.value ? ` • ${row.value}` : ''}`, IDENTIFIER_OPTION_MAX_CHARS),
+      source: 'empresa_global',
+    }))
+  }, [selectedCompany])
+
+  const processTagOptions = useMemo(() => {
+    const fromForm = formTags.map((tag) => ({
+      key: String(tag.key),
+      label: String(tag.label),
+      display_text: truncateText(`${String(tag.label)} (${String(tag.key)})`, IDENTIFIER_OPTION_MAX_CHARS),
+      source: 'formulario',
+    }))
+
+    const fields = getConfigArray('process_fields')
+    const fromProcessFields = fields
+      .filter((field: any) => field?.key)
+      .map((field: any) => ({
+        key: String(field.key),
+        label: String(field.label || field.key),
+        display_text: truncateText(
+          `${String(field.label || field.key)} (${String(field.key)})`,
+          IDENTIFIER_OPTION_MAX_CHARS,
+        ),
+        source: 'processo',
+      }))
+
+    const merged = [...companyGlobalTagOptions, ...fromForm, ...fromProcessFields]
+    const unique = new Map<string, { key: string; label: string; display_text: string; source: string; value?: string }>()
+    for (const item of merged) {
+      if (!unique.has(item.key)) unique.set(item.key, item)
+    }
+    return Array.from(unique.values())
+  }, [companyGlobalTagOptions, formTags, selected?.config])
+
+  const publicUrl = selected?.is_public && selected?.public_slug ? `/cadastro-parceiro/${normalizeSlug(selected.public_slug)}` : ''
+
+  const processDraftSignature = useMemo(() => stringifyPretty({ selected, stages }), [selected, stages])
+
+  const hasPendingChanges = useMemo(() => {
+    return view === 'edit' && !!selected && initialSnapshotRef.current !== processDraftSignature
+  }, [view, selected, processDraftSignature])
+
+  const canRunValidation = !!selected?.form_id && stages.length > 0
+  const canOpenPublicLink = canRunValidation && health.blocking.length === 0 && !!publicUrl
+
+  const processDocumentOptions = useMemo(() => {
+    const list = getConfigArray('documents')
+    return list
+      .map((doc: any, idx: number) => {
+        const key = String(doc?.id || doc?.template_id || `${doc?.stage_key || doc?.stage_name || 'stage'}:${doc?.name || idx}`)
+        const label = String(doc?.name || doc?.template_name || `Documento ${idx + 1}`)
+        const stageLabel = String(doc?.stage_name || '')
+        return {
+          key,
+          label: stageLabel ? `${label} (${stageLabel})` : label,
+        }
+      })
+      .filter((item) => item.key && item.label)
+  }, [selected?.config])
+
+  function getPlaceholderToken(placeholder: any) {
+    const token = String(placeholder?.token || '').trim()
+    if (token.startsWith('{{') && token.endsWith('}}')) return token
+
+    const id = String(placeholder?.id || '').trim()
+    if (id.startsWith('{{') && id.endsWith('}}')) return id
+
+    const label = String(placeholder?.label || '')
+    const tokenInLabel = label.match(/\{\{[^}]+\}\}/)?.[0]
+    return String(tokenInLabel || '')
+  }
+
+  function suggestTagForPlaceholder(placeholder: any) {
+    const token = getPlaceholderToken(placeholder)
+    if (!token) return ''
+    const exact = processTagOptions.find((opt) => opt.key === token)
+    return exact?.key || ''
+  }
+
+  useEffect(() => {
+    if (!selected) return
+    const docs = getConfigArray('documents')
+    if (!docs.length) return
+
+    let changed = false
+    const nextDocs = docs.map((doc: any) => {
+      const template = findContractTemplate(doc)
+      const placeholders = template?.placeholders || []
+      if (!placeholders.length) return doc
+
+      const currentMapping = doc?.placeholder_mapping && typeof doc.placeholder_mapping === 'object' ? doc.placeholder_mapping : {}
+      const nextMapping: Record<string, string> = { ...currentMapping }
+      let docChanged = false
+
+      for (const placeholder of placeholders) {
+        const placeholderId = String(placeholder?.id || '')
+        if (!placeholderId) continue
+        if (String(nextMapping[placeholderId] || '').trim()) continue
+
+        const suggested = suggestTagForPlaceholder(placeholder)
+        if (!suggested) continue
+        nextMapping[placeholderId] = suggested
+        docChanged = true
+      }
+
+      if (!docChanged) return doc
+      changed = true
+      return { ...doc, placeholder_mapping: nextMapping }
+    })
+
+    if (changed) setConfigArray('documents', nextDocs)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.company_profile_id, selected?.form_id, contractTemplates, processTagOptions.length])
+
+  function getConfigArray(key: string): any[] {
+    const cfg = selected?.config || {}
+    return Array.isArray(cfg?.[key]) ? cfg[key] : []
+  }
+
+  function setConfigArray(key: string, next: any[]) {
+    setSelected((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        config: {
+          ...(prev.config || {}),
+          [key]: next,
+        },
+      }
+    })
+  }
+
+  function updateConfigValue(path: string, value: any) {
+    setSelected((prev) => {
+      if (!prev) return prev
+      const cfg = { ...(prev.config || {}) }
+      const parts = path.split('.')
+      let cursor: any = cfg
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i]
+        if (!cursor[part] || typeof cursor[part] !== 'object') cursor[part] = {}
+        cursor = cursor[part]
+      }
+      cursor[parts[parts.length - 1]] = value
+      return { ...prev, config: cfg }
+    })
+  }
+
+  function getStageItems(key: string, stage: StageRow) {
+    return getConfigArray(key).filter((item: any) => item?.stage_key === stage.client_key || item?.stage_name === stage.name)
+  }
+
+  function findContractTemplate(doc: any) {
+    const byId = contractTemplates.find((template) => template.id === String(doc?.template_id || ''))
+    if (byId) return byId
+    const byName = contractTemplates.find((template) => String(template.name || '').toLowerCase() === String(doc?.template_name || '').toLowerCase())
+    return byName || null
+  }
+
+  function buildUniqueFieldKey(label: string, stage: StageRow, currentIndex: number) {
+    const base = normalizeFieldKey(label)
+    const sameStageItems = getStageItems('process_fields', stage)
+    const existingKeys = sameStageItems
+      .map((item: any, idx: number) => (idx === currentIndex ? null : String(item?.key || '').trim()))
+      .filter(Boolean)
+
+    if (!existingKeys.includes(base)) return base
+
+    let suffix = 2
+    let candidate = `${base}-${suffix}`
+    while (existingKeys.includes(candidate)) {
+      suffix += 1
+      candidate = `${base}-${suffix}`
+    }
+    return candidate
+  }
+
+  function addStageItem(key: string, stage: StageRow, seed: any) {
+    const list = getConfigArray(key)
+    setConfigArray(key, [
+      ...list,
+      {
+        ...seed,
+        stage_key: stage.client_key,
+        stage_name: stage.name,
+      },
+    ])
+  }
+
+  function updateStageItem(key: string, stage: StageRow, localIndex: number, patch: any) {
+    const list = getConfigArray(key)
+    let stageCounter = -1
+    const next = list.map((item: any) => {
+      const sameStage = item?.stage_key === stage.client_key || item?.stage_name === stage.name
+      if (!sameStage) return item
+      stageCounter += 1
+      if (stageCounter !== localIndex) return item
+      return {
+        ...item,
+        ...patch,
+        stage_key: stage.client_key,
+        stage_name: stage.name,
+      }
+    })
+    setConfigArray(key, next)
+  }
+
+  function removeStageItem(key: string, stage: StageRow, localIndex: number) {
+    const list = getConfigArray(key)
+    let stageCounter = -1
+    const next = list.filter((item: any) => {
+      const sameStage = item?.stage_key === stage.client_key || item?.stage_name === stage.name
+      if (!sameStage) return true
+      stageCounter += 1
+      return stageCounter !== localIndex
+    })
+    setConfigArray(key, next)
+  }
+
+  function renameStageReferences(clientKey: string, oldName: string, newName: string) {
+    ;['process_fields', 'documents', 'emails', 'whatsapp'].forEach((key) => {
+      const list = getConfigArray(key)
+      if (!list.length) return
+      const next = list.map((item: any) => {
+        const sameStage = item?.stage_key === clientKey || item?.stage_name === oldName
+        if (!sameStage) return item
+        return {
+          ...item,
+          stage_key: clientKey,
+          stage_name: newName,
+        }
+      })
+      setConfigArray(key, next)
+    })
+  }
+
+  function removeStageReferences(stage: StageRow) {
+    ;['process_fields', 'documents', 'emails', 'whatsapp'].forEach((key) => {
+      const list = getConfigArray(key)
+      if (!list.length) return
+      const next = list.filter((item: any) => !(item?.stage_key === stage.client_key || item?.stage_name === stage.name))
+      setConfigArray(key, next)
+    })
+  }
+
+  function computeLocalHealth(proc: ProcessModelRow | null, stageList: StageRow[]): Health {
+    const blocking: string[] = []
+    const warnings: string[] = []
+
+    if (!proc) return { blocking, warnings }
+
+    if (!proc.name?.trim()) blocking.push('Nome do processo é obrigatório.')
+    if (!proc.form_id) blocking.push('Selecione o formulário base.')
+    if (!proc.entry_config?.identifier_field_key) blocking.push('Selecione o campo identificador.')
+
+    if (stageList.length === 0) blocking.push('Cadastre ao menos uma etapa no Kanban.')
+
+    stageList.forEach((stage) => {
+      const transitions = Array.isArray(stage?.config?.transitions) ? stage.config.transitions : []
+      const isTerminal = !!stage?.config?.is_terminal
+      if (!isTerminal && transitions.length === 0) {
+        blocking.push(`Etapa "${stage.name}" sem transição de saída.`)
+      }
+    })
+
+    const hasAnySla = stageList.some((s) => !!s?.config?.sla_hours || !!s?.config?.sla_days)
+    if (!hasAnySla) warnings.push('Nenhuma etapa com SLA definido.')
+
+    const fields = getConfigArray('process_fields')
+    if (fields.length === 0) warnings.push('Nenhum campo de processo configurado nas etapas.')
+
+    const docs = getConfigArray('documents')
+    for (const doc of docs) {
+      const template = findContractTemplate(doc)
+      if (!template) {
+        blocking.push(`Documento "${doc?.name || 'sem nome'}" sem modelo selecionado.`)
+        continue
+      }
+      const requiredPlaceholders = (template.placeholders || []).filter((placeholder: any) => !!placeholder?.required)
+      const mapping = doc?.placeholder_mapping && typeof doc.placeholder_mapping === 'object' ? doc.placeholder_mapping : {}
+      for (const placeholder of requiredPlaceholders) {
+        const placeholderId = String(placeholder?.id || '')
+        if (!placeholderId) continue
+        const selectedTag = String(mapping?.[placeholderId] || '')
+        if (!selectedTag) {
+          blocking.push(`Documento "${doc?.name || template.name}" sem vínculo para "${placeholder?.label || placeholderId}".`)
+        }
+      }
+    }
+
+    const requireSignatureTriggerConfig = (items: any[], kindLabel: string) => {
+      for (const item of items) {
+        if (String(item?.trigger || '') !== SIGNATURE_LINK_TRIGGER) continue
+        if (!String(item?.signature_document_ref || '').trim()) {
+          blocking.push(`${kindLabel} "${item?.name || 'sem nome'}" precisa de documento vinculado para gatilho de link.`)
+        }
+        if (!String(item?.signature_signer_role || '').trim()) {
+          blocking.push(`${kindLabel} "${item?.name || 'sem nome'}" precisa de papel de assinante para gatilho de link.`)
+        }
+      }
+    }
+
+    requireSignatureTriggerConfig(getConfigArray('emails'), 'E-mail')
+    requireSignatureTriggerConfig(getConfigArray('whatsapp'), 'WhatsApp')
+
+    return { blocking, warnings }
+  }
+
+  async function loadAll() {
+    setLoading(true)
+    setMessage(null)
+    const [pRes, fRes, dRes, cRes] = await Promise.all([getProcessModels(), getPartnerForms(), getContractTemplates(), getCompanyProfiles()])
+    if (pRes.success) setProcesses((pRes.processes || []) as any)
+    if (fRes.success) setForms((fRes.forms || []) as any)
+    if (dRes.success) setContractTemplates((dRes.templates || []) as any)
+    if (cRes.success) setCompanies(((cRes.companies || []) as any[] as CompanyProfileRow[]).filter((c) => c.is_active !== false))
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    loadAll()
+  }, [])
+
+  useEffect(() => {
+    if (!selected) return
+    setHealth(computeLocalHealth(selected, stages))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, stages])
+
+  async function openEdit(proc: ProcessModelRow) {
+    const nextSelected: ProcessModelRow = {
+      id: proc.id,
+      name: proc.name || '',
+      type: proc.type || 'generic',
+      is_active: !!proc.is_active,
+      is_public: !!proc.is_public,
+      public_slug: proc.public_slug || '',
+      form_id: proc.form_id || null,
+      company_profile_id: proc.company_profile_id || null,
+      entry_config: proc.entry_config || {},
+      config: proc.config || {},
+    }
+
+    setSelected(nextSelected)
+    setActiveTab('formulario')
+    setExpandedStageIndex(null)
+    setSlugStatus('idle')
+    setMessage(null)
+    setView('edit')
+
+    let loadedStages: StageRow[] = []
+    if (proc.id) {
+      const stRes = await getProcessStages(proc.id)
+      if (stRes.success) {
+        loadedStages = ((stRes.stages || []) as any[]).map((s: any, idx: number) => ({
+          id: s.id,
+          client_key: s.id || makeClientKey(`persisted-${idx}`),
+          name: s.name,
+          position: typeof s.position === 'number' ? s.position : idx,
+          color: s.color,
+          bg: s.bg,
+          config: s.config || {},
+        }))
+      }
+    } else {
+      loadedStages = [
+        { client_key: makeClientKey(), name: 'Novo', position: 0, color: '#3B82F6', bg: '#EFF6FF', config: { transitions: ['Aguardando Assinatura'] } },
+        { client_key: makeClientKey(), name: 'Aguardando Assinatura', position: 1, color: '#F59E0B', bg: '#FEF3C7', config: { transitions: ['Finalizado'] } },
+        { client_key: makeClientKey(), name: 'Finalizado', position: 2, color: '#059669', bg: '#E6F4EA', config: { is_terminal: true, transitions: [] } },
+      ]
+    }
+    setStages(loadedStages)
+
+    const sig = stringifyPretty({ selected: nextSelected, stages: loadedStages })
+    initialSnapshotRef.current = sig
+    setHealth(computeLocalHealth(nextSelected, loadedStages))
+  }
+
+  function handleNew() {
+    openEdit({
+      name: 'Novo Processo',
+      type: 'generic',
+      is_active: true,
+      is_public: true,
+      public_slug: '',
+      form_id: null,
+      company_profile_id: null,
+      entry_config: {
+        dedupe: {
+          enabled: true,
+          scope: 'active',
+          message: 'Já existe um processo ativo com este identificador. Finalize ou arquive o card antes de enviar novamente.',
+        },
+        identifier_normalization: 'auto',
+        validate_timing: 'both',
+      },
+      config: {
+        process_fields: [],
+        documents: [],
+        emails: [],
+        whatsapp: [],
+        rules: { default_sla_hours: null, work_calendar: 'dias_uteis', strict_stage_exit: true },
+      },
+    })
+  }
+
+  async function validateAndSetSlug(raw: string) {
+    if (!selected) return
+    const normalized = normalizeSlug(raw)
+    setSelected({ ...selected, public_slug: normalized })
+    if (!selected.is_public) return
+    if (!normalized) {
+      setSlugStatus('idle')
+      return
+    }
+    setSlugStatus('checking')
+    const res = await isProcessSlugAvailable(normalized, selected.id)
+    if (res.success) {
+      setSlugStatus(res.available ? 'available' : 'taken')
+      setSelected((prev) => (prev ? { ...prev, public_slug: res.normalized } : prev))
+    } else {
+      setSlugStatus('idle')
+    }
+  }
+
+  function moveStage(idx: number, dir: 'up' | 'down') {
+    setStages((prev) => {
+      const next = [...prev]
+      const target = dir === 'up' ? idx - 1 : idx + 1
+      if (target < 0 || target >= next.length) return prev
+      const tmp = next[idx]
+      next[idx] = next[target]
+      next[target] = tmp
+      return next.map((s, i) => ({ ...s, position: i }))
+    })
+  }
+
+  async function runHealthValidation() {
+    if (!selected) return
+
+    const local = computeLocalHealth(selected, stages)
+    if (!selected.id) {
+      setHealth(local)
+      setMessage({ type: local.blocking.length ? 'error' : 'success', text: local.blocking.length ? 'Existem pendências bloqueantes.' : 'Validação concluída.' })
+      return
+    }
+
+    const remote = await validateProcessModel(selected.id)
+    if (!remote.success) {
+      setHealth(local)
+      setMessage({ type: 'error', text: remote.error || 'Erro ao validar processo.' })
+      return
+    }
+
+    const normalizedWarnings = (remote.warnings || []).map((w: string) =>
+      w.replace(/dedupe/gi, 'duplicação').replace(/Dedupe/g, 'Duplicação')
+    )
+
+    const merged: Health = {
+      blocking: [...new Set([...(local.blocking || []), ...(remote.blocking || [])])],
+      warnings: [...new Set([...(local.warnings || []), ...normalizedWarnings])],
+    }
+    setHealth(merged)
+    setMessage({
+      type: merged.blocking.length ? 'error' : 'success',
+      text: merged.blocking.length ? 'Validação concluída com bloqueios.' : 'Validação concluída sem erros bloqueantes.',
+    })
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selected) return
+    setSaving(true)
+    setMessage(null)
+
+    const payload = {
+      id: selected.id,
+      name: selected.name,
+      type: normalizeSlug(selected.name) || selected.type || 'generic',
+      is_active: !!selected.is_active,
+      is_public: !!selected.is_public,
+      public_slug: selected.public_slug || null,
+      form_id: selected.form_id || null,
+      company_profile_id: selected.company_profile_id || null,
+      entry_config: selected.entry_config || {},
+      config: selected.config || {},
+      stages: stages.map((s, i) => ({
+        id: s.id,
+        name: s.name,
+        position: i,
+        color: s.color || null,
+        bg: s.bg || null,
+        config: s.config || {},
+      })),
+    }
+
+    const res = await saveProcessModel(payload as any)
+    if (res.success) {
+      setMessage({ type: 'success', text: 'Processo salvo com sucesso.' })
+      await loadAll()
+      const id = (res as any).id || selected.id
+      const updated = (await getProcessModels()) as any
+      if (updated.success) {
+        const found = (updated.processes || []).find((p: any) => p.id === id) || null
+        if (found) await openEdit(found)
+      }
+    } else {
+      setMessage({ type: 'error', text: res.error || 'Erro ao salvar processo.' })
+    }
+    setSaving(false)
+  }
+
+  async function handleDelete(processId: string) {
+    if (!confirm('Excluir este processo? Esta ação remove apenas o modelo.')) return
+    setDeletingId(processId)
+    const res = await deleteProcessModel(processId)
+    if (res.success) {
+      setMessage({ type: 'success', text: 'Processo excluído.' })
+      await loadAll()
+      if (selected?.id === processId) {
+        setView('list')
+        setSelected(null)
+        setStages([])
+      }
+    } else {
+      setMessage({ type: 'error', text: res.error || 'Erro ao excluir processo.' })
+    }
+    setDeletingId(null)
+  }
+
+  async function handleDuplicate(processId: string) {
+    setDuplicatingId(processId)
+    const res = await duplicateProcessModel(processId)
+    if (res.success) {
+      setMessage({ type: 'success', text: 'Processo duplicado com sucesso.' })
+      await loadAll()
+    } else {
+      setMessage({ type: 'error', text: res.error || 'Erro ao duplicar processo.' })
+    }
+    setDuplicatingId(null)
+  }
+
+  async function handleArchive(processId: string) {
+    setArchivingId(processId)
+    const res = await archiveProcessModel(processId)
+    if (res.success) {
+      setMessage({ type: 'success', text: 'Processo arquivado (inativo).' })
+      await loadAll()
+      if (selected?.id === processId) {
+        setSelected((prev) => (prev ? { ...prev, is_active: false } : prev))
+      }
+    } else {
+      setMessage({ type: 'error', text: res.error || 'Erro ao arquivar processo.' })
+    }
+    setArchivingId(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="card" style={{ padding: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Loader2 className="spinner" size={18} />
+          Carregando processos...
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding: '1.5rem' }}>
+      {message && (
+        <div
+          style={{
+            marginBottom: '1rem',
+            padding: '0.75rem 1rem',
+            borderRadius: 10,
+            border: `1px solid ${message.type === 'success' ? '#A7F3D0' : '#FECACA'}`,
+            background: message.type === 'success' ? '#ECFDF5' : '#FEF2F2',
+            color: message.type === 'success' ? '#065F46' : '#991B1B',
+            display: 'flex',
+            gap: '0.5rem',
+            alignItems: 'center',
+          }}
+        >
+          {message.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+          <span>{message.text}</span>
+        </div>
+      )}
+
+      {view === 'list' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--brs-gray-900)' }}>Construtor de Processos</div>
+              <div style={{ color: 'var(--brs-gray-500)', fontSize: '0.9rem' }}>
+                Configure formulário, etapas e automações por etapa para o fluxo do processo.
+              </div>
+            </div>
+            <button type="button" className="btn btn-primary" onClick={handleNew}>
+              <Plus size={16} />
+              Novo Processo
+            </button>
+          </div>
+
+          <div className="card" style={{ padding: '1.25rem' }}>
+            {processes.length === 0 ? (
+              <div style={{ padding: '1rem', border: '1px dashed var(--brs-gray-200)', borderRadius: 8, color: 'var(--brs-gray-600)' }}>
+                Nenhum processo criado ainda.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--brs-gray-100)' }}>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Nome do Processo</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Status</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Formulário vinculado</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {processes.map((p: any) => (
+                      <tr key={p.id} style={{ borderBottom: '1px solid var(--brs-gray-50)' }}>
+                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700, color: 'var(--brs-gray-800)' }}>{p.name}</td>
+                        <td style={{ padding: '0.75rem 0.5rem', color: p.is_active ? '#065F46' : '#92400E' }}>{p.is_active ? 'Ativo' : 'Inativo'}</td>
+                        <td style={{ padding: '0.75rem 0.5rem', color: 'var(--brs-gray-600)' }}>
+                          {forms.find((f) => f.id === p.form_id)?.title || 'Não definido'}
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <button type="button" className="btn btn-outline" onClick={() => openEdit(p)}>
+                              <Pencil size={16} />
+                              Editar
+                            </button>
+                            <button type="button" className="btn btn-outline" disabled={duplicatingId === p.id} onClick={() => handleDuplicate(p.id)}>
+                              {duplicatingId === p.id ? <Loader2 size={16} className="spinner" /> : <Files size={16} />}
+                              Duplicar
+                            </button>
+                            <button type="button" className="btn btn-outline" disabled={archivingId === p.id || !p.is_active} onClick={() => handleArchive(p.id)}>
+                              {archivingId === p.id ? <Loader2 size={16} className="spinner" /> : <Archive size={16} />}
+                              Arquivar
+                            </button>
+                            <button type="button" className="btn btn-outline text-danger" disabled={deletingId === p.id} onClick={() => handleDelete(p.id)}>
+                              {deletingId === p.id ? <Loader2 size={16} className="spinner" /> : <Trash size={16} />}
+                              Excluir
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {view === 'edit' && selected && (
+        <div className="card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 160px)', overflow: 'hidden' }}>
+          <div style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 2, borderBottom: '1px solid var(--brs-gray-100)', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)', marginBottom: '0.35rem' }}>
+              CRM Parceiros {'>'} Construtor de Processos {'>'} {selected.name || 'Novo Processo'}
+            </div>
+
+            <form onSubmit={handleSave}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(260px, 320px) auto', gap: '0.75rem', alignItems: 'end' }}>
+                <div className="form-group">
+                  <label className="form-label">Nome do Processo</label>
+                  <input type="text" className="form-control" value={selected.name} onChange={(e) => setSelected({ ...selected, name: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Empresa vinculada</label>
+                  <select
+                    className="form-control"
+                    value={selected.company_profile_id || ''}
+                    onChange={(e) => setSelected({ ...selected, company_profile_id: e.target.value || null })}
+                  >
+                    <option value="">Selecionar empresa...</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.nickname}
+                        {company.cnpj ? ` (${company.cnpj})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', marginBottom: '0.65rem' }}>
+                  <input type="checkbox" checked={selected.is_active} onChange={(e) => setSelected({ ...selected, is_active: e.target.checked })} />
+                  Ativo
+                </label>
+              </div>
+            </form>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+            {TAB_LABELS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  borderRadius: 8,
+                  border: `1px solid ${activeTab === tab.id ? 'var(--brs-primary-300)' : 'var(--brs-gray-200)'}`,
+                  background: activeTab === tab.id ? 'var(--brs-primary-50)' : '#fff',
+                  color: activeTab === tab.id ? 'var(--brs-primary-700)' : 'var(--brs-gray-700)',
+                  fontWeight: activeTab === tab.id ? 700 : 600,
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '0.25rem' }}>
+            {activeTab === 'formulario' && (
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                  <div className="section-divider" style={{ marginBottom: '1rem' }}>Formulário Base</div>
+                  <div className="form-grid form-grid-2">
+                    <div className="form-group">
+                      <label className="form-label">Formulário</label>
+                      <select
+                        className="form-control"
+                        value={selected.form_id || ''}
+                        onChange={(e) => {
+                          const nextFormId = e.target.value || null
+                          setSelected((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  form_id: nextFormId,
+                                  entry_config: {
+                                    ...(prev.entry_config || {}),
+                                    identifier_field_key: '',
+                                    identifier_label: '',
+                                    identifier_system_key: '',
+                                    identifier_mask: '',
+                                  },
+                                }
+                              : prev
+                          )
+                        }}
+                      >
+                        <option value="">Selecionar formulário...</option>
+                        {forms.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.title}
+                            {f.is_active ? ' (ativo)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Campo identificador</label>
+                      <select
+                        className="form-control"
+                        value={selected.entry_config?.identifier_field_key || ''}
+                        onChange={(e) => {
+                          const key = e.target.value
+                          const found = identifierOptions.find((o) => o.key === key)
+                          setSelected((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  entry_config: {
+                                    ...(prev.entry_config || {}),
+                                    identifier_field_key: key,
+                                    identifier_label: found?.label || key,
+                                    identifier_system_key: found?.system_key || '',
+                                    identifier_mask: found?.mask || '',
+                                  },
+                                }
+                              : prev
+                          )
+                        }}
+                      >
+                        <option value="">Selecionar campo...</option>
+                        {identifierOptions.map((o) => (
+                          <option key={o.key} value={o.key}>
+                            {o.display_label || o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-grid form-grid-3">
+                    <div className="form-group">
+                      <label className="form-label">Normalização</label>
+                      <select
+                        className="form-control"
+                        value={selected.entry_config?.identifier_normalization || 'auto'}
+                        onChange={(e) =>
+                          setSelected((prev) =>
+                            prev ? { ...prev, entry_config: { ...(prev.entry_config || {}), identifier_normalization: e.target.value } } : prev
+                          )
+                        }
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="digits">Somente dígitos</option>
+                        <option value="lowercase">Lowercase</option>
+                        <option value="none">Sem normalizar</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Regra de Duplicidade</label>
+                      <select
+                        className="form-control"
+                        value={selected.entry_config?.dedupe?.scope || 'active'}
+                        onChange={(e) =>
+                          setSelected((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  entry_config: {
+                                    ...(prev.entry_config || {}),
+                                    dedupe: {
+                                      ...(prev.entry_config?.dedupe || {}),
+                                      scope: e.target.value,
+                                      enabled: true,
+                                    },
+                                  },
+                                }
+                              : prev
+                          )
+                        }
+                      >
+                        <option value="active">Bloquear se existir ativo</option>
+                        <option value="active_archived">Bloquear ativo ou arquivado</option>
+                        <option value="all">Bloquear em qualquer status</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Quando validar duplicação</label>
+                      <select
+                        className="form-control"
+                        value={selected.entry_config?.validate_timing || 'both'}
+                        onChange={(e) =>
+                          setSelected((prev) =>
+                            prev ? { ...prev, entry_config: { ...(prev.entry_config || {}), validate_timing: e.target.value } } : prev
+                          )
+                        }
+                      >
+                        <option value="both">Ao digitar e ao enviar</option>
+                        <option value="on_blur">Ao digitar (blur)</option>
+                        <option value="on_submit">Apenas ao enviar</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Mensagem de duplicidade para o usuário</label>
+                    <textarea
+                      className="form-control"
+                      rows={3}
+                      value={selected.entry_config?.dedupe?.message || ''}
+                      onChange={(e) =>
+                        setSelected((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                entry_config: {
+                                  ...(prev.entry_config || {}),
+                                  dedupe: {
+                                    ...(prev.entry_config?.dedupe || {}),
+                                    enabled: true,
+                                    message: e.target.value,
+                                  },
+                                },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                  <div className="section-divider" style={{ marginBottom: '1rem' }}>Link Público do Processo</div>
+                  <div className="form-grid form-grid-3">
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', marginTop: '1.8rem' }}>
+                      <input type="checkbox" checked={selected.is_public} onChange={(e) => setSelected({ ...selected, is_public: e.target.checked })} />
+                      Processo público
+                    </label>
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                      <label className="form-label">Slug público</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={selected.public_slug || ''}
+                        onChange={(e) => {
+                          setSlugStatus('idle')
+                          setSelected({ ...selected, public_slug: e.target.value })
+                        }}
+                        onBlur={() => validateAndSetSlug(selected.public_slug || '')}
+                        disabled={!selected.is_public}
+                      />
+                      <div style={{ marginTop: '0.35rem', fontSize: '0.78rem', color: slugStatus === 'taken' ? 'var(--brs-danger)' : 'var(--brs-gray-500)' }}>
+                        {slugStatus === 'checking'
+                          ? 'Verificando slug...'
+                          : slugStatus === 'available'
+                            ? 'Slug disponível.'
+                            : slugStatus === 'taken'
+                              ? 'Slug em uso.'
+                              : 'Use letras, números e hífen.'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                  <div className="section-divider" style={{ marginBottom: '1rem' }}>Tags do Formulário</div>
+                  <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--brs-gray-100)', borderRadius: 8 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--brs-gray-50)' }}>
+                          <th style={{ textAlign: 'left', padding: '0.45rem' }}>Label</th>
+                          <th style={{ textAlign: 'left', padding: '0.45rem' }}>Tags para Uso (Key)</th>
+                          <th style={{ textAlign: 'left', padding: '0.45rem' }}>Tipo</th>
+                          <th style={{ textAlign: 'left', padding: '0.45rem' }}>Obrig.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formTags.map((tag) => (
+                          <tr key={tag.key} style={{ borderTop: '1px solid var(--brs-gray-100)' }}>
+                            <td style={{ padding: '0.45rem' }}>{tag.label}</td>
+                            <td style={{ padding: '0.45rem', color: 'var(--brs-gray-500)', fontFamily: 'monospace' }}>{tag.key}</td>
+                            <td style={{ padding: '0.45rem' }}>{tag.type}</td>
+                            <td style={{ padding: '0.45rem' }}>{tag.required ? 'Sim' : 'Não'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'etapas' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {stages.map((stage, idx) => {
+                  const transitions = Array.isArray(stage?.config?.transitions) ? stage.config.transitions.join(', ') : ''
+                  return (
+                    <div key={stage.client_key} className="card" style={{ padding: '0.85rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ width: 10, height: 10, borderRadius: 999, background: stage.color || '#94A3B8' }} />
+                          <input
+                            className="form-control"
+                            value={stage.name}
+                            onChange={(e) => {
+                              const newName = e.target.value
+                              setStages((prev) =>
+                                prev.map((s, i) => {
+                                  if (i !== idx) return s
+                                  return { ...s, name: newName }
+                                })
+                              )
+                              renameStageReferences(stage.client_key, stage.name, newName)
+                            }}
+                            style={{ minWidth: 240 }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          <button type="button" className="btn btn-ghost btn-xs btn-icon" onClick={() => moveStage(idx, 'up')} disabled={idx === 0}>
+                            <ChevronUp size={16} />
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-xs btn-icon" onClick={() => moveStage(idx, 'down')} disabled={idx === stages.length - 1}>
+                            <ChevronDown size={16} />
+                          </button>
+                          <button type="button" className="btn btn-outline" onClick={() => setExpandedStageIndex(expandedStageIndex === idx ? null : idx)}>
+                            {expandedStageIndex === idx ? 'Fechar' : 'Configurar'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline text-danger"
+                            onClick={() => {
+                              removeStageReferences(stage)
+                              setStages((prev) => prev.filter((_, i) => i !== idx).map((s, i) => ({ ...s, position: i })))
+                            }}
+                          >
+                            <Trash size={15} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {expandedStageIndex === idx && (
+                        <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.65rem' }}>
+                          <div className="form-grid form-grid-3">
+                            <div className="form-group">
+                              <label className="form-label">Cor</label>
+                              <input
+                                type="color"
+                                className="form-control"
+                                value={stage.color || '#3B82F6'}
+                                onChange={(e) =>
+                                  setStages((prev) => prev.map((s, i) => (i === idx ? { ...s, color: e.target.value } : s)))
+                                }
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label">SLA (horas)</label>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={stage?.config?.sla_hours || ''}
+                                onChange={(e) =>
+                                  setStages((prev) =>
+                                    prev.map((s, i) =>
+                                      i === idx ? { ...s, config: { ...(s.config || {}), sla_hours: Number(e.target.value || 0) || null } } : s
+                                    )
+                                  )
+                                }
+                              />
+                            </div>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', marginTop: '1.8rem' }}>
+                              <input
+                                type="checkbox"
+                                checked={!!stage?.config?.is_terminal}
+                                onChange={(e) =>
+                                  setStages((prev) =>
+                                    prev.map((s, i) => (i === idx ? { ...s, config: { ...(s.config || {}), is_terminal: e.target.checked } } : s))
+                                  )
+                                }
+                              />
+                              Etapa final
+                            </label>
+                          </div>
+
+                          <div className="form-group">
+                            <label className="form-label">Transições (separadas por vírgula)</label>
+                            <input
+                              className="form-control"
+                              value={transitions}
+                              onChange={(e) =>
+                                setStages((prev) =>
+                                  prev.map((s, i) => (i === idx ? { ...s, config: { ...(s.config || {}), transitions: parseCommaList(e.target.value) } } : s))
+                                )
+                              }
+                              placeholder="Aguardando Assinatura, Finalizado"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() =>
+                    setStages((prev) => [
+                      ...prev,
+                      {
+                        client_key: makeClientKey(),
+                        name: `Etapa ${prev.length + 1}`,
+                        position: prev.length,
+                        color: '#64748B',
+                        bg: '#F1F5F9',
+                        config: { transitions: [] },
+                      },
+                    ])
+                  }
+                >
+                  <Plus size={16} />
+                  Adicionar etapa
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'campos' && (
+              <div style={{ display: 'grid', gap: '0.8rem' }}>
+                {stages.map((stage) => {
+                  const items = getStageItems('process_fields', stage)
+                  return (
+                    <div key={stage.client_key} className="card" style={{ padding: '0.9rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.6rem' }}>{stage.name}</div>
+                      {items.map((field: any, index: number) => (
+                        <div key={`${stage.client_key}-field-${index}`} style={{ border: '1px solid var(--brs-gray-100)', borderRadius: 8, padding: '0.65rem', marginBottom: '0.55rem' }}>
+                          <div className="form-grid form-grid-4">
+                            <input
+                              className="form-control"
+                              placeholder="Nome do Campo"
+                              value={field.label || ''}
+                              onChange={(e) => {
+                                const nextLabel = e.target.value
+                                const nextKey = buildUniqueFieldKey(nextLabel || 'campo', stage, index)
+                                updateStageItem('process_fields', stage, index, { label: nextLabel, key: nextKey })
+                              }}
+                            />
+                            <select className="form-control" value={field.type || ''} onChange={(e) => updateStageItem('process_fields', stage, index, { type: e.target.value })}>
+                              <option value="" disabled>Tipo de Campo</option>
+                              <option value="text">Texto</option>
+                              <option value="date">Data</option>
+                              <option value="checkbox">CheckBox</option>
+                              <option value="email">E-mail</option>
+                              <option value="number">Número</option>
+                            </select>
+                            <button type="button" className="btn btn-outline text-danger" onClick={() => removeStageItem('process_fields', stage, index)}>
+                              <Trash size={14} />
+                            </button>
+                          </div>
+                          <div style={{ marginTop: '0.4rem', fontSize: '0.78rem', color: 'var(--brs-gray-500)' }}>
+                            Chave técnica gerada automaticamente: <code>{field.key || '(aguardando nome do campo)'}</code>
+                          </div>
+                          <div className="form-grid form-grid-3" style={{ marginTop: '0.5rem' }}>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                              <input type="checkbox" checked={!!field.required} onChange={(e) => updateStageItem('process_fields', stage, index, { required: e.target.checked })} />
+                              Obrigatório
+                            </label>
+                            <select className="form-control" value={field.trigger || ''} onChange={(e) => updateStageItem('process_fields', stage, index, { trigger: e.target.value })}>
+                              <option value="" disabled>Gatilho de acionamento</option>
+                              <option value="on_enter">Ao entrar na etapa</option>
+                              <option value="on_exit">Ao sair da etapa</option>
+                              <option value="manual">Manual</option>
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                      <button type="button" className="btn btn-outline" onClick={() => addStageItem('process_fields', stage, { key: buildUniqueFieldKey('campo', stage, -1), label: '', type: '', required: false, trigger: '' })}>
+                        <Plus size={16} />
+                        Adicionar campo na etapa
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {activeTab === 'documentos' && (
+              <div style={{ display: 'grid', gap: '0.8rem' }}>
+                {stages.map((stage) => {
+                  const items = getStageItems('documents', stage)
+                  return (
+                    <div key={stage.client_key} className="card" style={{ padding: '0.9rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.6rem' }}>{stage.name}</div>
+                      {items.map((doc: any, index: number) => (
+                        <div key={`${stage.client_key}-doc-${index}`} style={{ border: '1px solid var(--brs-gray-100)', borderRadius: 8, padding: '0.65rem', marginBottom: '0.55rem' }}>
+                          <div className="form-grid form-grid-4">
+                            <input className="form-control" placeholder="Nome do documento no processo" value={doc.name || ''} onChange={(e) => updateStageItem('documents', stage, index, { name: e.target.value })} />
+                            <select
+                              className="form-control"
+                              value={doc.template_id || ''}
+                              onChange={(e) => {
+                                const templateId = e.target.value
+                                const template = contractTemplates.find((item) => item.id === templateId)
+                                const existingMapping = doc?.placeholder_mapping && typeof doc.placeholder_mapping === 'object' ? doc.placeholder_mapping : {}
+                                const nextMapping: Record<string, string> = {}
+                                for (const placeholder of template?.placeholders || []) {
+                                  const placeholderId = String(placeholder?.id || '')
+                                  if (!placeholderId) continue
+                                  nextMapping[placeholderId] = String(existingMapping?.[placeholderId] || '')
+                                }
+                                updateStageItem('documents', stage, index, {
+                                  template_id: templateId,
+                                  template_name: template?.name || '',
+                                  placeholder_mapping: nextMapping,
+                                })
+                              }}
+                            >
+                              <option value="">Selecionar modelo de documento</option>
+                              {contractTemplates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.name}
+                                </option>
+                              ))}
+                            </select>
+                            <select className="form-control" value={doc.trigger || ''} onChange={(e) => updateStageItem('documents', stage, index, { trigger: e.target.value })}>
+                              <option value="" disabled>Gatilho de acionamento</option>
+                              <option value="on_enter">Gatilho: ao entrar</option>
+                              <option value="on_exit">Gatilho: ao sair</option>
+                              <option value="manual">Gatilho: manual</option>
+                            </select>
+                            <button type="button" className="btn btn-outline text-danger" onClick={() => removeStageItem('documents', stage, index)}>
+                              <Trash size={14} />
+                            </button>
+                          </div>
+                          {(() => {
+                            const selectedTemplate = findContractTemplate(doc)
+                            const placeholders = selectedTemplate?.placeholders || []
+                            const mapping = doc?.placeholder_mapping && typeof doc.placeholder_mapping === 'object' ? doc.placeholder_mapping : {}
+                            return (
+                              <div style={{ marginTop: '0.65rem' }}>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.45rem', color: 'var(--brs-gray-700)' }}>
+                                  Mapeamento de placeholders do documento
+                                </div>
+                                {!selectedTemplate ? (
+                                  <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)' }}>
+                                    Selecione um modelo para mapear placeholders.
+                                  </div>
+                                ) : placeholders.length === 0 ? (
+                                  <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)' }}>
+                                    O modelo selecionado não possui placeholders genéricos.
+                                  </div>
+                                ) : (
+                                  <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                      <thead>
+                                        <tr style={{ textAlign: 'left', background: 'var(--brs-gray-50)' }}>
+                                          <th style={{ padding: '0.45rem' }}>Placeholder genérico (label)</th>
+                                          <th style={{ padding: '0.45rem' }}>Tag vinculada do processo</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {placeholders.map((placeholder: any, placeholderIndex: number) => {
+                                          const placeholderId = String(placeholder?.id || `ph_${placeholderIndex}`)
+                                          return (
+                                            <tr key={`${doc.template_id || doc.template_name || 'doc'}-${placeholderId}`} style={{ borderTop: '1px solid var(--brs-gray-100)' }}>
+                                              <td style={{ padding: '0.45rem' }}>
+                                                <div style={{ fontWeight: 600 }}>{placeholder?.label || placeholderId}</div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--brs-gray-500)', fontFamily: 'monospace' }}>
+                                                  {placeholder?.token || placeholderId}
+                                                </div>
+                                                {placeholder?.required ? (
+                                                  <div style={{ fontSize: '0.72rem', color: '#B45309' }}>Obrigatório</div>
+                                                ) : null}
+                                              </td>
+                                              <td style={{ padding: '0.45rem' }}>
+                                                <select
+                                                  className="form-control"
+                                                  value={String(mapping?.[placeholderId] || '')}
+                                                  onChange={(e) => {
+                                                    const nextValue = e.target.value
+                                                    const nextMapping = { ...(mapping || {}), [placeholderId]: nextValue }
+                                                    updateStageItem('documents', stage, index, { placeholder_mapping: nextMapping })
+                                                  }}
+                                                >
+                                                  <option value="">Selecionar tag do processo</option>
+                                                  {processTagOptions.map((option) => (
+                                                    <option key={option.key} value={option.key}>
+                                                      {option.display_text}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              </td>
+                                            </tr>
+                                          )
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      ))}
+                      <button type="button" className="btn btn-outline" onClick={() => addStageItem('documents', stage, { name: '', template_id: '', template_name: '', trigger: '', placeholder_mapping: {} })}>
+                        <Plus size={16} />
+                        Adicionar documento na etapa
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {activeTab === 'emails' && (
+              <div style={{ display: 'grid', gap: '0.8rem' }}>
+                {stages.map((stage) => {
+                  const items = getStageItems('emails', stage)
+                  return (
+                    <div key={stage.client_key} className="card" style={{ padding: '0.9rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.6rem' }}>{stage.name}</div>
+                      {items.map((mail: any, index: number) => (
+                        <div key={`${stage.client_key}-mail-${index}`} style={{ border: '1px solid var(--brs-gray-100)', borderRadius: 8, padding: '0.65rem', marginBottom: '0.55rem' }}>
+                          <div className="form-grid form-grid-4">
+                            <input className="form-control" placeholder="Nome do disparo" value={mail.name || ''} onChange={(e) => updateStageItem('emails', stage, index, { name: e.target.value })} />
+                            <input className="form-control" placeholder="Modelo de e-mail" value={mail.template_name || ''} onChange={(e) => updateStageItem('emails', stage, index, { template_name: e.target.value })} />
+                            <select
+                              className="form-control"
+                              value={mail.trigger || 'on_enter'}
+                              onChange={(e) => {
+                                const trigger = e.target.value
+                                updateStageItem('emails', stage, index, {
+                                  trigger,
+                                  ...(trigger === SIGNATURE_LINK_TRIGGER
+                                    ? {}
+                                    : { signature_document_ref: '', signature_signer_role: '' }),
+                                })
+                              }}
+                            >
+                              <option value="on_enter">Gatilho: ao entrar</option>
+                              <option value="on_exit">Gatilho: ao sair</option>
+                              <option value="manual">Gatilho: manual</option>
+                              <option value={SIGNATURE_LINK_TRIGGER}>Gatilho: link de assinatura disponível</option>
+                            </select>
+                            <button type="button" className="btn btn-outline text-danger" onClick={() => removeStageItem('emails', stage, index)}>
+                              <Trash size={14} />
+                            </button>
+                          </div>
+                          <div className="form-grid form-grid-3" style={{ marginTop: '0.5rem' }}>
+                            <select className="form-control" value={mail.recipient_source || 'tag'} onChange={(e) => updateStageItem('emails', stage, index, { recipient_source: e.target.value })}>
+                              <option value="tag">Destinatário por tag</option>
+                              <option value="fixed">Destinatário fixo</option>
+                            </select>
+                            <input className="form-control" placeholder="Tag/campo destinatário" value={mail.recipient_field || ''} onChange={(e) => updateStageItem('emails', stage, index, { recipient_field: e.target.value })} />
+                            <input className="form-control" placeholder="Fallback destinatário" value={mail.recipient_fallback || ''} onChange={(e) => updateStageItem('emails', stage, index, { recipient_fallback: e.target.value })} />
+                          </div>
+                          {String(mail.trigger || '') === SIGNATURE_LINK_TRIGGER && (
+                            <div className="form-grid form-grid-3" style={{ marginTop: '0.5rem' }}>
+                              <select
+                                className="form-control"
+                                value={mail.signature_document_ref || ''}
+                                onChange={(e) => updateStageItem('emails', stage, index, { signature_document_ref: e.target.value })}
+                              >
+                                <option value="">Documento de assinatura vinculado</option>
+                                {processDocumentOptions.map((docOption) => (
+                                  <option key={docOption.key} value={docOption.key}>
+                                    {docOption.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className="form-control"
+                                value={mail.signature_signer_role || ''}
+                                onChange={(e) => updateStageItem('emails', stage, index, { signature_signer_role: e.target.value })}
+                              >
+                                <option value="">Papel do assinante</option>
+                                {SIGNER_ROLE_OPTIONS.map((roleOption) => (
+                                  <option key={roleOption.value} value={roleOption.value}>
+                                    {roleOption.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                className="form-control"
+                                readOnly
+                                value="Dispara quando o link do assinante é recebido da assinatura eletrônica."
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <button type="button" className="btn btn-outline" onClick={() => addStageItem('emails', stage, { name: '', template_name: '', trigger: 'on_enter', recipient_source: 'tag' })}>
+                        <Plus size={16} />
+                        Adicionar e-mail na etapa
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {activeTab === 'whatsapp' && (
+              <div style={{ display: 'grid', gap: '0.8rem' }}>
+                {stages.map((stage) => {
+                  const items = getStageItems('whatsapp', stage)
+                  return (
+                    <div key={stage.client_key} className="card" style={{ padding: '0.9rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.6rem' }}>{stage.name}</div>
+                      {items.map((msg: any, index: number) => (
+                        <div key={`${stage.client_key}-wa-${index}`} style={{ border: '1px solid var(--brs-gray-100)', borderRadius: 8, padding: '0.65rem', marginBottom: '0.55rem' }}>
+                          <div className="form-grid form-grid-4">
+                            <input className="form-control" placeholder="Nome do disparo" value={msg.name || ''} onChange={(e) => updateStageItem('whatsapp', stage, index, { name: e.target.value })} />
+                            <input className="form-control" placeholder="Modelo de WhatsApp" value={msg.template_name || ''} onChange={(e) => updateStageItem('whatsapp', stage, index, { template_name: e.target.value })} />
+                            <select
+                              className="form-control"
+                              value={msg.trigger || 'on_enter'}
+                              onChange={(e) => {
+                                const trigger = e.target.value
+                                updateStageItem('whatsapp', stage, index, {
+                                  trigger,
+                                  ...(trigger === SIGNATURE_LINK_TRIGGER
+                                    ? {}
+                                    : { signature_document_ref: '', signature_signer_role: '' }),
+                                })
+                              }}
+                            >
+                              <option value="on_enter">Gatilho: ao entrar</option>
+                              <option value="on_exit">Gatilho: ao sair</option>
+                              <option value="manual">Gatilho: manual</option>
+                              <option value={SIGNATURE_LINK_TRIGGER}>Gatilho: link de assinatura disponível</option>
+                            </select>
+                            <button type="button" className="btn btn-outline text-danger" onClick={() => removeStageItem('whatsapp', stage, index)}>
+                              <Trash size={14} />
+                            </button>
+                          </div>
+                          <div className="form-grid form-grid-3" style={{ marginTop: '0.5rem' }}>
+                            <select className="form-control" value={msg.recipient_source || 'tag'} onChange={(e) => updateStageItem('whatsapp', stage, index, { recipient_source: e.target.value })}>
+                              <option value="tag">Destinatário por tag</option>
+                              <option value="fixed">Destinatário fixo</option>
+                            </select>
+                            <input className="form-control" placeholder="Tag/campo telefone" value={msg.recipient_field || ''} onChange={(e) => updateStageItem('whatsapp', stage, index, { recipient_field: e.target.value })} />
+                            <input className="form-control" placeholder="Fallback telefone" value={msg.recipient_fallback || ''} onChange={(e) => updateStageItem('whatsapp', stage, index, { recipient_fallback: e.target.value })} />
+                          </div>
+                          {String(msg.trigger || '') === SIGNATURE_LINK_TRIGGER && (
+                            <div className="form-grid form-grid-3" style={{ marginTop: '0.5rem' }}>
+                              <select
+                                className="form-control"
+                                value={msg.signature_document_ref || ''}
+                                onChange={(e) => updateStageItem('whatsapp', stage, index, { signature_document_ref: e.target.value })}
+                              >
+                                <option value="">Documento de assinatura vinculado</option>
+                                {processDocumentOptions.map((docOption) => (
+                                  <option key={docOption.key} value={docOption.key}>
+                                    {docOption.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                className="form-control"
+                                value={msg.signature_signer_role || ''}
+                                onChange={(e) => updateStageItem('whatsapp', stage, index, { signature_signer_role: e.target.value })}
+                              >
+                                <option value="">Papel do assinante</option>
+                                {SIGNER_ROLE_OPTIONS.map((roleOption) => (
+                                  <option key={roleOption.value} value={roleOption.value}>
+                                    {roleOption.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                className="form-control"
+                                readOnly
+                                value="Dispara quando o link do assinante é recebido da assinatura eletrônica."
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <button type="button" className="btn btn-outline" onClick={() => addStageItem('whatsapp', stage, { name: '', template_name: '', trigger: 'on_enter', recipient_source: 'tag' })}>
+                        <Plus size={16} />
+                        Adicionar WhatsApp na etapa
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {activeTab === 'regras' && (
+              <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                <div className="section-divider" style={{ marginBottom: '1rem' }}>Regras Globais e SLA</div>
+                <div className="form-grid form-grid-3">
+                  <div className="form-group">
+                    <label className="form-label">SLA Default (horas)</label>
+                    <input
+                      className="form-control"
+                      type="number"
+                      value={selected.config?.rules?.default_sla_hours || ''}
+                      onChange={(e) => updateConfigValue('rules.default_sla_hours', Number(e.target.value || 0) || null)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Calendário</label>
+                    <select className="form-control" value={selected.config?.rules?.work_calendar || 'dias_uteis'} onChange={(e) => updateConfigValue('rules.work_calendar', e.target.value)}>
+                      <option value="dias_uteis">Dias úteis</option>
+                      <option value="corridos">Dias corridos</option>
+                    </select>
+                  </div>
+
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', marginTop: '1.8rem' }}>
+                    <input type="checkbox" checked={!!selected.config?.rules?.strict_stage_exit} onChange={(e) => updateConfigValue('rules.strict_stage_exit', e.target.checked)} />
+                    Bloquear saída da etapa se pendências obrigatórias
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: '0.75rem', borderTop: '1px solid var(--brs-gray-100)', paddingTop: '0.75rem', display: 'grid', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input type="text" className="form-control" readOnly value={publicUrl} style={{ maxWidth: 320 }} placeholder="/cadastro-parceiro/..." />
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={!canOpenPublicLink}
+                onClick={async () => {
+                  if (!publicUrl) return
+                  try {
+                    await navigator.clipboard.writeText(publicUrl)
+                    setMessage({ type: 'success', text: 'Link copiado.' })
+                  } catch {
+                    setMessage({ type: 'error', text: 'Falha ao copiar link.' })
+                  }
+                }}
+              >
+                <Copy size={15} />
+                Copiar Link
+              </button>
+              <button type="button" className="btn btn-outline" disabled={!canOpenPublicLink} onClick={() => window.open(publicUrl, '_blank')}>
+                <ExternalLink size={15} />
+                Abrir Link
+              </button>
+              <button type="button" className="btn btn-outline" disabled={!canRunValidation} onClick={runHealthValidation}>
+                <ShieldCheck size={15} />
+                Validar Processo
+              </button>
+              <button type="button" className="btn btn-outline" onClick={() => setView('list')}>
+                Voltar para lista
+              </button>
+              <button type="button" className="btn btn-primary" disabled={saving} onClick={(e) => handleSave(e as any)}>
+                {saving ? <Loader2 size={15} className="spinner" /> : <Save size={15} />}
+                Salvar {hasPendingChanges ? '(pendente)' : ''}
+              </button>
+            </div>
+
+            {(health.blocking.length > 0 || health.warnings.length > 0) && (
+              <div className="card" style={{ padding: '0.75rem', border: '1px solid var(--brs-gray-100)' }}>
+                {health.blocking.length > 0 && (
+                  <div style={{ marginBottom: '0.45rem' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--brs-danger)', marginBottom: '0.25rem' }}>Erros bloqueantes</div>
+                    {health.blocking.map((item, idx) => (
+                      <div key={`block-${idx}`} style={{ fontSize: '0.85rem', color: '#991B1B' }}>
+                        - {item}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {health.warnings.length > 0 && (
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#92400E', marginBottom: '0.25rem' }}>Alertas</div>
+                    {health.warnings.map((item, idx) => (
+                      <div key={`warn-${idx}`} style={{ fontSize: '0.85rem', color: '#92400E' }}>
+                        - {item}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

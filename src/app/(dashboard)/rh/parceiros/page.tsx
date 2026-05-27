@@ -1,55 +1,123 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { getCRMData, updatePartnerCRM, executePartnerAutomation } from './actions'
-import { 
-  LayoutGrid, List, Search, Building2, User, Mail, Phone, MapPin, 
-  CreditCard, CheckCircle, AlertCircle, Loader2, Eye, Edit2, Check, 
-  ExternalLink, FileText, Sparkles, Send, Globe, Key 
+import { useEffect, useMemo, useState } from 'react'
+import {
+  getProcessCRMData,
+  getProcessInstanceDetail,
+  updateProcessInstance,
+} from './actions'
+import {
+  AlertCircle,
+  Archive,
+  CheckCircle,
+  Clock3,
+  ClipboardList,
+  FileText,
+  LayoutGrid,
+  List,
+  Loader2,
+  Mail,
+  MessageSquare,
+  Search,
+  X,
 } from 'lucide-react'
 
-const CRM_STAGES = [
-  { id: 'novo', name: 'Novo', color: '#3B82F6', bg: '#EFF6FF' },
-  { id: 'aguarda_assinatura', name: 'Aguardando Assinatura', color: '#F59E0B', bg: '#FEF3C7' },
-  { id: 'assinatura_realizada', name: 'Assinatura Realizada', color: '#10B981', bg: '#ECFDF5' },
-  { id: 'validacao_final', name: 'Validação Final', color: '#8B5CF6', bg: '#F5F3FF' },
-  { id: 'finalizado', name: 'Finalizado', color: '#059669', bg: '#E6F4EA' }
-]
+type ProcessRow = {
+  id: string
+  name: string
+  type: string
+  is_active: boolean
+}
+
+type StageRow = {
+  id: string
+  name: string
+  position: number
+  color?: string | null
+}
+
+type PartnerRow = {
+  name?: string | null
+  cpf_cnpj?: string | null
+  email_comissao?: string | null
+  phone_whatsapp?: string | null
+  arw_code?: string | null
+  superintendente_id?: string | null
+  supervisor_id?: string | null
+  gerente_id?: string | null
+}
+
+type InstanceRow = {
+  id: string
+  identifier_value: string
+  status: 'active' | 'archived' | 'completed' | 'canceled'
+  current_stage_id?: string | null
+  created_at?: string
+  partner?: PartnerRow | null
+}
+
+type CommercialEntity = {
+  id: string
+  name: string
+  role: 'superintendente' | 'supervisor' | 'gerente'
+  parent_id?: string | null
+}
+
+type DetailTab = 'resumo' | 'respostas' | 'campos' | 'documentos' | 'comunicacoes' | 'timeline' | 'config'
+
+function safeLower(value: any) {
+  return String(value ?? '').toLowerCase()
+}
+
+function safeJson(value: any) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2)
+  } catch {
+    return '{}'
+  }
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('pt-BR')
+}
 
 export default function ParceirosCRMPage() {
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban')
-  const [partners, setPartners] = useState<any[]>([])
-  const [entities, setEntities] = useState<any[]>([])
-  
-  // Loading & Error States
   const [loading, setLoading] = useState(true)
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
-  const [savingDetails, setSavingDetails] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  // Filters State
+  const [processes, setProcesses] = useState<ProcessRow[]>([])
+  const [selectedProcessId, setSelectedProcessId] = useState<string>('')
+  const [stages, setStages] = useState<StageRow[]>([])
+  const [instances, setInstances] = useState<InstanceRow[]>([])
+  const [entities, setEntities] = useState<CommercialEntity[]>([])
+
   const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'active' | 'archived' | 'completed' | 'canceled' | 'all'>('active')
   const [filterSuperintendente, setFilterSuperintendente] = useState('')
   const [filterSupervisor, setFilterSupervisor] = useState('')
   const [filterGerente, setFilterGerente] = useState('')
 
-  // Edit / Details Modal State
-  const [selectedPartner, setSelectedPartner] = useState<any | null>(null)
-  const [activeTab, setActiveTab] = useState<'dados' | 'endereco' | 'banco' | 'documentos' | 'automacao'>('dados')
-  
-  // Automation Form Inputs
-  const [arwCodeInput, setArwCodeInput] = useState('')
-  const [tempPasswordInput, setTempPasswordInput] = useState('')
-  const [driveUrlInput, setDriveUrlInput] = useState('')
-  const [customMsgInput, setCustomMsgInput] = useState('')
-  const [runningAutomation, setRunningAutomation] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detail, setDetail] = useState<any>(null)
+  const [detailTab, setDetailTab] = useState<DetailTab>('resumo')
 
-  async function loadData() {
+  async function loadData(processId?: string) {
     setLoading(true)
-    const res = await getCRMData()
-    if (res.success && res.partners && res.commercialEntities) {
-      setPartners(res.partners)
-      setEntities(res.commercialEntities)
+    setMessage(null)
+    const res = await getProcessCRMData(processId)
+    if (res.success) {
+      setProcesses((res.processes || []) as any)
+      setSelectedProcessId(String(res.selectedProcessId || ''))
+      setStages((res.stages || []) as any)
+      setInstances((res.instances || []) as any)
+      setEntities((res.commercialEntities || []) as any)
+    } else {
+      setMessage({ type: 'error', text: res.error || 'Erro ao carregar o CRM.' })
     }
     setLoading(false)
   }
@@ -58,954 +126,478 @@ export default function ParceirosCRMPage() {
     loadData()
   }, [])
 
-  // Cascade Filter logic
-  const filteredSuperintendentes = entities.filter(e => e.role === 'superintendente')
-  const filteredSupervisores = entities.filter(
-    e => e.role === 'supervisor' && (!filterSuperintendente || e.parent_id === filterSuperintendente)
+  const filteredSuperintendentes = useMemo(
+    () => entities.filter((e) => e.role === 'superintendente'),
+    [entities]
   )
-  const filteredGerentes = entities.filter(
-    e => e.role === 'gerente' && (!filterSupervisor || e.parent_id === filterSupervisor)
+  const filteredSupervisores = useMemo(
+    () => entities.filter((e) => e.role === 'supervisor' && (!filterSuperintendente || e.parent_id === filterSuperintendente)),
+    [entities, filterSuperintendente]
+  )
+  const filteredGerentes = useMemo(
+    () => entities.filter((e) => e.role === 'gerente' && (!filterSupervisor || e.parent_id === filterSupervisor)),
+    [entities, filterSupervisor]
   )
 
-  // Filtering Partners
-  const filteredPartners = partners.filter(p => {
-    // Search filter
-    const matchesSearch = 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.cpf_cnpj.includes(searchTerm) ||
-      (p.arw_code && p.arw_code.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredInstances = useMemo(() => {
+    const term = safeLower(searchTerm).trim()
+    return instances.filter((inst) => {
+      if (statusFilter !== 'all' && inst.status !== statusFilter) return false
 
-    // Hierarchy filters
-    const matchesSuper = !filterSuperintendente || p.superintendente_id === filterSuperintendente
-    const matchesSuperv = !filterSupervisor || p.supervisor_id === filterSupervisor
-    const matchesGerente = !filterGerente || p.gerente_id === filterGerente
+      const partner = inst.partner
+      const matchesSearch =
+        !term ||
+        safeLower(partner?.name).includes(term) ||
+        safeLower(partner?.cpf_cnpj).includes(term) ||
+        safeLower(partner?.arw_code).includes(term) ||
+        safeLower(inst.identifier_value).includes(term)
 
-    return matchesSearch && matchesSuper && matchesSuperv && matchesGerente
-  })
+      const matchesSuper = !filterSuperintendente || String(partner?.superintendente_id || '') === filterSuperintendente
+      const matchesSuperv = !filterSupervisor || String(partner?.supervisor_id || '') === filterSupervisor
+      const matchesGerente = !filterGerente || String(partner?.gerente_id || '') === filterGerente
 
-  // Quick Move Stage
-  async function handleMoveStage(partnerId: string, newStatus: any) {
-    setUpdatingId(partnerId)
-    const res = await updatePartnerCRM({ id: partnerId, status: newStatus })
-    if (res.success) {
-      setPartners(prev => prev.map(p => p.id === partnerId ? { ...p, status: newStatus } : p))
-    }
-    setUpdatingId(null)
-  }
-
-  // Open Edit Modal
-  function handleOpenDetails(partner: any) {
-    setSelectedPartner({ ...partner })
-    setArwCodeInput(partner.arw_code || '')
-    setTempPasswordInput(partner.temporary_password || '')
-    setDriveUrlInput(partner.google_drive_url || '')
-    setCustomMsgInput('')
-    setActiveTab('dados')
-    setMessage(null)
-  }
-
-  // Save general modifications inside Modal
-  async function handleSaveDetails(e: React.FormEvent) {
-    e.preventDefault()
-    if (!selectedPartner) return
-    
-    setSavingDetails(true)
-    setMessage(null)
-
-    const res = await updatePartnerCRM({
-      id: selectedPartner.id,
-      superintendente_id: selectedPartner.superintendente_id,
-      supervisor_id: selectedPartner.supervisor_id,
-      gerente_id: selectedPartner.gerente_id,
-      arw_code: selectedPartner.arw_code,
-      temporary_password: selectedPartner.temporary_password,
-      google_drive_url: selectedPartner.google_drive_url,
-      filial: selectedPartner.filial,
-      nivel_acesso: selectedPartner.nivel_acesso,
-      tipo_agente: selectedPartner.tipo_agente,
-      regra_fisico: selectedPartner.regra_fisico
+      return matchesSearch && matchesSuper && matchesSuperv && matchesGerente
     })
+  }, [instances, searchTerm, statusFilter, filterSuperintendente, filterSupervisor, filterGerente])
 
-    if (res.success) {
-      setMessage({ type: 'success', text: 'Dados atualizados com sucesso!' })
-      loadData()
-    } else {
-      setMessage({ type: 'error', text: res.error || 'Erro ao salvar alterações.' })
+  const stagesWithFallback = useMemo<StageRow[]>(() => {
+    if (stages.length) return stages
+    return [{ id: '__no_stage__', name: 'Sem etapas', position: 0, color: '#64748B' }]
+  }, [stages])
+
+  const instancesByStage = useMemo(() => {
+    const map = new Map<string, InstanceRow[]>()
+    for (const st of stagesWithFallback) map.set(st.id, [])
+    for (const inst of filteredInstances) {
+      const stageId = inst.current_stage_id || '__no_stage__'
+      if (!map.has(stageId)) map.set(stageId, [])
+      map.get(stageId)!.push(inst)
     }
-    setSavingDetails(false)
-  }
+    for (const [, list] of map) {
+      list.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    }
+    return map
+  }, [filteredInstances, stagesWithFallback])
 
-  // Run Automations
-  async function runAutomation(type: 'contrato' | 'whatsapp' | 'email' | 'aprovar') {
-    if (!selectedPartner) return
-    setRunningAutomation(true)
+  async function handleMoveStage(instanceId: string, newStageId: string) {
     setMessage(null)
-
-    let paramsObj: any = {}
-    if (type === 'whatsapp') {
-      paramsObj.message = customMsgInput || undefined
-    } else if (type === 'aprovar') {
-      paramsObj = {
-        arw_code: arwCodeInput,
-        temporary_password: tempPasswordInput,
-        google_drive_url: driveUrlInput
-      }
-    }
-
-    const res = await executePartnerAutomation(selectedPartner.id, type, paramsObj)
+    const res = await updateProcessInstance({ id: instanceId, current_stage_id: newStageId })
     if (res.success) {
-      setMessage({ type: 'success', text: res.message || 'Automação executada com sucesso!' })
-      // Update local state and inputs
-      if (type === 'contrato' && res.signatureUrl) {
-        setSelectedPartner((prev: any) => ({ 
-          ...prev, 
-          status: 'aguarda_assinatura', 
-          assinafy_signature_url: res.signatureUrl 
-        }))
-      } else if (type === 'aprovar') {
-        setSelectedPartner((prev: any) => ({ 
-          ...prev, 
-          status: 'finalizado', 
-          arw_code: arwCodeInput,
-          temporary_password: tempPasswordInput || prev.temporary_password,
-          google_drive_url: driveUrlInput
-        }))
-      }
-      loadData()
+      setInstances((prev) => prev.map((i) => (i.id === instanceId ? { ...i, current_stage_id: newStageId } : i)))
+      setMessage({ type: 'success', text: 'Etapa atualizada.' })
     } else {
-      setMessage({ type: 'error', text: res.error || 'Erro ao processar a automação.' })
+      setMessage({ type: 'error', text: res.error || 'Erro ao mover etapa.' })
     }
-    setRunningAutomation(false)
   }
 
-  if (loading) {
-    return (
-      <div className="page-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-        <span className="spinner" style={{ borderTopColor: 'var(--brs-navy)' }} />
-      </div>
-    )
+  async function handleArchive(instanceId: string) {
+    if (!confirm('Arquivar este card?')) return
+    const res = await updateProcessInstance({ id: instanceId, status: 'archived' })
+    if (res.success) {
+      setInstances((prev) => prev.map((i) => (i.id === instanceId ? { ...i, status: 'archived' } : i)))
+      setMessage({ type: 'success', text: 'Card arquivado.' })
+    } else {
+      setMessage({ type: 'error', text: res.error || 'Erro ao arquivar card.' })
+    }
   }
+
+  async function openDetail(instanceId: string) {
+    setDetailOpen(true)
+    setDetailLoading(true)
+    setDetail(null)
+    setDetailTab('resumo')
+    const res = await getProcessInstanceDetail(instanceId)
+    if (res.success) setDetail(res)
+    else setDetail({ error: res.error || 'Erro ao carregar detalhe.' })
+    setDetailLoading(false)
+  }
+
+  const detailEvents = useMemo<any[]>(() => (Array.isArray(detail?.events) ? detail.events : []), [detail?.events])
+  const detailDocsEvents = useMemo<any[]>(
+    () => detailEvents.filter((e) => /assin|doc|contract|envelope/i.test(String(e?.event_type || ''))),
+    [detailEvents]
+  )
+  const detailCommsEvents = useMemo<any[]>(
+    () => detailEvents.filter((e) => /email|whats|mensagem|comunic/i.test(String(e?.event_type || ''))),
+    [detailEvents]
+  )
 
   return (
-    <div className="page-content">
-      
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+    <div style={{ padding: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--brs-gray-800)', margin: 0 }}>
-            CRM SCP & Cadastro de Parceiros
-          </h1>
-          <p style={{ color: 'var(--brs-gray-400)', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
-            Acompanhe o funil de credenciamento e gerencie os parceiros comerciais da BRS Promotora
-          </p>
+          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--brs-gray-900)' }}>CRM Parceiros</div>
+          <div style={{ color: 'var(--brs-gray-500)', fontSize: '0.9rem' }}>Filtre por tipo de processo para ver o Kanban e cards daquele fluxo.</div>
         </div>
-
-        {/* View Mode Toggle */}
-        <div style={{ display: 'flex', background: 'var(--brs-gray-100)', padding: '4px', borderRadius: '8px' }}>
-          <button 
-            className={`btn btn-sm ${viewMode === 'kanban' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setViewMode('kanban')}
-            style={{ margin: 0, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-          >
+        <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--brs-gray-100)', padding: '2px', borderRadius: '6px' }}>
+          <button type="button" className="btn btn-ghost btn-xs btn-icon" onClick={() => setViewMode('kanban')} style={{ background: viewMode === 'kanban' ? '#fff' : 'transparent', borderRadius: '4px', border: 'none' }} title="Kanban">
             <LayoutGrid size={14} />
-            Funil Kanban
           </button>
-          <button 
-            className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setViewMode('table')}
-            style={{ margin: 0, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-          >
+          <button type="button" className="btn btn-ghost btn-xs btn-icon" onClick={() => setViewMode('table')} style={{ background: viewMode === 'table' ? '#fff' : 'transparent', borderRadius: '4px', border: 'none' }} title="Tabela">
             <List size={14} />
-            Tabela
           </button>
         </div>
       </div>
 
-      {/* FILTROS HIERÁRQUICOS */}
-      <div className="card" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '1rem', alignItems: 'end' }}>
-          
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label" style={{ marginBottom: '0.25rem' }}>Buscar Parceiro</label>
+      <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 0.8fr', gap: '0.75rem', alignItems: 'end' }}>
+          <div className="form-group">
+            <label className="form-label">Tipo de Processo</label>
+            <select className="form-control" value={selectedProcessId} onChange={async (e) => loadData(e.target.value)} disabled={loading || !processes.length}>
+              {processes.length === 0 ? <option value="">Nenhum processo cadastrado</option> : processes.map((p) => <option key={p.id} value={p.id}>{p.name}{p.is_active ? '' : ' (inativo)'}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Busca</label>
             <div style={{ position: 'relative' }}>
-              <input 
-                type="text" 
-                className="form-control" 
-                placeholder="Nome, CPF/CNPJ ou Cód ARW..." 
-                style={{ paddingLeft: '2rem' }}
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--brs-gray-400)' }} />
+              <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--brs-gray-400)' }} />
+              <input className="form-control" style={{ paddingLeft: '34px' }} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Nome, CNPJ/CPF, identificador..." />
             </div>
           </div>
-
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label" style={{ marginBottom: '0.25rem' }}>Superintendente</label>
-            <select 
-              className="form-control"
-              value={filterSuperintendente}
-              onChange={e => {
-                setFilterSuperintendente(e.target.value)
-                setFilterSupervisor('')
-                setFilterGerente('')
-              }}
-            >
+          <div className="form-group">
+            <label className="form-label">Superintendente</label>
+            <select className="form-control" value={filterSuperintendente} onChange={(e) => { setFilterSuperintendente(e.target.value); setFilterSupervisor(''); setFilterGerente('') }}>
               <option value="">Todos</option>
-              {filteredSuperintendentes.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              {filteredSuperintendentes.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </div>
-
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label" style={{ marginBottom: '0.25rem' }}>Supervisor</label>
-            <select 
-              className="form-control"
-              value={filterSupervisor}
-              onChange={e => {
-                setFilterSupervisor(e.target.value)
-                setFilterGerente('')
-              }}
-            >
+          <div className="form-group">
+            <label className="form-label">Supervisor</label>
+            <select className="form-control" value={filterSupervisor} onChange={(e) => { setFilterSupervisor(e.target.value); setFilterGerente('') }} disabled={!filteredSupervisores.length}>
               <option value="">Todos</option>
-              {filteredSupervisores.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              {filteredSupervisores.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </div>
-
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label" style={{ marginBottom: '0.25rem' }}>Gerente Comercial</label>
-            <select 
-              className="form-control"
-              value={filterGerente}
-              onChange={e => setFilterGerente(e.target.value)}
-            >
+          <div className="form-group">
+            <label className="form-label">Gerente</label>
+            <select className="form-control" value={filterGerente} onChange={(e) => setFilterGerente(e.target.value)} disabled={!filteredGerentes.length}>
               <option value="">Todos</option>
-              {filteredGerentes.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              {filteredGerentes.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </div>
-
+          <div className="form-group">
+            <label className="form-label">Status</label>
+            <select className="form-control" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
+              <option value="active">Ativos</option>
+              <option value="archived">Arquivados</option>
+              <option value="completed">Concluídos</option>
+              <option value="canceled">Cancelados</option>
+              <option value="all">Todos</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* VIEW: KANBAN BOARD */}
-      {viewMode === 'kanban' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', overflowX: 'auto', paddingBottom: '1rem', alignItems: 'start' }}>
-          {CRM_STAGES.map(stage => {
-            const stagePartners = filteredPartners.filter(p => p.status === stage.id)
+      {message && (
+        <div style={{ marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: 10, border: `1px solid ${message.type === 'success' ? '#A7F3D0' : '#FECACA'}`, background: message.type === 'success' ? '#ECFDF5' : '#FEF2F2', color: message.type === 'success' ? '#065F46' : '#991B1B', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {message.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+          <span>{message.text}</span>
+        </div>
+      )}
 
+      {loading ? (
+        <div className="card" style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Loader2 className="spinner" size={18} />
+            Carregando...
+          </div>
+        </div>
+      ) : viewMode === 'kanban' ? (
+        <div style={{ display: 'flex', gap: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+          {stagesWithFallback.map((st) => {
+            const list = instancesByStage.get(st.id) || []
             return (
-              <div 
-                key={stage.id} 
-                style={{ 
-                  background: 'var(--brs-gray-50)', 
-                  borderRadius: '12px', 
-                  border: '1px solid var(--brs-gray-100)', 
-                  padding: '0.75rem',
-                  minHeight: '400px'
-                }}
-              >
-                {/* Stage Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', padding: '0.25rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: stage.color }} />
-                    <span style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--brs-gray-700)' }}>
-                      {stage.name}
-                    </span>
+              <div key={st.id} style={{ minWidth: 320, maxWidth: 360, flex: '0 0 auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, color: 'var(--brs-gray-800)' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 999, background: st.color || '#64748B' }} />
+                    {st.name}
                   </div>
-                  <span style={{ 
-                    background: stage.color, 
-                    color: 'white', 
-                    fontSize: '0.7rem', 
-                    padding: '2px 6px', 
-                    borderRadius: '10px', 
-                    fontWeight: 700 
-                  }}>
-                    {stagePartners.length}
-                  </span>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)' }}>{list.length}</div>
                 </div>
-
-                {/* Stage Cards */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {stagePartners.map(partner => (
-                    <div 
-                      key={partner.id} 
-                      className="card card-hover"
-                      style={{ 
-                        padding: '0.85rem', 
-                        border: '1px solid var(--brs-gray-100)',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                        position: 'relative'
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--brs-gray-800)', marginBottom: '0.25rem' }}>
-                        {partner.name}
+                  {list.map((inst) => {
+                    const title = String(inst.partner?.name || '').trim() || `#${inst.identifier_value}`
+                    const subtitle = inst.partner?.cpf_cnpj ? String(inst.partner.cpf_cnpj) : inst.identifier_value
+                    return (
+                      <div key={inst.id} className="card" style={{ padding: '0.9rem', borderLeft: `4px solid ${st.color || '#64748B'}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, color: 'var(--brs-gray-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                            <button type="button" className="btn btn-ghost btn-xs" onClick={() => openDetail(inst.id)}>Detalhes</button>
+                            <button type="button" className="btn btn-ghost btn-xs btn-icon" title="Arquivar" onClick={() => handleArchive(inst.id)}>
+                              <Archive size={16} />
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <select className="form-control" value={inst.current_stage_id || '__no_stage__'} onChange={(e) => handleMoveStage(inst.id, e.target.value)} style={{ height: 34, padding: '2px 8px', fontSize: '0.85rem' }}>
+                            {stagesWithFallback.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </div>
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--brs-gray-400)', marginBottom: '0.5rem', fontFamily: 'monospace' }}>
-                        {partner.cpf_cnpj}
-                      </div>
-
-                      {/* Info Pills */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.75rem' }}>
-                        <span style={{ fontSize: '0.65rem', background: '#F3F4F6', padding: '2px 6px', borderRadius: '4px', color: 'var(--brs-gray-600)' }}>
-                          {partner.person_type}
-                        </span>
-                        {partner.arw_code && (
-                          <span style={{ fontSize: '0.65rem', background: 'var(--brs-navy)', color: '#white', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                            ARW: {partner.arw_code}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Card Footer Actions */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--brs-gray-100)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
-                        <button 
-                          className="btn btn-ghost btn-sm" 
-                          onClick={() => handleOpenDetails(partner)}
-                          style={{ padding: '4px 8px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                        >
-                          <Eye size={12} />
-                          Ver Detalhes
-                        </button>
-
-                        <select 
-                          className="form-control"
-                          value={partner.status}
-                          disabled={updatingId === partner.id}
-                          onChange={(e) => handleMoveStage(partner.id, e.target.value)}
-                          style={{ width: 'auto', padding: '2px 4px', fontSize: '0.7rem', height: 'auto', margin: 0 }}
-                        >
-                          {CRM_STAGES.map(st => (
-                            <option key={st.id} value={st.id}>{st.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  ))}
-
-                  {stagePartners.length === 0 && (
-                    <div style={{ padding: '2rem 1rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--brs-gray-400)', border: '1px dashed var(--brs-gray-200)', borderRadius: '8px' }}>
-                      Nenhum parceiro
-                    </div>
-                  )}
+                    )
+                  })}
+                  {list.length === 0 && <div style={{ padding: '0.75rem', color: 'var(--brs-gray-400)', border: '1px dashed var(--brs-gray-200)', borderRadius: 10 }}>Nenhum card aqui.</div>}
                 </div>
-
               </div>
             )
           })}
         </div>
       ) : (
-        /* VIEW: TABLE LIST */
-        <div className="card">
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>Documento</th>
-                  <th>Contato</th>
-                  <th>Status</th>
-                  <th>Hierarquia Responsável</th>
-                  <th style={{ textAlign: 'right' }}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPartners.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--brs-gray-400)' }}>
-                      Nenhum parceiro encontrado
+        <div className="card" style={{ padding: '1rem', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>
+                <th style={{ padding: '0.75rem 0.5rem' }}>Parceiro</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>Identificador</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>Etapa</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>Status</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredInstances.map((inst) => {
+                const stage = stages.find((s) => s.id === inst.current_stage_id) || null
+                return (
+                  <tr key={inst.id} style={{ borderTop: '1px solid var(--brs-gray-100)' }}>
+                    <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700, color: 'var(--brs-gray-800)' }}>{inst.partner?.name || '—'}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', color: 'var(--brs-gray-600)' }}>{inst.identifier_value}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', color: 'var(--brs-gray-600)' }}>{stage?.name || '—'}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', color: 'var(--brs-gray-600)' }}>{inst.status}</td>
+                    <td style={{ padding: '0.75rem 0.5rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button type="button" className="btn btn-outline" onClick={() => openDetail(inst.id)}>Detalhes</button>
+                        <button type="button" className="btn btn-outline" onClick={() => handleArchive(inst.id)}>Arquivar</button>
+                      </div>
                     </td>
                   </tr>
-                ) : (
-                  filteredPartners.map(p => (
-                    <tr key={p.id}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{p.name}</div>
-                        {p.fantasy_name && <div style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>{p.fantasy_name}</div>}
-                      </td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.cpf_cnpj}</td>
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                          <span style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Phone size={12} /> {p.phone_whatsapp}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Mail size={12} /> {p.email_comissao}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span style={{ 
-                          background: CRM_STAGES.find(s => s.id === p.status)?.bg || '#eee',
-                          color: CRM_STAGES.find(s => s.id === p.status)?.color || '#333',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          padding: '4px 10px',
-                          borderRadius: '12px'
-                        }}>
-                          {CRM_STAGES.find(s => s.id === p.status)?.name}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={{ fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                          <span><strong>Superint.:</strong> {p.superintendente?.name || '-'}</span>
-                          <span><strong>Superv.:</strong> {p.supervisor?.name || '-'}</span>
-                          <span><strong>Gerente:</strong> {p.gerente?.name || '-'}</span>
-                        </div>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => handleOpenDetails(p)}>
-                          <Eye size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                )
+              })}
+              {filteredInstances.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ padding: '1rem', color: 'var(--brs-gray-500)' }}>Nenhum resultado para os filtros atuais.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* DRAWER / DETAILS MODAL */}
-      {/* ========================================================================= */}
-      {selectedPartner && (
-        <div className="modal-backdrop" onClick={() => setSelectedPartner(null)}>
-          <div className="modal" style={{ maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            
-            <div className="modal-header">
-              <div>
-                <h3 className="modal-title" style={{ fontSize: '1.15rem' }}>Detalhes do Credenciamento</h3>
-                <span style={{ 
-                  background: CRM_STAGES.find(s => s.id === selectedPartner.status)?.bg || '#eee',
-                  color: CRM_STAGES.find(s => s.id === selectedPartner.status)?.color || '#333',
-                  fontSize: '0.7rem',
-                  fontWeight: 700,
-                  padding: '3px 8px',
-                  borderRadius: '12px',
-                  display: 'inline-block',
-                  marginTop: '0.25rem'
-                }}>
-                  Status: {CRM_STAGES.find(s => s.id === selectedPartner.status)?.name}
-                </span>
-              </div>
-              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSelectedPartner(null)}>
-                Fechar
+      {detailOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }} onClick={() => setDetailOpen(false)}>
+          <div className="card" style={{ width: 'min(1100px, 100%)', maxHeight: 'min(84dvh, 860px)', overflow: 'hidden', padding: 0 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--brs-gray-100)' }}>
+              <div style={{ fontWeight: 900, color: 'var(--brs-gray-900)' }}>Detalhe da Instância</div>
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setDetailOpen(false)} title="Fechar">
+                <X size={18} />
               </button>
             </div>
 
-            {/* Modal Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--brs-gray-200)', gap: '0.5rem', marginBottom: '1.25rem' }}>
-              <button 
-                type="button"
-                className={`btn btn-sm ${activeTab === 'dados' ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setActiveTab('dados')}
-                style={{ margin: 0, borderRadius: '8px 8px 0 0' }}
-              >
-                Dados Gerais
-              </button>
-              <button 
-                type="button"
-                className={`btn btn-sm ${activeTab === 'endereco' ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setActiveTab('endereco')}
-                style={{ margin: 0, borderRadius: '8px 8px 0 0' }}
-              >
-                Endereço & Contatos
-              </button>
-              <button 
-                type="button"
-                className={`btn btn-sm ${activeTab === 'banco' ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setActiveTab('banco')}
-                style={{ margin: 0, borderRadius: '8px 8px 0 0' }}
-              >
-                Dados Bancários
-              </button>
-              <button 
-                type="button"
-                className={`btn btn-sm ${activeTab === 'documentos' ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setActiveTab('documentos')}
-                style={{ margin: 0, borderRadius: '8px 8px 0 0' }}
-              >
-                Documentos Anexos
-              </button>
-              <button 
-                type="button"
-                className={`btn btn-sm ${activeTab === 'automacao' ? 'btn-primary' : 'btn-ghost'}`}
-                onClick={() => setActiveTab('automacao')}
-                style={{ margin: 0, borderRadius: '8px 8px 0 0', color: 'var(--brs-navy)', fontWeight: 600 }}
-              >
-                <Sparkles size={14} style={{ marginRight: '0.25rem' }} />
-                Integrações & Acesso
-              </button>
-            </div>
+            <div style={{ padding: '1rem 1.25rem', overflowY: 'auto', maxHeight: 'calc(min(84dvh, 860px) - 60px)' }}>
+              {detailLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <Loader2 className="spinner" size={18} />
+                  Carregando detalhe...
+                </div>
+              ) : detail?.error ? (
+                <div style={{ color: 'var(--brs-danger)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <AlertCircle size={18} />
+                  {detail.error}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
+                    {[
+                      { id: 'resumo', label: 'Resumo', icon: ClipboardList },
+                      { id: 'respostas', label: 'Respostas', icon: FileText },
+                      { id: 'campos', label: 'Campos + Validações', icon: CheckCircle },
+                      { id: 'documentos', label: 'Documentos', icon: FileText },
+                      { id: 'comunicacoes', label: 'Comunicações', icon: Mail },
+                      { id: 'timeline', label: 'Timeline', icon: Clock3 },
+                      { id: 'config', label: 'Config', icon: MessageSquare },
+                    ].map((tab) => {
+                      const Icon = tab.icon
+                      return (
+                        <button key={tab.id} type="button" className="btn btn-ghost" onClick={() => setDetailTab(tab.id as DetailTab)} style={{ border: `1px solid ${detailTab === tab.id ? 'var(--brs-primary-300)' : 'var(--brs-gray-200)'}`, background: detailTab === tab.id ? 'var(--brs-primary-50)' : '#fff', color: detailTab === tab.id ? 'var(--brs-primary-700)' : 'var(--brs-gray-700)', fontWeight: detailTab === tab.id ? 700 : 600 }}>
+                          <Icon size={14} />
+                          {tab.label}
+                        </button>
+                      )
+                    })}
+                  </div>
 
-            {message && (
-              <div 
-                style={{ 
-                  padding: '0.75rem', 
-                  borderRadius: '6px', 
-                  marginBottom: '1rem', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '0.5rem',
-                  background: message.type === 'success' ? '#ECFDF5' : '#FEF2F2',
-                  color: message.type === 'success' ? '#065F46' : '#991B1B',
-                  border: `1px solid ${message.type === 'success' ? '#A7F3D0' : '#FECACA'}`
-                }}
-              >
-                {message.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{message.text}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSaveDetails}>
-              <div className="modal-body" style={{ padding: '0.5rem 0' }}>
-                
-                {/* TAB 1: DADOS GERAIS */}
-                {activeTab === 'dados' && (
-                  <div className="form-grid form-grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Nome / Razão Social</label>
-                      <input type="text" className="form-control" value={selectedPartner.name || ''} readOnly />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">CPF / CNPJ</label>
-                      <input type="text" className="form-control" value={selectedPartner.cpf_cnpj || ''} readOnly />
-                    </div>
-                    {selectedPartner.person_type === 'PJ' && (
-                      <>
-                        <div className="form-group">
-                          <label className="form-label">Nome Fantasia</label>
-                          <input type="text" className="form-control" value={selectedPartner.fantasy_name || ''} readOnly />
+                  {detailTab === 'resumo' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                        <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Parceiro</div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--brs-gray-700)' }}>
+                          <div><strong>Nome:</strong> {detail.instance?.partner?.name || '—'}</div>
+                          <div><strong>CNPJ/CPF:</strong> {detail.instance?.partner?.cpf_cnpj || '—'}</div>
+                          <div><strong>E-mail:</strong> {detail.instance?.partner?.email_comissao || '—'}</div>
+                          <div><strong>WhatsApp:</strong> {detail.instance?.partner?.phone_whatsapp || '—'}</div>
                         </div>
-                        <div className="form-group">
-                          <label className="form-label">Representante Legal</label>
-                          <input type="text" className="form-control" value={selectedPartner.representante_legal || ''} readOnly />
-                        </div>
-                      </>
-                    )}
-
-                    {/* Vínculo de Hierarquia Comercial (Cascateado) */}
-                    <div style={{ gridColumn: 'span 2', marginTop: '1rem', borderTop: '1px solid var(--brs-gray-100)', paddingTop: '1rem' }}>
-                      <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--brs-gray-700)' }}>Hierarquia Comercial Atribuída</h4>
-                      
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                        <div className="form-group">
-                          <label className="form-label">Superintendente</label>
-                          <select 
-                            className="form-control"
-                            value={selectedPartner.superintendente_id || ''}
-                            onChange={e => setSelectedPartner({ 
-                              ...selectedPartner, 
-                              superintendente_id: e.target.value || null,
-                              supervisor_id: null,
-                              gerente_id: null
-                            })}
-                          >
-                            <option value="">Selecione...</option>
-                            {entities.filter(ent => ent.role === 'superintendente').map(ent => (
-                              <option key={ent.id} value={ent.id}>{ent.name}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="form-group">
-                          <label className="form-label">Supervisor</label>
-                          <select 
-                            className="form-control"
-                            value={selectedPartner.supervisor_id || ''}
-                            onChange={e => setSelectedPartner({ 
-                              ...selectedPartner, 
-                              supervisor_id: e.target.value || null,
-                              gerente_id: null
-                            })}
-                          >
-                            <option value="">Selecione...</option>
-                            {entities
-                              .filter(ent => ent.role === 'supervisor' && (!selectedPartner.superintendente_id || ent.parent_id === selectedPartner.superintendente_id))
-                              .map(ent => (
-                                <option key={ent.id} value={ent.id}>{ent.name}</option>
-                              ))
-                            }
-                          </select>
-                        </div>
-
-                        <div className="form-group">
-                          <label className="form-label">Gerente</label>
-                          <select 
-                            className="form-control"
-                            value={selectedPartner.gerente_id || ''}
-                            onChange={e => setSelectedPartner({ 
-                              ...selectedPartner, 
-                              gerente_id: e.target.value || null
-                            })}
-                          >
-                            <option value="">Selecione...</option>
-                            {entities
-                              .filter(ent => ent.role === 'gerente' && (!selectedPartner.supervisor_id || ent.parent_id === selectedPartner.supervisor_id))
-                              .map(ent => (
-                                <option key={ent.id} value={ent.id}>{ent.name}</option>
-                              ))
-                            }
-                          </select>
+                      </div>
+                      <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                        <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Processo</div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--brs-gray-700)' }}>
+                          <div><strong>Nome:</strong> {detail.instance?.process?.name || '—'}</div>
+                          <div><strong>Identificador:</strong> {detail.instance?.identifier_value || '—'}</div>
+                          <div><strong>Status:</strong> {detail.instance?.status || '—'}</div>
+                          <div><strong>Criado em:</strong> {formatDate(detail.instance?.created_at)}</div>
                         </div>
                       </div>
                     </div>
+                  )}
 
-                    {/* CNPJ Rich Data (da API publica.cnpj.ws) */}
-                    {selectedPartner.additional_data?.cnpj_rich_info && (
-                      <div style={{ gridColumn: 'span 2', marginTop: '1.5rem', borderTop: '1px solid var(--brs-gray-100)', paddingTop: '1.5rem' }}>
-                        <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--brs-navy)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <Building2 size={16} style={{ color: 'var(--brs-navy)' }} />
-                          Informações Adicionais do CNPJ (Receita Federal)
-                        </h4>
-                        
-                        <div style={{ background: 'var(--brs-gray-50)', border: '1px solid var(--brs-gray-100)', borderRadius: '10px', padding: '1.25rem', fontSize: '0.8rem' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                            <div>
-                              <span style={{ color: 'var(--brs-gray-400)', display: 'block', marginBottom: '0.2rem' }}>Situação Cadastral</span>
-                              <span style={{ fontWeight: 600, color: selectedPartner.additional_data.cnpj_rich_info.situacao_cadastral === 'Ativa' ? '#059669' : '#DC2626' }}>
-                                {selectedPartner.additional_data.cnpj_rich_info.situacao_cadastral}
-                              </span>
-                            </div>
-                            <div>
-                              <span style={{ color: 'var(--brs-gray-400)', display: 'block', marginBottom: '0.2rem' }}>Data de Abertura</span>
-                              <span style={{ fontWeight: 600 }}>{selectedPartner.additional_data.cnpj_rich_info.data_abertura || '-'}</span>
-                            </div>
-                            <div>
-                              <span style={{ color: 'var(--brs-gray-400)', display: 'block', marginBottom: '0.2rem' }}>Capital Social</span>
-                              <span style={{ fontWeight: 600 }}>
-                                {selectedPartner.additional_data.cnpj_rich_info.capital_social 
-                                  ? Number(selectedPartner.additional_data.cnpj_rich_info.capital_social).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                                  : '-'}
-                              </span>
-                            </div>
-                            <div>
-                              <span style={{ color: 'var(--brs-gray-400)', display: 'block', marginBottom: '0.2rem' }}>Natureza Jurídica</span>
-                              <span style={{ fontWeight: 600 }}>{selectedPartner.additional_data.cnpj_rich_info.natureza_juridica || '-'}</span>
-                            </div>
-                            <div style={{ gridColumn: 'span 2' }}>
-                              <span style={{ color: 'var(--brs-gray-400)', display: 'block', marginBottom: '0.2rem' }}>CNAE Principal</span>
-                              <span style={{ fontWeight: 600 }}>{selectedPartner.additional_data.cnpj_rich_info.cnae_principal || '-'}</span>
-                            </div>
-                          </div>
+                  {detailTab === 'respostas' && (
+                    <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Snapshot do formulário (último envio)</div>
+                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.8rem', background: 'var(--brs-gray-50)', border: '1px solid var(--brs-gray-100)', padding: '0.75rem', borderRadius: 10 }}>
+                        {safeJson((detail.snapshots?.[0]?.payload) || {})}
+                      </pre>
+                    </div>
+                  )}
 
-                          {selectedPartner.additional_data.cnpj_rich_info.socios && selectedPartner.additional_data.cnpj_rich_info.socios.length > 0 && (
-                            <div style={{ borderTop: '1px solid var(--brs-gray-200)', paddingTop: '1rem', marginTop: '1rem' }}>
-                              <span style={{ color: 'var(--brs-gray-400)', display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Quadro de Sócios e Administradores (QSA)</span>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                                {selectedPartner.additional_data.cnpj_rich_info.socios.map((socio: any, idx: number) => (
-                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', background: 'white', padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--brs-gray-100)' }}>
-                                    <span style={{ fontWeight: 600 }}>{socio.nome}</span>
-                                    <span style={{ color: 'var(--brs-gray-400)', fontSize: '0.75rem' }}>{socio.cargo}</span>
-                                  </div>
+                  {detailTab === 'campos' && (
+                    <div style={{ display: 'grid', gap: '0.85rem' }}>
+                      <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                        <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Campos de backoffice</div>
+                        {(detail.fields || []).length === 0 ? (
+                          <div style={{ color: 'var(--brs-gray-500)' }}>Nenhum campo interno preenchido.</div>
+                        ) : (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr style={{ textAlign: 'left' }}>
+                                  <th style={{ padding: '0.45rem', borderBottom: '1px solid var(--brs-gray-100)' }}>Campo</th>
+                                  <th style={{ padding: '0.45rem', borderBottom: '1px solid var(--brs-gray-100)' }}>Valor</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(detail.fields || []).map((field: any) => (
+                                  <tr key={field.id}>
+                                    <td style={{ padding: '0.45rem', borderBottom: '1px solid var(--brs-gray-50)', fontFamily: 'monospace' }}>{field.key}</td>
+                                    <td style={{ padding: '0.45rem', borderBottom: '1px solid var(--brs-gray-50)' }}>{safeJson(field.value)}</td>
+                                  </tr>
                                 ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* TAB 2: ENDEREÇO & CONTATOS */}
-                {activeTab === 'endereco' && (
-                  <div>
-                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem' }}>Contatos Cadastrados</h4>
-                    <div className="form-grid form-grid-2" style={{ marginBottom: '1.5rem' }}>
-                      <div className="form-group">
-                        <label className="form-label">WhatsApp Celular</label>
-                        <input type="text" className="form-control" value={selectedPartner.phone_whatsapp || ''} readOnly />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">E-mail Comissão</label>
-                        <input type="text" className="form-control" value={selectedPartner.email_comissao || ''} readOnly />
-                      </div>
-                    </div>
-
-                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem' }}>Endereço Comercial</h4>
-                    <div className="form-grid form-grid-3">
-                      <div className="form-group">
-                        <label className="form-label">CEP</label>
-                        <input type="text" className="form-control" value={selectedPartner.cep || ''} readOnly />
-                      </div>
-                      <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                        <label className="form-label">Rua</label>
-                        <input type="text" className="form-control" value={selectedPartner.address_street || ''} readOnly />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Número</label>
-                        <input type="text" className="form-control" value={selectedPartner.address_number || ''} readOnly />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Bairro</label>
-                        <input type="text" className="form-control" value={selectedPartner.address_neighborhood || ''} readOnly />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Cidade / UF</label>
-                        <input type="text" className="form-control" value={`${selectedPartner.address_city || ''} - ${selectedPartner.address_state || ''}`} readOnly />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB 3: DADOS BANCÁRIOS */}
-                {activeTab === 'banco' && (
-                  <div className="form-grid form-grid-3">
-                    <div className="form-group">
-                      <label className="form-label">Tipo de Recebimento</label>
-                      <input type="text" className="form-control" value={selectedPartner.commission_receive_type || ''} readOnly />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Banco</label>
-                      <input type="text" className="form-control" value={selectedPartner.bank_name || ''} readOnly />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Agência</label>
-                      <input type="text" className="form-control" value={selectedPartner.bank_agency || ''} readOnly />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Conta</label>
-                      <input type="text" className="form-control" value={selectedPartner.bank_account || ''} readOnly />
-                    </div>
-                    {selectedPartner.pix_type && (
-                      <>
-                        <div className="form-group">
-                          <label className="form-label">Tipo Chave PIX</label>
-                          <input type="text" className="form-control" value={selectedPartner.pix_type || ''} readOnly />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Chave PIX</label>
-                          <input type="text" className="form-control" value={selectedPartner.pix_key || ''} readOnly />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* TAB 4: DOCUMENTOS ANEXOS */}
-                {activeTab === 'documentos' && (
-                  <div>
-                    <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.9rem' }}>Anexos do Formulário Dinâmico</h4>
-                    
-                    {selectedPartner.additional_data && Object.keys(selectedPartner.additional_data).length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                        {Object.entries(selectedPartner.additional_data).map(([key, val]: any) => {
-                          const isFileUrl = typeof val === 'string' && val.startsWith('http')
-                          
-                          return (
-                            <div 
-                              key={key} 
-                              style={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                alignItems: 'center', 
-                                padding: '0.75rem', 
-                                border: '1px solid var(--brs-gray-100)', 
-                                borderRadius: '8px',
-                                background: 'var(--brs-gray-50)'
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--brs-gray-700)' }}>
-                                  {key.toUpperCase()}
-                                </div>
-                                <div style={{ fontSize: '0.7rem', color: 'var(--brs-gray-400)', marginTop: '0.15rem' }}>
-                                  {isFileUrl ? 'Arquivo de Documento' : 'Informação Textual'}
-                                </div>
-                              </div>
-
-                              {isFileUrl ? (
-                                <a 
-                                  href={val} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                  className="btn btn-outline btn-sm"
-                                  style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', textDecoration: 'none', color: 'var(--brs-navy)', borderColor: 'var(--brs-navy)' }}
-                                >
-                                  <ExternalLink size={12} />
-                                  Visualizar Documento
-                                </a>
-                              ) : (
-                                <span style={{ fontWeight: 500, fontSize: '0.8rem' }}>{val}</span>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--brs-gray-400)', fontSize: '0.85rem' }}>
-                        Nenhum anexo ou resposta dinâmica cadastrada.
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* TAB 5: INTEGRAÇÕES & AUTOMAÇÕES */}
-                {activeTab === 'automacao' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    
-                    {/* 1. ASSINAFY */}
-                    <div style={{ border: '1px solid var(--brs-gray-100)', padding: '1rem', borderRadius: '10px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                        <span style={{ fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                          <FileText size={16} color="var(--brs-navy)" />
-                          Integração Assinafy (Assinatura de Contrato)
-                        </span>
-                        {selectedPartner.assinafy_signature_url && (
-                          <span style={{ fontSize: '0.7rem', background: '#ECFDF5', color: '#065F46', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
-                            Contrato Gerado
-                          </span>
+                              </tbody>
+                            </table>
+                          </div>
                         )}
                       </div>
-                      
-                      <p style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)', margin: '0 0 1rem 0' }}>
-                        Dispara a assinatura eletrônica do modelo de credenciamento configurado via Assinafy.
-                      </p>
+                      <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                        <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Validações (auditoria)</div>
+                        {(detail.validations || []).length === 0 ? (
+                          <div style={{ color: 'var(--brs-gray-500)' }}>Nenhuma validação registrada.</div>
+                        ) : (
+                          <div style={{ display: 'grid', gap: '0.5rem' }}>
+                            {(detail.validations || []).map((v: any) => (
+                              <div key={v.id} style={{ border: '1px solid var(--brs-gray-100)', borderRadius: 8, padding: '0.6rem' }}>
+                                <div style={{ fontWeight: 700 }}>{v.key}</div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--brs-gray-600)' }}>
+                                  Validado por: {v.validator?.name || 'Usuário não identificado'} em {formatDate(v.validated_at)}
+                                </div>
+                                {v.note ? <div style={{ fontSize: '0.85rem', color: 'var(--brs-gray-600)' }}>Obs: {v.note}</div> : null}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-                      {selectedPartner.assinafy_signature_url ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <a 
-                            href={selectedPartner.assinafy_signature_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="btn btn-outline btn-sm"
-                            style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', textDecoration: 'none' }}
-                          >
-                            <ExternalLink size={12} />
-                            Link da Assinatura
-                          </a>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>ID Doc: {selectedPartner.assinafy_document_id}</span>
-                        </div>
+                  {detailTab === 'documentos' && (
+                    <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Eventos de documentos/assinatura</div>
+                      {detailDocsEvents.length === 0 ? (
+                        <div style={{ color: 'var(--brs-gray-500)' }}>Sem eventos de documento registrados.</div>
                       ) : (
-                        <button 
-                          type="button" 
-                          className="btn btn-primary btn-sm" 
-                          disabled={runningAutomation}
-                          onClick={() => runAutomation('contrato')}
-                          style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}
-                        >
-                          {runningAutomation ? <Loader2 size={12} className="spinner" /> : <Sparkles size={12} />}
-                          Gerar e Enviar Contrato Assinafy
-                        </button>
+                        <div style={{ display: 'grid', gap: '0.45rem' }}>
+                          {detailDocsEvents.map((evt: any) => (
+                            <div key={evt.id} style={{ border: '1px solid var(--brs-gray-100)', borderRadius: 8, padding: '0.6rem' }}>
+                              <div style={{ fontWeight: 700 }}>{evt.event_type}</div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)' }}>{formatDate(evt.created_at)}</div>
+                              <pre style={{ margin: '0.45rem 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.78rem' }}>{safeJson(evt.payload)}</pre>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
+                  )}
 
-                    {/* 2. Z-API / WHATSAPP */}
-                    <div style={{ border: '1px solid var(--brs-gray-100)', padding: '1rem', borderRadius: '10px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem' }}>
-                        <Send size={16} color="#10B981" />
-                        Disparo de Mensagem WhatsApp (Z-API)
-                      </span>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)', margin: '0 0 0.75rem 0' }}>
-                        Dispare avisos no WhatsApp do parceiro (ex: cobrança de assinatura ou instruções).
-                      </p>
-                      
-                      <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                        <textarea 
-                          className="form-control" 
-                          placeholder="Mensagem customizada. Deixe em branco para usar o aviso padrão de cobrança..." 
-                          value={customMsgInput}
-                          onChange={e => setCustomMsgInput(e.target.value)}
-                          style={{ minHeight: '60px', fontSize: '0.75rem' }}
-                        />
-                      </div>
-
-                      <button 
-                        type="button" 
-                        className="btn btn-outline btn-sm" 
-                        disabled={runningAutomation}
-                        onClick={() => runAutomation('whatsapp')}
-                        style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', borderColor: '#10B981', color: '#10B981' }}
-                      >
-                        {runningAutomation ? <Loader2 size={12} className="spinner" /> : <Send size={12} />}
-                        Disparar WhatsApp
-                      </button>
-                    </div>
-
-                    {/* 3. FINALIZAÇÃO & ACESSO */}
-                    <div style={{ border: '1px solid var(--brs-gray-100)', padding: '1rem', borderRadius: '10px', background: 'rgba(138, 43, 226, 0.02)' }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.75rem', color: 'var(--brs-navy)' }}>
-                        <Key size={16} />
-                        Finalização de Credenciamento & Acesso do Workspace
-                      </span>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)', margin: '0 0 1rem 0' }}>
-                        Ao aprovar o parceiro, informe as credenciais de credenciamento do ARW. O sistema criará uma conta de login automaticamente e enviará as credenciais.
-                      </p>
-
-                      <div className="form-grid form-grid-3" style={{ marginBottom: '1rem' }}>
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Código ARW</label>
-                          <input 
-                            type="text" 
-                            className="form-control" 
-                            required={selectedPartner.status !== 'finalizado'}
-                            disabled={selectedPartner.status === 'finalizado'}
-                            placeholder="Ex: AGENT01"
-                            value={arwCodeInput}
-                            onChange={e => setArwCodeInput(e.target.value)}
-                          />
-                        </div>
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Senha Provisória</label>
-                          <input 
-                            type="text" 
-                            className="form-control" 
-                            disabled={selectedPartner.status === 'finalizado'}
-                            placeholder="Deixe em branco para auto-gerar"
-                            value={tempPasswordInput}
-                            onChange={e => setTempPasswordInput(e.target.value)}
-                          />
-                        </div>
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Link Pasta Google Drive</label>
-                          <input 
-                            type="text" 
-                            className="form-control" 
-                            placeholder="https://drive.google.com/..."
-                            value={driveUrlInput}
-                            onChange={e => setDriveUrlInput(e.target.value)}
-                          />
-                        </div>
-                      </div>
-
-                      {selectedPartner.status === 'finalizado' ? (
-                        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '0.75rem', borderRadius: '6px', fontSize: '0.75rem', color: '#065F46', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <CheckCircle size={14} />
-                          <span>Este parceiro já foi finalizado. Acesso criado com o e-mail cadastrado.</span>
-                        </div>
+                  {detailTab === 'comunicacoes' && (
+                    <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Comunicações (e-mail / WhatsApp)</div>
+                      {detailCommsEvents.length === 0 ? (
+                        <div style={{ color: 'var(--brs-gray-500)' }}>Sem envios registrados.</div>
                       ) : (
-                        <button 
-                          type="button" 
-                          className="btn btn-primary btn-sm" 
-                          disabled={runningAutomation || !arwCodeInput}
-                          onClick={() => runAutomation('aprovar')}
-                          style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', background: 'var(--brs-navy)' }}
-                        >
-                          {runningAutomation ? <Loader2 size={12} className="spinner" /> : <Check size={12} />}
-                          Aprovar Parceiro & Criar Usuário
-                        </button>
+                        <div style={{ display: 'grid', gap: '0.45rem' }}>
+                          {detailCommsEvents.map((evt: any) => (
+                            <div key={evt.id} style={{ border: '1px solid var(--brs-gray-100)', borderRadius: 8, padding: '0.6rem' }}>
+                              <div style={{ fontWeight: 700 }}>{evt.event_type}</div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)' }}>{formatDate(evt.created_at)}</div>
+                              <pre style={{ margin: '0.45rem 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.78rem' }}>{safeJson(evt.payload)}</pre>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
+                  )}
 
-                  </div>
-                )}
+                  {detailTab === 'timeline' && (
+                    <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Linha do tempo</div>
+                      {detailEvents.length === 0 ? (
+                        <div style={{ color: 'var(--brs-gray-500)' }}>Sem eventos registrados.</div>
+                      ) : (
+                        <div style={{ display: 'grid', gap: '0.45rem' }}>
+                          {detailEvents.map((evt: any) => (
+                            <div key={evt.id} style={{ border: '1px solid var(--brs-gray-100)', borderRadius: 8, padding: '0.6rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <div style={{ fontWeight: 700 }}>{evt.event_type}</div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)' }}>{formatDate(evt.created_at)}</div>
+                              </div>
+                              <pre style={{ margin: '0.45rem 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.78rem' }}>{safeJson(evt.payload)}</pre>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-              </div>
-              
-              <div className="modal-footer" style={{ borderTop: '1px solid var(--brs-gray-100)', paddingTop: '1rem', marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <button type="button" className="btn btn-outline" onClick={() => setSelectedPartner(null)}>
-                  Fechar
-                </button>
-                {activeTab === 'dados' && (
-                  <button type="submit" className="btn btn-primary" disabled={savingDetails}>
-                    {savingDetails ? <Loader2 size={16} className="spinner" /> : <Check size={16} />}
-                    Salvar Alterações de Dados
-                  </button>
-                )}
-              </div>
-            </form>
-
+                  {detailTab === 'config' && (
+                    <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+                      <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Configuração da instância (somente leitura)</div>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--brs-gray-700)', marginBottom: '0.6rem' }}>
+                        <div><strong>Processo:</strong> {detail.instance?.process?.name || '—'}</div>
+                        <div><strong>Tipo:</strong> {detail.instance?.process?.type || '—'}</div>
+                        <div><strong>Versão:</strong> {detail.instance?.process?.config?.publication?.version || 1}</div>
+                        <div><strong>Status publicação:</strong> {detail.instance?.process?.config?.publication?.status || 'draft'}</div>
+                      </div>
+                      <div style={{ fontWeight: 700, marginBottom: '0.4rem' }}>Etapas do processo</div>
+                      {(detail.stageModels || []).length === 0 ? (
+                        <div style={{ color: 'var(--brs-gray-500)' }}>Nenhuma etapa disponível.</div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          {(detail.stageModels || []).map((st: any) => (
+                            <span key={st.id} style={{ border: '1px solid var(--brs-gray-200)', borderRadius: 999, padding: '0.25rem 0.6rem', fontSize: '0.8rem' }}>
+                              {Number(st.position || 0) + 1}. {st.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
-
     </div>
   )
 }

@@ -22,6 +22,7 @@ export async function saveProfile(profileData: {
   schedules?: any[]
 }) {
   try {
+    const now = new Date().toISOString()
     let profileId = profileData.id
 
     // 1. Salvar ou atualizar o perfil
@@ -46,6 +47,8 @@ export async function saveProfile(profileData: {
       const { id, profile_id, user_id, ...rest } = p
       return {
         ...rest,
+        // Evita violação de NOT NULL em bases onde created_at não tem default
+        created_at: (rest as any).created_at ?? now,
         profile_id: profileId
       }
     })
@@ -119,6 +122,7 @@ export async function saveUserDirectly(userData: {
   employee_id?: string | null
 }) {
   try {
+    const now = new Date().toISOString()
     let userId = userData.id
     
     // 1. Salvar ou atualizar dados básicos do usuário
@@ -224,6 +228,8 @@ export async function saveUserDirectly(userData: {
       const { id, profile_id, user_id, ...rest } = p
       return {
         ...rest,
+        // Evita violação de NOT NULL em bases onde created_at não tem default
+        created_at: (rest as any).created_at ?? now,
         user_id: userId
       }
     })

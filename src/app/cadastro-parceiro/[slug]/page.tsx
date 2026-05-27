@@ -1,13 +1,14 @@
 import PartnerOnboarding from '../_components/PartnerOnboarding'
 import type { Metadata } from 'next'
-import { getFormBySlug } from '../actions'
+import { getFormBySlug, getPublicProcessBySlug } from '../actions'
 
 export default function CadastroParceiroSlugPage({ params }: { params: { slug: string } }) {
   return <PartnerOnboarding slug={params.slug} />
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const res = await getFormBySlug(params.slug)
+  const procRes = await getPublicProcessBySlug(params.slug)
+  const res = procRes.success && procRes.form ? { success: true, form: procRes.form } : await getFormBySlug(params.slug)
   type PartnerFormConfig = {
     intro?: { title?: string }
     branding?: { favicon_url?: string }

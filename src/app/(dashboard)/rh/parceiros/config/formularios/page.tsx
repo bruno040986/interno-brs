@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { getPartnerForms, savePartnerForm, isPartnerFormSlugAvailable, deletePartnerForm } from '../../actions'
+import { getPartnerForms, savePartnerForm, deletePartnerForm } from '../../actions'
 import { Plus, Trash, Save, Loader2, X, ChevronUp, ChevronDown, Eye, CheckCircle, AlertCircle, Phone, Monitor, Copy, Pencil, Files } from 'lucide-react'
 
 interface FormField {
@@ -24,6 +24,7 @@ interface FormField {
 interface PartnerFormConfig {
   schema_version?: number
   intro?: { title?: string; text?: string; start_label?: string }
+  closing?: { title?: string; lead?: string; text?: string; button_label?: string; button_url?: string }
   submit?: { finish_label?: string }
   branding?: { primary_color?: string; accent_color?: string; logo_url?: string; favicon_url?: string }
 }
@@ -124,12 +125,12 @@ export default function SchemaBuilderPage() {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
   const [view, setView] = useState<'list' | 'edit'>('list')
   const [optionsDraft, setOptionsDraft] = useState<Record<string, string>>({})
 
   // Form Ativo no Editor
   const [selectedForm, setSelectedForm] = useState<PartnerForm | null>(null)
+  const [builderTab, setBuilderTab] = useState<'flow' | 'fields'>('flow')
   
   // Preview States
   const [previewValues, setPreviewValues] = useState<Record<string, any>>({})
@@ -166,15 +167,6 @@ export default function SchemaBuilderPage() {
       // ignore
     }
   }, [activePreviewFieldKey])
-
-  function normalizeSlug(input: string): string {
-    return String(input || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-  }
 
   function normalizeForm(raw: any): PartnerForm {
     const schema = Array.isArray(raw?.schema) ? raw.schema : []
@@ -611,19 +603,6 @@ export default function SchemaBuilderPage() {
     return String(currentVal) === String(field.conditional.value)
   }
 
-  async function validateAndSetSlug(nextSlug: string) {
-    if (!selectedForm) return
-    const candidate = normalizeSlug(nextSlug)
-    setSlugStatus('checking')
-    const res = await isPartnerFormSlugAvailable(candidate, selectedForm.id)
-    if (res.success) {
-      setSelectedForm({ ...selectedForm, slug: res.normalized })
-      setSlugStatus(res.available ? 'available' : 'taken')
-    } else {
-      setSlugStatus('idle')
-    }
-  }
-
   function updateFormConfig(next: Partial<PartnerFormConfig>) {
     if (!selectedForm) return
     setSelectedForm({
@@ -673,6 +652,7 @@ export default function SchemaBuilderPage() {
                   const f = forms.find(item => item.id === e.target.value)
                   if (f) {
                     setSelectedForm(f)
+                    setBuilderTab('flow')
                     setView('edit')
                   }
                 }}
@@ -744,22 +724,16 @@ export default function SchemaBuilderPage() {
                 <thead>
                   <tr style={{ textAlign: 'left', fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>
                     <th style={{ padding: '0.75rem 0.5rem' }}>Título</th>
-                    <th style={{ padding: '0.75rem 0.5rem' }}>Slug</th>
                     <th style={{ padding: '0.75rem 0.5rem' }}>Ativo</th>
-                    <th style={{ padding: '0.75rem 0.5rem' }}>Link público</th>
                     <th style={{ padding: '0.75rem 0.5rem', width: 260 }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {forms.map(f => {
-                    const publicPath = f.slug ? `/cadastro-parceiro/${normalizeSlug(f.slug)}` : ''
                     return (
                       <tr key={f.id} style={{ borderTop: '1px solid var(--brs-gray-100)' }}>
                         <td style={{ padding: '0.75rem 0.5rem', color: 'var(--brs-gray-800)', fontWeight: 600 }}>
                           {f.title}
-                        </td>
-                        <td style={{ padding: '0.75rem 0.5rem', color: 'var(--brs-gray-600)', fontSize: '0.875rem' }}>
-                          {f.slug || <span style={{ color: 'var(--brs-gray-400)' }}>—</span>}
                         </td>
                         <td style={{ padding: '0.75rem 0.5rem' }}>
                           <span style={{
@@ -776,40 +750,17 @@ export default function SchemaBuilderPage() {
                             {f.is_active ? 'Ativo' : 'Inativo'}
                           </span>
                         </td>
-                        <td style={{ padding: '0.75rem 0.5rem', color: 'var(--brs-gray-600)', fontSize: '0.875rem' }}>
-                          {publicPath ? (
-                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                              <code style={{ background: 'var(--brs-gray-50)', border: '1px solid var(--brs-gray-100)', padding: '0.15rem 0.35rem', borderRadius: 6 }}>{publicPath}</code>
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-xs btn-icon"
-                                title="Copiar link"
-                                onClick={async () => {
-                                  try {
-                                    await navigator.clipboard.writeText(publicPath)
-                                    setMessage({ type: 'success', text: 'Link copiado para a área de transferência.' })
-                                  } catch {
-                                    setMessage({ type: 'error', text: 'Não foi possível copiar automaticamente. Copie manualmente.' })
-                                  }
-                                }}
-                              >
-                                <Copy size={14} />
-                              </button>
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--brs-gray-400)' }}>Defina um slug</span>
-                          )}
-                        </td>
                         <td style={{ padding: '0.75rem 0.5rem' }}>
                           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <button
                               type="button"
                               className="btn btn-outline"
-                              onClick={() => {
-                                setSelectedForm(f)
-                                setView('edit')
-                              }}
-                            >
+                            onClick={() => {
+                              setSelectedForm(f)
+                              setBuilderTab('flow')
+                              setView('edit')
+                            }}
+                          >
                               <Pencil size={16} />
                               Editar
                             </button>
@@ -869,72 +820,47 @@ export default function SchemaBuilderPage() {
                 </div>
               </div>
 
-              {/* Lista de perguntas (rolagem independente) */}
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                <div style={{ flexShrink: 0, fontWeight: 600, fontSize: '0.875rem', color: 'var(--brs-gray-800)', borderBottom: '1px solid var(--brs-gray-100)', paddingBottom: '0.5rem' }}>
+              {/* Abas do construtor */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setBuilderTab('flow')}
+                  style={{
+                    borderRadius: 8,
+                    border: `1px solid ${builderTab === 'flow' ? 'var(--brs-primary-300)' : 'var(--brs-gray-200)'}`,
+                    background: builderTab === 'flow' ? 'var(--brs-primary-50)' : '#fff',
+                    color: builderTab === 'flow' ? 'var(--brs-primary-700)' : 'var(--brs-gray-700)',
+                    fontWeight: builderTab === 'flow' ? 700 : 600,
+                  }}
+                >
+                  Telas do Fluxo (Abertura & Encerramento)
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setBuilderTab('fields')}
+                  style={{
+                    borderRadius: 8,
+                    border: `1px solid ${builderTab === 'fields' ? 'var(--brs-primary-300)' : 'var(--brs-gray-200)'}`,
+                    background: builderTab === 'fields' ? 'var(--brs-primary-50)' : '#fff',
+                    color: builderTab === 'fields' ? 'var(--brs-primary-700)' : 'var(--brs-gray-700)',
+                    fontWeight: builderTab === 'fields' ? 700 : 600,
+                  }}
+                >
                   Perguntas e Campos do Formulário
-                </div>
+                </button>
+              </div>
 
-                <div className="card" style={{ flexShrink: 0, padding: '1rem', background: 'var(--brs-gray-50)', border: '1px solid var(--brs-gray-100)' }}>
-                  <div className="form-grid form-grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Slug público</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="ex: cadastro-parceiros"
-                        value={selectedForm.slug || ''}
-                        onChange={e => {
-                          setSlugStatus('idle')
-                          setSelectedForm({ ...selectedForm, slug: e.target.value })
-                        }}
-                        onBlur={() => validateAndSetSlug(selectedForm.slug || '')}
-                      />
-                      <div style={{ marginTop: '0.35rem', fontSize: '0.75rem', color: slugStatus === 'taken' ? 'var(--brs-danger)' : 'var(--brs-gray-400)' }}>
-                        {slugStatus === 'checking' ? 'Verificando disponibilidade...' :
-                          slugStatus === 'available' ? 'Slug disponível.' :
-                          slugStatus === 'taken' ? 'Slug já está em uso.' :
-                          'Use letras, números e hífens.'}
-                      </div>
-                    </div>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {builderTab === 'flow' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '0.25rem' }}>
+                  <div className="card" style={{ flexShrink: 0, padding: '1rem', background: '#fff', border: '1px solid var(--brs-gray-100)' }}>
+                    <div className="section-divider" style={{ marginBottom: '1rem' }}>Tela de Abertura</div>
 
-                    <div className="form-group">
-                      <label className="form-label">Link público</label>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <input
-                          type="text"
-                          className="form-control"
-                          readOnly
-                          value={selectedForm.slug ? `/cadastro-parceiro/${normalizeSlug(selectedForm.slug)}` : ''}
-                          placeholder="Salve e defina um slug para gerar o link"
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-outline"
-                          disabled={!selectedForm.slug}
-                          onClick={async () => {
-                            try {
-                              const text = `/cadastro-parceiro/${normalizeSlug(selectedForm.slug || '')}`
-                              await navigator.clipboard.writeText(text)
-                              setMessage({ type: 'success', text: 'Link copiado para a área de transferência.' })
-                            } catch {
-                              setMessage({ type: 'error', text: 'Não foi possível copiar automaticamente. Copie manualmente.' })
-                            }
-                          }}
-                        >
-                          Copiar
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card" style={{ flexShrink: 0, padding: '1rem', background: 'var(--brs-gray-50)', border: '1px solid var(--brs-gray-100)' }}>
-                  <div className="section-divider" style={{ marginBottom: '1rem' }}>White Label / Intro</div>
-
-                  <div className="form-grid form-grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Título Inicial</label>
+                    <div className="form-grid form-grid-2">
+                      <div className="form-group">
+                        <label className="form-label">Título Inicial</label>
                       <input
                         type="text"
                         className="form-control"
@@ -942,8 +868,8 @@ export default function SchemaBuilderPage() {
                         onChange={e => updateFormConfig({ intro: { ...(selectedForm.config?.intro || {}), title: e.target.value } })}
                       />
                     </div>
-                    <div className="form-group">
-                      <label className="form-label">Label Botão Iniciar</label>
+                      <div className="form-group">
+                        <label className="form-label">Label Botão Iniciar</label>
                       <input
                         type="text"
                         className="form-control"
@@ -963,9 +889,9 @@ export default function SchemaBuilderPage() {
                     />
                   </div>
 
-                  <div className="form-grid form-grid-3">
-                    <div className="form-group">
-                      <label className="form-label">Label Botão Finalizar</label>
+                    <div className="form-grid form-grid-3">
+                      <div className="form-group">
+                        <label className="form-label">Label Botão Finalizar</label>
                       <input
                         type="text"
                         className="form-control"
@@ -973,8 +899,8 @@ export default function SchemaBuilderPage() {
                         onChange={e => updateFormConfig({ submit: { ...(selectedForm.config?.submit || {}), finish_label: e.target.value } })}
                       />
                     </div>
-                    <div className="form-group">
-                      <label className="form-label">Cor Primária</label>
+                      <div className="form-group">
+                        <label className="form-label">Cor Primária</label>
                       <input
                         type="color"
                         className="form-control"
@@ -1018,6 +944,76 @@ export default function SchemaBuilderPage() {
                     </div>
                   </div>
                 </div>
+
+                  <div className="card" style={{ flexShrink: 0, padding: '1rem', background: '#fff', border: '1px solid var(--brs-gray-100)' }}>
+                    <div className="section-divider" style={{ marginBottom: '1rem' }}>Tela de Encerramento</div>
+
+                    <div className="form-grid form-grid-2">
+                      <div className="form-group">
+                        <label className="form-label">Título</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={selectedForm.config?.closing?.title || ''}
+                        onChange={e => updateFormConfig({ closing: { ...(selectedForm.config?.closing || {}), title: e.target.value } })}
+                      />
+                    </div>
+                      <div className="form-group">
+                        <label className="form-label">Subtítulo / Linha Verde</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={selectedForm.config?.closing?.lead || ''}
+                        onChange={e => updateFormConfig({ closing: { ...(selectedForm.config?.closing || {}), lead: e.target.value } })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Texto</label>
+                    <textarea
+                      className="form-control"
+                      rows={4}
+                      value={selectedForm.config?.closing?.text || ''}
+                      onChange={e => updateFormConfig({ closing: { ...(selectedForm.config?.closing || {}), text: e.target.value } })}
+                    />
+                      <div style={{ marginTop: '0.35rem', fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>
+                        Dica: use quebras de linha para separar parágrafos.
+                      </div>
+                  </div>
+
+                    <div className="form-grid form-grid-2">
+                      <div className="form-group">
+                        <label className="form-label">Label do Botão</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={selectedForm.config?.closing?.button_label || ''}
+                        onChange={e => updateFormConfig({ closing: { ...(selectedForm.config?.closing || {}), button_label: e.target.value } })}
+                      />
+                    </div>
+                      <div className="form-group">
+                        <label className="form-label">Link do Botão (URL)</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="https://..."
+                        value={selectedForm.config?.closing?.button_url || ''}
+                        onChange={e => updateFormConfig({ closing: { ...(selectedForm.config?.closing || {}), button_url: e.target.value } })}
+                      />
+                      </div>
+                  </div>
+                  </div>
+                  </div>
+                ) : (
+                  <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    {/* Lista de perguntas (rolagem completa) */}
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                <div style={{ flexShrink: 0, fontWeight: 600, fontSize: '0.875rem', color: 'var(--brs-gray-800)', borderBottom: '1px solid var(--brs-gray-100)', paddingBottom: '0.5rem' }}>
+                  Perguntas e Campos do Formulário
+                </div>
+
+
 
                 {selectedForm.schema.map((field, idx) => (
                   <div 
@@ -1344,6 +1340,9 @@ export default function SchemaBuilderPage() {
                   {saving ? <Loader2 size={16} className="spinner" /> : <Save size={16} />}
                   Salvar Formulário
                 </button>
+              </div>
+                  </div>
+                )}
               </div>
             </form>
           </div>

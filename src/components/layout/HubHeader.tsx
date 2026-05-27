@@ -93,9 +93,9 @@ export default function HubHeader({ user }: HubHeaderProps) {
       <div className="hub-header-left">
         <Link href="/">
           <Image 
-            src="/logotipos/BRS-GESTAO-FUNDO-CLARO.png" 
-            alt="BRS Gestão" 
-            width={120} 
+            src="/logotipos/BRS WORKSPACE FUNDO CLARO SEM FUNDO.png"
+            alt="BRS Workspace"
+            width={180}
             height={60} 
             priority
             style={{ objectFit: 'contain' }}

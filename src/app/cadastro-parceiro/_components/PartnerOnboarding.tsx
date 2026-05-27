@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getActiveForm, getFormBySlug, uploadPartnerFile, submitPartnerRegistration } from '../actions'
+import { getActiveForm, getFormBySlug, getPublicProcessBySlug, uploadPartnerFile, submitPartnerRegistration } from '../actions'
 import { 
   CheckCircle, AlertCircle, Upload, Search, Building2, User, 
   FileText, Lock, ArrowRight, MapPin, CreditCard, Loader2, Check 
@@ -85,6 +85,9 @@ export default function PartnerOnboarding({ slug }: Props) {
   const [bankFieldSeqByKey, setBankFieldSeqByKey] = useState<Record<string, string>>({})
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
+  const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+  const ALLOWED_UPLOAD_EXTENSIONS = new Set(['pdf', 'jpg', 'jpeg', 'png'])
+
   const primaryColor = formConfig?.branding?.primary_color || '#8A2BE2'
   const accentColor = formConfig?.branding?.accent_color || '#FF2D6D'
   const introTitle = formConfig?.intro?.title || 'Portal de Cadastro'
@@ -92,6 +95,17 @@ export default function PartnerOnboarding({ slug }: Props) {
   const introStartLabel = formConfig?.intro?.start_label || 'Iniciar'
   const finishLabel = formConfig?.submit?.finish_label || 'Finalizar e Enviar'
   const logoUrl = formConfig?.branding?.logo_url || ''
+  const closingTitle = formConfig?.closing?.title || 'Cadastro Recebido!'
+  const closingLead = formConfig?.closing?.lead || 'BRS Promotora agradece seu envio.'
+  const closingText =
+    formConfig?.closing?.text ||
+    'Seus dados cadastrais e documentos foram salvos com sucesso no sistema. Nossa equipe comercial fará a análise técnica e o vínculo na hierarquia em breve.\n\nVocê receberá as notificações de aprovação de conta, contrato para assinatura no WhatsApp e e-mail cadastrados. Fique atento!'
+  const closingButtonLabel = formConfig?.closing?.button_label || 'Ir para o site da BRS'
+  const closingButtonUrl = formConfig?.closing?.button_url || 'https://brspromotora.com.br'
+  const closingParagraphs = String(closingText || '')
+    .split(/\r?\n\r?\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean)
   const schemaVersion = Number(formConfig?.schema_version || 1)
   const isSchemaV2 = schemaVersion === 2
 
@@ -99,7 +113,17 @@ export default function PartnerOnboarding({ slug }: Props) {
   useEffect(() => {
     async function loadSchema() {
       setLoadingSchema(true)
-      const res = slug ? await getFormBySlug(slug) : await getActiveForm()
+      let res: any
+      if (slug) {
+        const procRes = await getPublicProcessBySlug(slug)
+        if (procRes.success && procRes.process && procRes.form) {
+          res = { success: true, form: procRes.form }
+        } else {
+          res = await getFormBySlug(slug)
+        }
+      } else {
+        res = await getActiveForm()
+      }
       if (res.success && res.form) {
         setFormSchema(res.form.schema || [])
         setFormId(res.form.id)
@@ -419,7 +443,7 @@ export default function PartnerOnboarding({ slug }: Props) {
         return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`
       }
       case 'pix_uuid': {
-        // aceita hex + '-' e normaliza em 8-4-4-4-12 quando possÃ­vel
+        // aceita hex + '-' e normaliza em 8-4-4-4-12 quando possível
         const hex = input.replace(/[^0-9a-fA-F]/g, '').slice(0, 32)
         if (hex.length <= 8) return hex
         if (hex.length <= 12) return `${hex.slice(0, 8)}-${hex.slice(8)}`
@@ -428,7 +452,7 @@ export default function PartnerOnboarding({ slug }: Props) {
         return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
       }
       case 'bank_account': {
-        // ExibiÃ§Ã£o em formato 0000000000-0 (preenchendo da direita para a esquerda)
+        // Exibição em formato 0000000000-0 (preenchendo da direita para a esquerda)
         const d = digits.slice(-11)
         if (!d) return ''
         const dv = d.slice(-1)
@@ -462,7 +486,7 @@ export default function PartnerOnboarding({ slug }: Props) {
       return typedDigits.slice(0, maxDigits)
     }
 
-    // Appending: pega o Ãºltimo dÃ­gito digitado e adiciona na sequÃªncia
+    // Appending: pega o último dígito digitado e adiciona na sequência
     const lastDigit = typedDigits.slice(-1)
     const nextSeq = `${prevSeq}${lastDigit}`.slice(0, maxDigits)
     return nextSeq
@@ -472,7 +496,7 @@ export default function PartnerOnboarding({ slug }: Props) {
     const d = String(seq || '').replace(/\D/g, '').slice(0, 5)
     if (!d) return ''
 
-    // Sempre exibe como 0000-0 (BRB pode ter 3 dígitos; preenche com zeros Ã  esquerda)
+    // Sempre exibe como 0000-0 (BRB pode ter 3 dígitos; preenche com zeros à esquerda)
     if (d.length <= 4) {
       const core = d.padStart(4, '0')
       return `${core}-0`
@@ -498,7 +522,7 @@ export default function PartnerOnboarding({ slug }: Props) {
     const digits = String(rawValue ?? '').replace(/\D/g, '').slice(0, maxDigits)
     if (!digits) return ''
 
-    // Se for apenas zeros (ex: "00000"), considera vazio para nÃ£o travar digitaÃ§Ã£o
+    // Se for apenas zeros (ex: "00000"), considera vazio para não travar digitação
     if (isAllZeros(digits)) return ''
 
     return digits
@@ -511,6 +535,11 @@ export default function PartnerOnboarding({ slug }: Props) {
     maxDigits: number,
   ) {
     const key = e.key
+    const digitFromCode = (() => {
+      const code = String(e.code || '')
+      const m = code.match(/^Numpad([0-9])$/)
+      return m ? m[1] : null
+    })()
 
     if (key === 'Backspace') {
       e.preventDefault()
@@ -528,10 +557,11 @@ export default function PartnerOnboarding({ slug }: Props) {
     if (key === 'Tab' || key.startsWith('Arrow') || key === 'Home' || key === 'End') return
 
     // Only allow digits; block '-' and any other chars
-    if (/^\d$/.test(key)) {
+    const digit = /^\d$/.test(key) ? key : digitFromCode
+    if (digit) {
       e.preventDefault()
       if (prevSeq.length >= maxDigits) return
-      setSeq((prevSeq + key).slice(0, maxDigits))
+      setSeq((prevSeq + digit).slice(0, maxDigits))
       return
     }
 
@@ -553,6 +583,29 @@ export default function PartnerOnboarding({ slug }: Props) {
     e.preventDefault()
     const next = (prevSeq + digits).slice(0, maxDigits)
     setSeq(next)
+  }
+
+  function handleDigitSequenceChange(
+    e: React.ChangeEvent<HTMLInputElement>,
+    prevSeq: string,
+    setSeq: (next: string) => void,
+    maxDigits: number,
+  ) {
+    const native = e.nativeEvent as unknown as { data?: string | null; inputType?: string }
+    const inputType = String(native?.inputType || '')
+    const dataDigits = String(native?.data ?? '').replace(/\D/g, '')
+
+    if (inputType.startsWith('delete')) {
+      setSeq(prevSeq.slice(0, -1))
+      return
+    }
+
+    if (dataDigits) {
+      setSeq((prevSeq + dataDigits).slice(0, maxDigits))
+      return
+    }
+
+    setSeq(inferAppendOnlySequence(prevSeq, e.target.value, maxDigits))
   }
 
   function getBankCode3(code: any): string {
@@ -817,6 +870,17 @@ export default function PartnerOnboarding({ slug }: Props) {
 
   // File Upload to base64 and server action
   async function handleFileUpload(fieldKey: string, file: File) {
+    setFieldErrors((prev) => ({ ...prev, [fieldKey]: '' }))
+    const ext = String(file.name.split('.').pop() || '').toLowerCase()
+    if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
+      setFieldErrors((prev) => ({ ...prev, [fieldKey]: 'Formato inválido. Envie PDF, JPG ou PNG.' }))
+      return
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setFieldErrors((prev) => ({ ...prev, [fieldKey]: 'Arquivo excede o tamanho máximo de 5MB.' }))
+      return
+    }
+
     setUploadingFiles(prev => ({ ...prev, [fieldKey]: true }))
     try {
       const cpfCnpjForUpload = (() => {
@@ -824,17 +888,29 @@ export default function PartnerOnboarding({ slug }: Props) {
         const raw = (fromSchema || cpfCnpj || 'temp').replace(/\D/g, '')
         return raw || 'temp'
       })()
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        const base64Data = (e.target?.result as string).split(',')[1]
-        const res = await uploadPartnerFile(cpfCnpjForUpload, file.name, base64Data)
-        if (res.success && res.publicUrl) {
-          setDynamicAnswers(prev => ({ ...prev, [fieldKey]: res.publicUrl }))
+
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const result = String((e.target?.result as string) || '')
+          const [, data] = result.split(',')
+          if (!data) return reject(new Error('Arquivo inválido'))
+          resolve(data)
         }
+        reader.onerror = () => reject(new Error('Falha ao ler arquivo'))
+        reader.readAsDataURL(file)
+      })
+
+      const res = await uploadPartnerFile(cpfCnpjForUpload, file.name, base64Data)
+      if (res.success && res.publicUrl) {
+        setDynamicAnswers(prev => ({ ...prev, [fieldKey]: res.publicUrl }))
+        setFieldErrors((prev) => ({ ...prev, [fieldKey]: '' }))
+        return
       }
-      reader.readAsDataURL(file)
+      setFieldErrors((prev) => ({ ...prev, [fieldKey]: res?.error || 'Erro ao enviar arquivo.' }))
     } catch (err) {
       console.error('Erro no upload:', err)
+      setFieldErrors((prev) => ({ ...prev, [fieldKey]: 'Erro ao enviar arquivo.' }))
     } finally {
       setUploadingFiles(prev => ({ ...prev, [fieldKey]: false }))
     }
@@ -974,7 +1050,7 @@ export default function PartnerOnboarding({ slug }: Props) {
         }
       })()
 
-      const res = await submitPartnerRegistration(payload as any)
+      const res = await submitPartnerRegistration({ ...(payload as any), process_slug: slug } as any)
       if (res.success) {
         setStep('success')
       } else {
@@ -1248,11 +1324,13 @@ export default function PartnerOnboarding({ slug }: Props) {
                       )}
                       <input 
                         type="file" 
+                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                         style={{ display: 'none' }} 
                         disabled={isUploading}
                         onChange={e => {
                           const file = e.target.files?.[0]
                           if (file) handleFileUpload(fieldKey, file)
+                          e.currentTarget.value = ''
                         }}
                       />
                     </label>
@@ -1263,9 +1341,14 @@ export default function PartnerOnboarding({ slug }: Props) {
                         <span>Documento anexado</span>
                       </div>
                     ) : (
-                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Nenhum arquivo enviado (PDF, JPG ou PNG)</span>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Nenhum arquivo enviado (PDF, JPG ou PNG), máximo de 5MB.</span>
                     )}
                   </div>
+                  {!!fieldErrors[fieldKey] && (
+                    <div style={{ marginTop: '0.5rem', color: '#f87171', fontSize: '0.78rem', fontWeight: 600 }}>
+                      {fieldErrors[fieldKey]}
+                    </div>
+                  )}
                 </div>
               )
             }
@@ -1292,16 +1375,28 @@ export default function PartnerOnboarding({ slug }: Props) {
                     className="onboarding-input"
                     required={isRequired}
                     placeholder={getPlaceholderForField(field)}
-                    value={formatted}
-                    inputMode="numeric"
-                    style={fieldErrors[fieldKey] ? { borderColor: '#ef4444' } : undefined}
-                    onChange={() => {
-                      // controlled via keyDown/paste
-                    }}
-                    onFocus={() => {
-                      setFieldErrors((prev) => ({ ...prev, [fieldKey]: '' }))
-                      setBankFieldSeqByKey((prev) => {
-                        const current = String(prev[fieldKey] || '').replace(/\D/g, '').slice(0, maxDigits)
+                  value={formatted}
+                  inputMode="numeric"
+                  style={fieldErrors[fieldKey] ? { borderColor: '#ef4444' } : undefined}
+                  onChange={(e) => {
+                    setFieldErrors((prev) => ({ ...prev, [fieldKey]: '' }))
+                    const prevSeq = String(bankFieldSeqByKey[fieldKey] || '').replace(/\D/g, '').slice(0, maxDigits)
+                    handleDigitSequenceChange(e, prevSeq, (nextSeq) => {
+                      const cleaned = nextSeq.replace(/\D/g, '').slice(0, maxDigits)
+                      setBankFieldSeqByKey((prev) => ({ ...prev, [fieldKey]: cleaned }))
+                      setDynamicAnswers((answersPrev) => ({
+                        ...answersPrev,
+                        [fieldKey]:
+                          field.mask === 'bank_agency_with_digit'
+                            ? formatBankAgencyWithDigitFromSeq(cleaned)
+                            : formatBankAccountFromSeq(cleaned),
+                      }))
+                    }, maxDigits)
+                  }}
+                  onFocus={() => {
+                    setFieldErrors((prev) => ({ ...prev, [fieldKey]: '' }))
+                    setBankFieldSeqByKey((prev) => {
+                      const current = String(prev[fieldKey] || '').replace(/\D/g, '').slice(0, maxDigits)
                         if (current) return prev
                         const seeded = seedBankSeqFromValue(field.mask, value, maxDigits)
                         if (!seeded) return prev
@@ -1369,7 +1464,7 @@ export default function PartnerOnboarding({ slug }: Props) {
                   onChange={(e) => setFieldAnswer(field, e.target.value)}
                   onFocus={() => setFieldErrors((prev) => ({ ...prev, [fieldKey]: '' }))}
                   onBlur={() => {
-                    // Auto-completa agÃªncia sem dÃ­gito com "0" no final (0000-0)
+                    // Auto-completa agência sem dígito com "0" no final (0000-0)
                     if (field.mask === 'bank_agency_with_digit') {
                       setBankFieldSeqByKey((prev) => {
                         const seq = String(prev[fieldKey] || '').replace(/\D/g, '').slice(0, 5)
@@ -1382,7 +1477,7 @@ export default function PartnerOnboarding({ slug }: Props) {
                       })
                     }
 
-                    // Valida mÃ¡scaras: nÃ£o permite valor parcial
+                    // Valida máscaras: não permite valor parcial
                     if (field.mask && String(field.mask) !== 'none') {
                       const masked = applyMask(field.mask, value)
                       const hasSomething = String(masked || '').trim() !== ''
@@ -2037,8 +2132,12 @@ export default function PartnerOnboarding({ slug }: Props) {
                   placeholder="1234-5"
                   value={formatBankAgencyWithDigitFromSeq(bankAgencySeq)}
                   inputMode="numeric"
-                  onChange={() => {
-                    // controlled via keyDown/paste
+                  onChange={(e) => {
+                    handleDigitSequenceChange(e, bankAgencySeq, (nextSeq) => {
+                      const seq = nextSeq.replace(/\D/g, '').slice(0, 5)
+                      setBankAgencySeq(seq)
+                      setBankAgency(formatBankAgencyWithDigitFromSeq(seq))
+                    }, 5)
                   }}
                   onKeyDown={(e) => {
                     handleDigitSequenceKeyDown(e, bankAgencySeq, (nextSeq) => {
@@ -2064,8 +2163,12 @@ export default function PartnerOnboarding({ slug }: Props) {
                   placeholder="12345-6"
                   value={formatBankAccountFromSeq(bankAccountSeq)}
                   inputMode="numeric"
-                  onChange={() => {
-                    // controlled via keyDown/paste
+                  onChange={(e) => {
+                    handleDigitSequenceChange(e, bankAccountSeq, (nextSeq) => {
+                      const seq = nextSeq.replace(/\D/g, '').slice(0, 11)
+                      setBankAccountSeq(seq)
+                      setBankAccount(formatBankAccountFromSeq(seq))
+                    }, 11)
                   }}
                   onKeyDown={(e) => {
                     handleDigitSequenceKeyDown(e, bankAccountSeq, (nextSeq) => {
@@ -2225,11 +2328,13 @@ export default function PartnerOnboarding({ slug }: Props) {
                               )}
                               <input 
                                 type="file" 
+                                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                                 style={{ display: 'none' }} 
                                 disabled={isUploading}
                                 onChange={e => {
                                   const file = e.target.files?.[0]
                                   if (file) handleFileUpload(fieldKey, file)
+                                  e.currentTarget.value = ''
                                 }}
                               />
                             </label>
@@ -2240,9 +2345,14 @@ export default function PartnerOnboarding({ slug }: Props) {
                                 <span>Documento anexado</span>
                               </div>
                             ) : (
-                              <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Nenhum arquivo enviado (PDF, JPG ou PNG)</span>
+                              <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Nenhum arquivo enviado (PDF, JPG ou PNG), máximo de 5MB.</span>
                             )}
                           </div>
+                          {!!fieldErrors[fieldKey] && (
+                            <div style={{ marginTop: '0.5rem', color: '#f87171', fontSize: '0.78rem', fontWeight: 600 }}>
+                              {fieldErrors[fieldKey]}
+                            </div>
+                          )}
                         </div>
                       )
                     }
@@ -2297,21 +2407,33 @@ export default function PartnerOnboarding({ slug }: Props) {
           </div>
 
           <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.75rem 0', color: 'white' }}>
-            Cadastro Recebido!
+            {closingTitle}
           </h2>
           <p style={{ color: '#10B981', fontWeight: 600, fontSize: '0.95rem', marginBottom: '1.5rem' }}>
-            BRS Promotora agradece seu envio.
+            {closingLead}
           </p>
 
           <p style={{ color: '#9ca3af', fontSize: '0.9rem', lineHeight: '1.6', margin: '0 0 2.5rem 0' }}>
-            Seus dados cadastrais e documentos foram salvos com sucesso no sistema. Nossa equipe comercial fará a análise técnica e o vínculo na hierarquia em breve. 
-            <br /><br />
-            Você receberá as notificações de aprovação de conta, contrato para assinatura no WhatsApp e e-mail cadastrados. Fique atento!
+            {closingParagraphs.length > 0 ? (
+              closingParagraphs.map((paragraph, idx) => (
+                <span key={idx}>
+                  {paragraph}
+                  {idx < closingParagraphs.length - 1 && (
+                    <>
+                      <br />
+                      <br />
+                    </>
+                  )}
+                </span>
+              ))
+            ) : (
+              <span />
+            )}
           </p>
 
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <a 
-              href="https://brspromotora.com.br" 
+              href={closingButtonUrl} 
               style={{ 
                 textDecoration: 'none',
                 background: 'rgba(255,255,255,0.05)',
@@ -2326,7 +2448,7 @@ export default function PartnerOnboarding({ slug }: Props) {
               onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
               onMouseOut={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
             >
-              Ir para o site da BRS
+              {closingButtonLabel}
             </a>
           </div>
         </div>

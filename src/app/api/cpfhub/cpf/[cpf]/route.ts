@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 type CacheEntry = { expiresAt: number; status: number; body: unknown }
 
 const CACHE_TTL_SUCCESS_MS = 1000 * 60 * 60 * 24 // 24h
-const CACHE_TTL_ERROR_MS = 1000 * 60 * 5 // 5min (evita gastar crÃ©dito em retries)
+const CACHE_TTL_ERROR_MS = 1000 * 60 * 5 // 5min (evita gastar crédito em retries)
 const MAX_CACHE_ENTRIES = 2000
 
 function getCache(): Map<string, CacheEntry> {

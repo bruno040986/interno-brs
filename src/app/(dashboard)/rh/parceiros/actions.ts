@@ -521,9 +521,35 @@ export async function getTemplates() {
 
     if (eErr) throw eErr
 
+    const normalizeTemplatePlaceholders = (body: string, placeholders: any): any[] => {
+      const extractedTokens = Array.from(new Set(String(body || '').match(/\{\{[^}]+\}\}/g) || []))
+      const current = Array.isArray(placeholders) ? placeholders : []
+      const byToken = new Map<string, any>()
+      for (const item of current) {
+        const token = String(item?.token || '').trim()
+        if (!token) continue
+        byToken.set(token, item)
+      }
+      return extractedTokens.map((token) => {
+        const existing = byToken.get(token)
+        const fallbackId = token.replace(/[{}]/g, '').replace(/[^a-zA-Z0-9_-]/g, '_')
+        return {
+          id: String(existing?.id || fallbackId || `ph_${Math.random().toString(36).slice(2, 8)}`),
+          token,
+          label: String(existing?.label || token),
+          required: !!existing?.required,
+        }
+      })
+    }
+
+    const normalizedContracts = (contracts || []).map((contract: any) => ({
+      ...contract,
+      placeholders: normalizeTemplatePlaceholders(contract?.body || '', contract?.placeholders),
+    }))
+
     return {
       success: true,
-      contracts: contracts || [],
+      contracts: normalizedContracts,
       emails: emails || []
     }
   } catch (error: any) {
@@ -536,25 +562,798 @@ export async function saveContractTemplate(templateData: {
   id?: string
   name: string
   body: string
+  placeholders?: Array<{ id: string; token: string; label: string; required?: boolean }>
 }) {
   try {
+    const normalizedPlaceholders = (templateData.placeholders || [])
+      .filter((p) => p?.token)
+      .map((p) => ({
+        id: String(p.id || p.token),
+        token: String(p.token),
+        label: String(p.label || p.token),
+        required: !!p.required,
+      }))
+
     if (templateData.id) {
-      const { error } = await supabaseAdmin
+      let { error } = await supabaseAdmin
         .from('contract_templates')
-        .update({ name: templateData.name, body: templateData.body })
+        .update({ name: templateData.name, body: templateData.body, placeholders: normalizedPlaceholders })
         .eq('id', templateData.id)
+      if (error && String(error.message || '').includes("Could not find the 'placeholders'")) {
+        const retry = await supabaseAdmin
+          .from('contract_templates')
+          .update({ name: templateData.name, body: templateData.body })
+          .eq('id', templateData.id)
+        error = retry.error
+      }
       if (error) throw error
     } else {
-      const { error } = await supabaseAdmin
+      let { error } = await supabaseAdmin
         .from('contract_templates')
-        .insert({ name: templateData.name, body: templateData.body })
+        .insert({ name: templateData.name, body: templateData.body, placeholders: normalizedPlaceholders })
+      if (error && String(error.message || '').includes("Could not find the 'placeholders'")) {
+        const retry = await supabaseAdmin
+          .from('contract_templates')
+          .insert({ name: templateData.name, body: templateData.body })
+        error = retry.error
+      }
       if (error) throw error
     }
 
     revalidatePath('/rh/parceiros/config/templates')
+    revalidatePath('/rh/parceiros/config/documentos')
     return { success: true }
   } catch (error: any) {
     console.error('Erro ao salvar template de contrato:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getContractTemplates() {
+  try {
+    const res = await getTemplates()
+    if (!res.success) return { success: false, error: res.error || 'Erro ao carregar modelos de documentos.' }
+    return { success: true, templates: res.contracts || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
+// =========================================================================
+// 6. Cadastro da Empresa (multi-CNPJ)
+// =========================================================================
+
+type CompanyProfileRow = {
+  id?: string
+  nickname: string
+  is_active: boolean
+  cnpj?: string | null
+  company_data?: any
+  partner_primary_data?: any
+  partner_secondary_data?: any
+  witness_data?: any
+  created_at?: string
+  updated_at?: string
+}
+
+function sanitizeDigits(value: any) {
+  return String(value || '').replace(/\D/g, '')
+}
+
+export async function getCompanyProfiles() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('company_profiles')
+      .select('*')
+      .order('nickname', { ascending: true })
+    if (error) throw error
+    return { success: true, companies: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar cadastro de empresas:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveCompanyProfile(payload: CompanyProfileRow) {
+  try {
+    const row: any = {
+      nickname: String(payload.nickname || '').trim(),
+      is_active: payload.is_active !== false,
+      cnpj: sanitizeDigits(payload.cnpj || '') || null,
+      company_data: payload.company_data ?? {},
+      partner_primary_data: payload.partner_primary_data ?? {},
+      partner_secondary_data: payload.partner_secondary_data ?? {},
+      witness_data: payload.witness_data ?? {},
+      updated_at: new Date().toISOString(),
+    }
+
+    if (!row.nickname) {
+      return { success: false, error: 'Apelido é obrigatório.' }
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('company_profiles')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('company_profiles')
+        .insert(row)
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/empresas')
+    revalidatePath('/rh/parceiros/config/provedores/empresas')
+    revalidatePath('/rh/parceiros/config/processos')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar cadastro de empresa:', error)
+    if (String(error?.message || '').includes("Could not find the 'company_profiles'")) {
+      return {
+        success: false,
+        error:
+          "A tabela 'company_profiles' ainda não existe. Aplique as migrations do Supabase (supabase/migrations/20260526020000_create_company_profiles.sql).",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe uma empresa cadastrada com este CNPJ.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function archiveCompanyProfile(id: string) {
+  try {
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('company_profiles')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) throw error
+    revalidatePath('/rh/parceiros/config/empresas')
+    revalidatePath('/rh/parceiros/config/provedores/empresas')
+    revalidatePath('/rh/parceiros/config/processos')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao arquivar empresa:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function deleteCompanyProfile(id: string) {
+  try {
+    if (!id) return { success: false, error: 'ID inválido.' }
+    let { data: linked, error: lErr } = await supabaseAdmin
+      .from('process_models')
+      .select('id')
+      .eq('company_profile_id', id)
+      .limit(1)
+      .maybeSingle()
+    if (lErr && String(lErr.message || '').includes("Could not find the 'company_profile_id'")) {
+      linked = null
+      lErr = null as any
+    }
+    if (lErr) throw lErr
+    if (linked) {
+      return { success: false, error: 'Empresa vinculada a processo. Arquive em vez de excluir.' }
+    }
+
+    const { error } = await supabaseAdmin.from('company_profiles').delete().eq('id', id)
+    if (error) throw error
+    revalidatePath('/rh/parceiros/config/empresas')
+    revalidatePath('/rh/parceiros/config/provedores/empresas')
+    revalidatePath('/rh/parceiros/config/processos')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao excluir empresa:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// =========================================================================
+// 7. Construtor de Processos (Workflow / Kanban por tipo de processo)
+// =========================================================================
+
+type ProcessModelRow = {
+  id: string
+  name: string
+  type: string
+  is_active: boolean
+  is_public: boolean
+  public_slug?: string | null
+  form_id?: string | null
+  company_profile_id?: string | null
+  entry_config?: any
+  config?: any
+  created_at?: string
+  updated_at?: string
+}
+
+type StageModelRow = {
+  id: string
+  process_id: string
+  name: string
+  position: number
+  color?: string | null
+  bg?: string | null
+  config?: any
+}
+
+function normalizeSlug(input: string): string {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+export async function getProcessModels() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('process_models')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    return { success: true, processes: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar processos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getProcessStages(processId: string) {
+  try {
+    if (!processId) return { success: true, stages: [] }
+    const { data, error } = await supabaseAdmin
+      .from('process_stage_models')
+      .select('*')
+      .eq('process_id', processId)
+      .order('position', { ascending: true })
+    if (error) throw error
+    return { success: true, stages: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar etapas do processo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function isProcessSlugAvailable(slug: string, excludeId?: string) {
+  try {
+    const normalized = normalizeSlug(slug)
+    if (!normalized) return { success: true, available: false, normalized }
+
+    let q = supabaseAdmin
+      .from('process_models')
+      .select('id')
+      .eq('public_slug', normalized)
+      .limit(1)
+
+    if (excludeId) q = q.neq('id', excludeId)
+
+    const { data, error } = await q.maybeSingle()
+    if (error) throw error
+
+    return { success: true, available: !data, normalized }
+  } catch (error: any) {
+    return { success: false, error: error.message, available: false }
+  }
+}
+
+export async function saveProcessModel(payload: {
+  id?: string
+  name: string
+  type: string
+  is_active: boolean
+  is_public: boolean
+  public_slug?: string | null
+  form_id?: string | null
+  company_profile_id?: string | null
+  entry_config?: any
+  config?: any
+  stages?: Array<Partial<StageModelRow> & { id?: string }>
+}) {
+  try {
+    const modelData: any = {
+      name: payload.name,
+      type: payload.type || 'generic',
+      is_active: !!payload.is_active,
+      is_public: !!payload.is_public,
+      public_slug: payload.is_public ? (payload.public_slug ? normalizeSlug(payload.public_slug) : null) : null,
+      form_id: payload.form_id || null,
+      company_profile_id: payload.company_profile_id || null,
+      entry_config: payload.entry_config ?? {},
+      config: payload.config ?? {},
+      updated_at: new Date().toISOString(),
+    }
+
+    let processId = payload.id
+
+    if (payload.id) {
+      let { data, error } = await supabaseAdmin
+        .from('process_models')
+        .update(modelData)
+        .eq('id', payload.id)
+        .select('id')
+        .maybeSingle()
+      if (error && String(error.message || '').includes("Could not find the 'company_profile_id'")) {
+        const fallbackData = { ...modelData }
+        delete fallbackData.company_profile_id
+        const retry = await supabaseAdmin
+          .from('process_models')
+          .update(fallbackData)
+          .eq('id', payload.id)
+          .select('id')
+          .maybeSingle()
+        data = retry.data as any
+        error = retry.error as any
+      }
+      if (error) throw error
+      processId = data?.id || payload.id
+    } else {
+      let { data, error } = await supabaseAdmin
+        .from('process_models')
+        .insert(modelData)
+        .select('id')
+        .maybeSingle()
+      if (error && String(error.message || '').includes("Could not find the 'company_profile_id'")) {
+        const fallbackData = { ...modelData }
+        delete fallbackData.company_profile_id
+        const retry = await supabaseAdmin
+          .from('process_models')
+          .insert(fallbackData)
+          .select('id')
+          .maybeSingle()
+        data = retry.data as any
+        error = retry.error as any
+      }
+      if (error) throw error
+      processId = data?.id
+    }
+
+    // Upsert stages (simple: delete missing + upsert provided)
+    if (processId && Array.isArray(payload.stages)) {
+      const { data: existing, error: sErr } = await supabaseAdmin
+        .from('process_stage_models')
+        .select('id')
+        .eq('process_id', processId)
+      if (sErr) throw sErr
+
+      const existingIds = new Set((existing || []).map((r: any) => String(r.id)))
+      const incomingIds = new Set(payload.stages.map(s => String(s.id || '')).filter(Boolean))
+
+      const toDelete = [...existingIds].filter(id => !incomingIds.has(id))
+      if (toDelete.length) {
+        const { error: dErr } = await supabaseAdmin
+          .from('process_stage_models')
+          .delete()
+          .in('id', toDelete)
+        if (dErr) throw dErr
+      }
+
+      for (let i = 0; i < payload.stages.length; i++) {
+        const st = payload.stages[i]
+        const row: any = {
+          process_id: processId,
+          name: String(st.name || '').trim() || `Etapa ${i + 1}`,
+          position: typeof st.position === 'number' ? st.position : i,
+          color: st.color ?? null,
+          bg: st.bg ?? null,
+          config: st.config ?? {},
+          updated_at: new Date().toISOString(),
+        }
+        if (st.id) {
+          const { error } = await supabaseAdmin.from('process_stage_models').update(row).eq('id', st.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabaseAdmin.from('process_stage_models').insert(row)
+          if (error) throw error
+        }
+      }
+    }
+
+    revalidatePath('/rh/parceiros/config/processos')
+    return { success: true, id: processId }
+  } catch (error: any) {
+    console.error('Erro ao salvar processo:', error)
+    if (String(error?.message || '').includes("Could not find the 'process_models'")) {
+      return {
+        success: false,
+        error:
+          "As tabelas de processos ainda não existem no banco. Aplique as migrations do Supabase (supabase/migrations/20260525000000_create_process_tables.sql) e recarregue o schema cache da API.",
+      }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function deleteProcessModel(id: string) {
+  try {
+    if (!id) return { success: false, error: 'ID inválido' }
+    const { error } = await supabaseAdmin.from('process_models').delete().eq('id', id)
+    if (error) throw error
+    revalidatePath('/rh/parceiros/config/processos')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao excluir processo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function archiveProcessModel(id: string) {
+  try {
+    if (!id) return { success: false, error: 'ID inválido' }
+    const { error } = await supabaseAdmin
+      .from('process_models')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) throw error
+    revalidatePath('/rh/parceiros/config/processos')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao arquivar processo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function duplicateProcessModel(id: string) {
+  try {
+    if (!id) return { success: false, error: 'ID inválido' }
+
+    const { data: current, error: cErr } = await supabaseAdmin
+      .from('process_models')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+    if (cErr) throw cErr
+    if (!current) return { success: false, error: 'Processo não encontrado' }
+
+    const baseSlug = normalizeSlug(String(current.public_slug || current.name || 'processo'))
+    let nextSlug = baseSlug ? `${baseSlug}-copia` : null
+    if (nextSlug) {
+      let tries = 2
+      while (tries < 50) {
+        const { data: exists } = await supabaseAdmin
+          .from('process_models')
+          .select('id')
+          .eq('public_slug', nextSlug)
+          .limit(1)
+          .maybeSingle()
+        if (!exists) break
+        nextSlug = `${baseSlug}-copia-${tries}`
+        tries++
+      }
+    }
+
+    const { data: inserted, error: iErr } = await supabaseAdmin
+      .from('process_models')
+      .insert({
+        name: `${current.name} (Copia)`,
+        type: current.type || 'generic',
+        is_active: false,
+        is_public: !!current.is_public,
+        public_slug: current.is_public ? nextSlug : null,
+        form_id: current.form_id || null,
+        entry_config: current.entry_config || {},
+        config: current.config || {},
+      })
+      .select('id')
+      .maybeSingle()
+    if (iErr) throw iErr
+
+    const newId = inserted?.id
+    if (!newId) return { success: false, error: 'Falha ao criar cópia do processo' }
+
+    const { data: stages, error: sErr } = await supabaseAdmin
+      .from('process_stage_models')
+      .select('*')
+      .eq('process_id', id)
+      .order('position', { ascending: true })
+    if (sErr) throw sErr
+
+    if ((stages || []).length > 0) {
+      const rows = (stages || []).map((s: any) => ({
+        process_id: newId,
+        name: s.name,
+        position: s.position,
+        color: s.color ?? null,
+        bg: s.bg ?? null,
+        config: s.config ?? {},
+      }))
+      const { error: insertStagesErr } = await supabaseAdmin
+        .from('process_stage_models')
+        .insert(rows)
+      if (insertStagesErr) throw insertStagesErr
+    }
+
+    revalidatePath('/rh/parceiros/config/processos')
+    return { success: true, id: newId }
+  } catch (error: any) {
+    console.error('Erro ao duplicar processo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function validateProcessModel(id: string) {
+  try {
+    if (!id) return { success: false, error: 'ID inválido', blocking: [], warnings: [] }
+
+    const { data: process, error: pErr } = await supabaseAdmin
+      .from('process_models')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+    if (pErr) throw pErr
+    if (!process) return { success: false, error: 'Processo não encontrado', blocking: [], warnings: [] }
+
+    const { data: stages, error: sErr } = await supabaseAdmin
+      .from('process_stage_models')
+      .select('*')
+      .eq('process_id', id)
+      .order('position', { ascending: true })
+    if (sErr) throw sErr
+
+    const blocking: string[] = []
+    const warnings: string[] = []
+    const stageList = stages || []
+
+    if (stageList.length === 0) blocking.push('Nenhuma etapa cadastrada no processo.')
+
+    for (const stage of stageList) {
+      const transitions = Array.isArray(stage?.config?.transitions) ? stage.config.transitions : []
+      const isTerminal = !!stage?.config?.is_terminal
+      if (!isTerminal && transitions.length === 0) {
+        blocking.push(`Etapa "${stage.name}" sem transição de saída.`)
+      }
+    }
+
+    const cfg = process.config || {}
+    const docs = Array.isArray(cfg?.documents) ? cfg.documents : []
+    const mails = Array.isArray(cfg?.emails) ? cfg.emails : []
+    const whats = Array.isArray(cfg?.whatsapp) ? cfg.whatsapp : []
+    const processFields = Array.isArray(cfg?.process_fields) ? cfg.process_fields : []
+    const SIGNATURE_LINK_TRIGGER = 'signature_link_ready'
+
+    const { data: contractTemplates } = await supabaseAdmin
+      .from('contract_templates')
+      .select('id, name, placeholders')
+
+    const templateById = new Map<string, any>()
+    const templateByName = new Map<string, any>()
+    for (const template of contractTemplates || []) {
+      if (template?.id) templateById.set(String(template.id), template)
+      if (template?.name) templateByName.set(String(template.name).toLowerCase(), template)
+    }
+
+    const hasSignatureAction =
+      docs.some((d: any) => d?.enabled !== false) ||
+      stageList.some((s: any) => {
+        const actions = Array.isArray(s?.config?.actions) ? s.config.actions : []
+        return actions.some((a: any) => String(a?.type || '').toLowerCase() === 'signature')
+      })
+
+    const checkTemplates = (items: any[], kind: string) => {
+      for (const item of items) {
+        const body = String(item?.body || item?.template_body || '')
+        if (body.includes('{{assinatura.link}}') && !hasSignatureAction) {
+          blocking.push(`${kind} "${item?.name || 'sem nome'}" usa {{assinatura.link}} sem ação de assinatura.`)
+        }
+        const recipientSource = String(item?.recipient_source || '')
+        const recipientField = String(item?.recipient_field || '')
+        if (recipientSource === 'tag' && !recipientField) {
+          blocking.push(`${kind} "${item?.name || 'sem nome'}" possui destinatário por tag sem mapeamento.`)
+        }
+      }
+    }
+
+    const requireSignatureTriggerConfig = (items: any[], kind: string) => {
+      for (const item of items) {
+        if (String(item?.trigger || '') !== SIGNATURE_LINK_TRIGGER) continue
+        if (!String(item?.signature_document_ref || '').trim()) {
+          blocking.push(`${kind} "${item?.name || 'sem nome'}" precisa de documento vinculado para gatilho de link.`)
+        }
+        if (!String(item?.signature_signer_role || '').trim()) {
+          blocking.push(`${kind} "${item?.name || 'sem nome'}" precisa de papel de assinante para gatilho de link.`)
+        }
+      }
+    }
+
+    checkTemplates(mails, 'E-mail')
+    checkTemplates(whats, 'WhatsApp')
+    requireSignatureTriggerConfig(mails, 'E-mail')
+    requireSignatureTriggerConfig(whats, 'WhatsApp')
+
+    for (const doc of docs) {
+      const template =
+        templateById.get(String(doc?.template_id || '')) ||
+        templateByName.get(String(doc?.template_name || '').toLowerCase())
+
+      if (!template) {
+        blocking.push(`Documento "${doc?.name || 'sem nome'}" sem modelo válido selecionado.`)
+        continue
+      }
+
+      const requiredPlaceholders = (Array.isArray(template?.placeholders) ? template.placeholders : [])
+        .filter((p: any) => !!p?.required)
+
+      const mapping = doc?.placeholder_mapping && typeof doc.placeholder_mapping === 'object' ? doc.placeholder_mapping : {}
+      for (const placeholder of requiredPlaceholders) {
+        const placeholderId = String(placeholder?.id || '')
+        if (!placeholderId) continue
+        const mapped = String(mapping?.[placeholderId] || '')
+        if (!mapped) {
+          blocking.push(`Documento "${doc?.name || 'sem nome'}" sem vínculo para placeholder obrigatório "${placeholder?.label || placeholderId}".`)
+        }
+      }
+    }
+
+    const requiredNoStage = processFields.filter((f: any) => f?.required && (!Array.isArray(f?.stages) || f.stages.length === 0))
+    if (requiredNoStage.length > 0) warnings.push('Há campos obrigatórios sem etapa definida.')
+
+    const dedupeEnabled = process.entry_config?.dedupe?.enabled !== false
+    if (!dedupeEnabled) warnings.push('Dedupe está desligado.')
+
+    const hasAnySla = stageList.some((s: any) => !!s?.config?.sla_hours || !!s?.config?.sla_days)
+    if (!hasAnySla) warnings.push('Nenhum SLA configurado nas etapas.')
+
+    return { success: true, blocking, warnings }
+  } catch (error: any) {
+    console.error('Erro ao validar processo:', error)
+    return { success: false, error: error.message, blocking: [], warnings: [] }
+  }
+}
+
+export async function getProcessCRMData(processId?: string) {
+  try {
+    const { data: processes, error: pErr } = await supabaseAdmin
+      .from('process_models')
+      .select('id, name, type, is_active, is_public, public_slug, form_id, entry_config, config')
+      .order('created_at', { ascending: false })
+    if (pErr) throw pErr
+
+    const selected = processId || (processes?.[0]?.id as string | undefined)
+    let stages: any[] = []
+    let instances: any[] = []
+
+    if (selected) {
+      const { data: st, error: sErr } = await supabaseAdmin
+        .from('process_stage_models')
+        .select('*')
+        .eq('process_id', selected)
+        .order('position', { ascending: true })
+      if (sErr) throw sErr
+      stages = st || []
+
+      const { data: inst, error: iErr } = await supabaseAdmin
+        .from('process_instances')
+        .select(`
+          *,
+          partner:partner_id ( id, name, cpf_cnpj, email_comissao, phone_whatsapp, arw_code, superintendente_id, supervisor_id, gerente_id, status, additional_data )
+        `)
+        .eq('process_id', selected)
+        .order('created_at', { ascending: false })
+      if (iErr) throw iErr
+      instances = inst || []
+    }
+
+    const { data: entities, error: eErr } = await supabaseAdmin
+      .from('commercial_entities')
+      .select('id, name, role, parent_id')
+      .eq('status', 'ativo')
+
+    if (eErr) throw eErr
+
+    return { success: true, processes: processes || [], selectedProcessId: selected, stages, instances, commercialEntities: entities || [] }
+  } catch (error: any) {
+    console.error('Erro ao obter dados do CRM por processo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function updateProcessInstance(data: {
+  id: string
+  current_stage_id?: string | null
+  status?: 'active' | 'archived' | 'completed' | 'canceled'
+}) {
+  try {
+    if (!data.id) return { success: false, error: 'ID inválido' }
+
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    }
+    if ('current_stage_id' in data) payload.current_stage_id = data.current_stage_id
+    if ('status' in data) payload.status = data.status
+
+    const { error } = await supabaseAdmin
+      .from('process_instances')
+      .update(payload)
+      .eq('id', data.id)
+
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao atualizar instância do processo:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getProcessInstanceDetail(instanceId: string) {
+  try {
+    if (!instanceId) return { success: false, error: 'ID inválido' }
+
+    const { data: instance, error: iErr } = await supabaseAdmin
+      .from('process_instances')
+      .select(`
+        *,
+        process:process_id ( id, name, type, config ),
+        partner:partner_id ( id, name, cpf_cnpj, email_comissao, phone_whatsapp, arw_code, superintendente_id, supervisor_id, gerente_id, status, additional_data )
+      `)
+      .eq('id', instanceId)
+      .maybeSingle()
+
+    if (iErr) throw iErr
+
+    const { data: snapshots, error: sErr } = await supabaseAdmin
+      .from('process_instance_form_snapshots')
+      .select('*')
+      .eq('instance_id', instanceId)
+      .order('created_at', { ascending: false })
+
+    if (sErr) throw sErr
+
+    const { data: events, error: eErr } = await supabaseAdmin
+      .from('process_instance_events')
+      .select('*')
+      .eq('instance_id', instanceId)
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (eErr) throw eErr
+
+    const { data: fields, error: fErr } = await supabaseAdmin
+      .from('process_instance_fields')
+      .select('*')
+      .eq('instance_id', instanceId)
+      .order('created_at', { ascending: true })
+    if (fErr) throw fErr
+
+    const { data: validations, error: vErr } = await supabaseAdmin
+      .from('process_instance_validations')
+      .select(`
+        *,
+        validator:validated_by ( id, name, email )
+      `)
+      .eq('instance_id', instanceId)
+      .order('validated_at', { ascending: false })
+    if (vErr) throw vErr
+
+    let stageModels: any[] = []
+    const processId = instance?.process_id
+    if (processId) {
+      const { data: stages, error: stErr } = await supabaseAdmin
+        .from('process_stage_models')
+        .select('id, name, position')
+        .eq('process_id', processId)
+        .order('position', { ascending: true })
+      if (stErr) throw stErr
+      stageModels = stages || []
+    }
+
+    return {
+      success: true,
+      instance,
+      snapshots: snapshots || [],
+      events: events || [],
+      fields: fields || [],
+      validations: validations || [],
+      stageModels,
+    }
+  } catch (error: any) {
+    console.error('Erro ao obter detalhe da instância:', error)
     return { success: false, error: error.message }
   }
 }
@@ -588,9 +1387,59 @@ export async function saveEmailTemplate(templateData: {
     }
 
     revalidatePath('/rh/parceiros/config/templates')
+    revalidatePath('/rh/parceiros/config/emails')
     return { success: true }
   } catch (error: any) {
     console.error('Erro ao salvar template de e-mail:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getWhatsappTemplates() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('whatsapp_templates')
+      .select('*')
+      .order('name')
+
+    if (error) throw error
+    return { success: true, templates: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar templates de WhatsApp:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveWhatsappTemplate(templateData: {
+  id?: string
+  name: string
+  body: string
+}) {
+  try {
+    if (templateData.id) {
+      const { error } = await supabaseAdmin
+        .from('whatsapp_templates')
+        .update({ name: templateData.name, body: templateData.body })
+        .eq('id', templateData.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('whatsapp_templates')
+        .insert({ name: templateData.name, body: templateData.body })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/whatsapp')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar template de WhatsApp:', error)
+    if (String(error?.message || '').includes("Could not find the 'whatsapp_templates'")) {
+      return {
+        success: false,
+        error:
+          "Sua tabela 'whatsapp_templates' ainda não existe. Aplique as migrations do Supabase e recarregue o schema cache da API.",
+      }
+    }
     return { success: false, error: error.message }
   }
 }

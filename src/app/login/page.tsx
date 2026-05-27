@@ -34,16 +34,17 @@ export default function LoginPage() {
       <div className="login-card">
         <div className="login-logo">
           <Image
-            src="/logotipos/BRS-GESTAO-FUNDO-CLARO.png"
-            alt="BRS Gestão"
-            width={150}
-            height={75}
+            src="/logotipos/BRS WORKSPACE FUNDO CLARO SEM FUNDO.png"
+            alt="BRS Workspace"
+            width={220}
+            height={90}
             style={{ objectFit: 'contain' }}
             priority
           />
           <div className="login-logo-title">
-            <h1>BRS Gestão — HUB</h1>
-            <p>Acesse todas as ferramentas em um só lugar</p>
+            <p style={{ color: 'var(--brs-gray-800)', fontWeight: 700 }}>
+              Acesse todas as ferramentas em um só lugar.
+            </p>
           </div>
         </div>
 
@@ -108,8 +109,10 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>
-          CNPJ 59.841.366/0001-36 — Uso interno exclusivo
+        <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--brs-gray-500)', lineHeight: 1.35 }}>
+          Uso interno exclusivo
+          <br />
+          BRS Promotora de Vendas Ltda - CNPJ 54.303.453/0001-16
         </p>
       </div>
     </div>
