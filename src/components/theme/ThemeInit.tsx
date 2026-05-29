@@ -18,9 +18,7 @@ export default function ThemeInit(props: { preference?: ThemePreference }) {
         return () => mq.removeEventListener('change', handler)
       } catch {
         // Safari fallback
-        // @ts-expect-error older API
         mq.addListener(handler)
-        // @ts-expect-error older API
         return () => mq.removeListener(handler)
       }
     }

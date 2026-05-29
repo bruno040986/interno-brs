@@ -15,13 +15,22 @@ CREATE TABLE IF NOT EXISTS praise_messages (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-ALTER TABLE praise_messages
-  ADD CONSTRAINT praise_messages_to_all_consistency
-  CHECK (
-    (to_all = true AND to_user_id IS NULL AND status = 'accepted')
-    OR
-    (to_all = false AND to_user_id IS NOT NULL)
-  );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'praise_messages_to_all_consistency'
+  ) THEN
+    ALTER TABLE praise_messages
+      ADD CONSTRAINT praise_messages_to_all_consistency
+      CHECK (
+        (to_all = true AND to_user_id IS NULL AND status = 'accepted')
+        OR
+        (to_all = false AND to_user_id IS NOT NULL)
+      );
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS praise_reactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
