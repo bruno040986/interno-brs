@@ -7,6 +7,7 @@ import {
   AlertCircle, ChevronRight, FileText
 } from 'lucide-react'
 import type { DisciplinaryReason } from '@/types'
+import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
 
 export default function MotivosPage() {
   const [reasons, setReasons] = useState<DisciplinaryReason[]>([])
@@ -14,8 +15,38 @@ export default function MotivosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingReason, setEditingReason] = useState<Partial<DisciplinaryReason> | null>(null)
   const [saving, setSaving] = useState(false)
+  const [canEdit, setCanEdit] = useState(false)
+  const [permReady, setPermReady] = useState(false)
   
   const supabase = createClient()
+
+  const loadPermission = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        setCanEdit(false)
+        setPermReady(true)
+        return
+      }
+
+      const permsRes = await getEffectivePermissions(user.id)
+      const perms = (permsRes.success ? permsRes.permissions : []) as any[]
+      const allowed =
+        perms.some((p) => p?.resource_name === 'workspace-rh' && !!p?.can_edit) ||
+        perms.some((p) => p?.resource_name === 'rh-painel' && !!p?.can_edit) ||
+        perms.some((p) => p?.resource_name === 'rh-motivos' && !!p?.can_edit)
+
+      setCanEdit(!!allowed)
+      setPermReady(true)
+    } catch (err) {
+      console.error('Erro ao carregar permissões (RH/Motivos):', err)
+      setCanEdit(false)
+      setPermReady(true)
+    }
+  }, [supabase])
 
   const fetchReasons = useCallback(async () => {
     setLoading(true)
@@ -31,11 +62,16 @@ export default function MotivosPage() {
   }, [supabase])
 
   useEffect(() => {
+    loadPermission()
+  }, [loadPermission])
+
+  useEffect(() => {
     fetchReasons()
   }, [fetchReasons])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
+    if (!canEdit) return
     if (!editingReason?.name) return
     
     setSaving(true)
@@ -73,7 +109,7 @@ export default function MotivosPage() {
             Padronize os motivos e textos para advertências e suspensões
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditingReason({ name: '', default_gravity: 'leve', active: true }); setIsModalOpen(true); }}>
+        <button className="btn btn-primary" disabled={!canEdit} onClick={() => { if (!canEdit) return; setEditingReason({ name: '', default_gravity: 'leve', active: true }); setIsModalOpen(true); }}>
           <Plus size={16} />
           Novo Motivo
         </button>
@@ -124,9 +160,11 @@ export default function MotivosPage() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { setEditingReason(reason); setIsModalOpen(true); }}>
-                        <Edit2 size={16} />
-                      </button>
+                      {canEdit && (
+                        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { setEditingReason(reason); setIsModalOpen(true); }}>
+                          <Edit2 size={16} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

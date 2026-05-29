@@ -2,16 +2,19 @@
 
 import { useState, useEffect } from 'react'
 import { 
-  Search, Bell, Grid, User, LogOut, Settings, 
+  Bell, Grid, User, LogOut, Settings, X,
   ShieldCheck, ExternalLink, HelpCircle, LayoutGrid,
   Megaphone, Briefcase, Banknote, Monitor, UserCircle2, Key, Users
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import type { UserProfile } from '@/types'
+import type { ThemePreference, UserProfile } from '@/types'
 import { createClient } from '@/lib/supabase/client'
 import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import { getPraiseNotifications, getPraiseUnreadCount, markPraiseNotificationsRead } from '@/app/(dashboard)/praises/actions'
+import { setMyThemePreference } from '@/app/(dashboard)/theme/actions'
+import { applyResolvedTheme, readStoredThemePreference, resolveTheme, storeThemePreference } from '@/components/theme/theme'
 
 interface HubHeaderProps {
   user: UserProfile
@@ -21,8 +24,15 @@ export default function HubHeader({ user }: HubHeaderProps) {
   const router = useRouter()
   const [showApps, setShowApps] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
   const [permissions, setPermissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+
+  const [praiseUnread, setPraiseUnread] = useState<number>(0)
+  const [loadingNotifs, setLoadingNotifs] = useState(false)
+  const [notifItems, setNotifItems] = useState<any[]>([])
+  const [toast, setToast] = useState<{ id: string; text: string } | null>(null)
+  const [themePref, setThemePref] = useState<ThemePreference>('light')
 
   useEffect(() => {
     async function loadPerms() {
@@ -41,8 +51,88 @@ export default function HubHeader({ user }: HubHeaderProps) {
     loadPerms()
   }, [user?.id])
 
+  useEffect(() => {
+    const stored = readStoredThemePreference()
+    const initial: ThemePreference = stored || user?.theme_preference || 'light'
+    setThemePref(initial)
+  }, [user?.theme_preference])
+
+  async function handleThemeChange(next: ThemePreference) {
+    setThemePref(next)
+    storeThemePreference(next)
+    applyResolvedTheme(resolveTheme(next))
+    const res = await setMyThemePreference(next)
+    if (!res?.success) {
+      console.warn('Não foi possível salvar preferência de tema:', res?.error)
+    }
+  }
+
+  async function refreshPraiseBadge() {
+    if (!user?.id) return
+    const res = await getPraiseUnreadCount()
+    if (res.success) setPraiseUnread(res.count || 0)
+  }
+
+  async function loadNotifications() {
+    setLoadingNotifs(true)
+    const res = await getPraiseNotifications({ limit: 10 })
+    if (res.success) setNotifItems((res.notifications || []) as any)
+    setLoadingNotifs(false)
+  }
+
+  useEffect(() => {
+    refreshPraiseBadge()
+    const handler = () => refreshPraiseBadge()
+    window.addEventListener('praise:refresh', handler)
+    const interval = window.setInterval(() => refreshPraiseBadge(), 30000)
+    const onFocus = () => refreshPraiseBadge()
+    window.addEventListener('focus', onFocus)
+    return () => {
+      window.removeEventListener('praise:refresh', handler)
+      window.removeEventListener('focus', onFocus)
+      window.clearInterval(interval)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!user?.id) return
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`praise-notifs-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'praise_notifications', filter: `user_id=eq.${user.id}` },
+        async (payload) => {
+          const newId = String((payload as any)?.new?.id || '')
+          await refreshPraiseBadge()
+
+          const listRes = await getPraiseNotifications({ limit: 10 })
+          if (listRes.success) {
+            const list = (listRes.notifications || []) as any[]
+            setNotifItems(list)
+            const current = list.find((n) => String(n.id) === newId) || list[0] || null
+            const type = String(current?.type || (payload as any)?.new?.type || '')
+            if (type === 'praise_reaction') {
+              const actorName = String(current?.from_user?.name || 'Alguém')
+              setToast({ id: newId || `t_${Date.now()}`, text: `${actorName} reagiu ao seu elogio!` })
+            } else if (type === 'praise_received') {
+              setToast({ id: newId || `t_${Date.now()}`, text: 'Você recebeu um elogio!' })
+            }
+          }
+
+          window.setTimeout(() => setToast((prev) => (prev?.id === (newId || prev?.id || '') ? null : prev)), 4500)
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
+
   const hasPermission = (resourceId: string): boolean => {
-    if (loading) return true
+    if (loading) return false
     const perm = permissions.find(p => p.resource_name === resourceId)
     return perm ? !!perm.can_view : false
   }
@@ -104,17 +194,130 @@ export default function HubHeader({ user }: HubHeaderProps) {
       </div>
 
       <div className="hub-header-center">
-        <div className="search-bar-hub">
-          <Search size={18} />
-          <input type="text" placeholder="Buscar na intranet..." />
+        <div className="bia-bar-hub" title="Em breve a BIA vai estar aqui para te ajudar...">
+          <Image className="bia-bar-hub-icon" src="/bia.png" alt="BIA" width={42} height={42} priority />
+          <div className="bia-bar-hub-box">
+            <span className="bia-bar-hub-label">Em breve a BIA vai estar aqui para te ajudar...</span>
+          </div>
         </div>
       </div>
 
       <div className="hub-header-right">
-        <button className="icon-button">
+        {toast && (
+          <div
+            style={{
+              position: 'fixed',
+              right: 18,
+              bottom: 18,
+              zIndex: 2000,
+              background: 'var(--brs-surface)',
+              border: '1px solid var(--brs-gray-100)',
+              boxShadow: '0 10px 35px rgba(0,0,0,0.18)',
+              borderRadius: 16,
+              padding: '0.85rem 1rem',
+              minWidth: 260,
+              maxWidth: 360,
+              fontWeight: 800,
+              color: 'var(--brs-gray-800)',
+              cursor: 'pointer',
+            }}
+            onClick={() => {
+              setShowNotifications(true)
+              loadNotifications()
+            }}
+            title="Abrir notificações"
+          >
+            {toast.text}
+          </div>
+        )}
+        <div style={{ position: 'relative' }}>
+        <button
+          className="icon-button"
+          onClick={async () => {
+            const next = !showNotifications
+            setShowNotifications(next)
+            if (next) {
+              await Promise.all([refreshPraiseBadge(), loadNotifications()])
+            }
+          }}
+        >
           <Bell size={20} />
-          <span className="notification-badge" />
+          {praiseUnread > 0 && <span className="notification-badge">{Math.min(99, praiseUnread)}</span>}
         </button>
+
+        {showNotifications && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50px',
+              right: 0,
+              zIndex: 1000,
+              width: '320px',
+              background: '#fff',
+              borderRadius: '16px',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+              border: '1px solid var(--brs-gray-100)',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ padding: '0.9rem 1rem', fontWeight: 900, color: 'var(--brs-gray-800)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              Notificações
+              <button className="icon-button" style={{ width: 30, height: 30 }} onClick={() => setShowNotifications(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div style={{ borderTop: '1px solid var(--brs-gray-50)' }} />
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+              {loadingNotifs ? (
+                <div style={{ padding: '1rem', color: 'var(--brs-gray-400)', fontSize: '0.8125rem', textAlign: 'center' }}>Carregando…</div>
+              ) : notifItems.length === 0 ? (
+                <div style={{ padding: '1rem', color: 'var(--brs-gray-400)', fontSize: '0.8125rem', textAlign: 'center' }}>Nenhuma notificação.</div>
+              ) : (
+                notifItems.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={async () => {
+                      await markPraiseNotificationsRead({ praise_id: n.praise_id })
+                      window.dispatchEvent(new Event('praise:refresh'))
+                      setShowNotifications(false)
+                      const type = String(n.type || 'praise_received')
+                      if (type === 'praise_reaction') {
+                        router.push(`/?praiseTab=feed&praiseId=${encodeURIComponent(String(n.praise_id))}`)
+                      } else {
+                        router.push('/?praiseTab=received')
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '0.85rem 1rem',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      display: 'grid',
+                      gap: '0.25rem',
+                    }}
+                  >
+                    {String(n.type || 'praise_received') === 'praise_reaction' ? (
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brs-gray-800)' }}>
+                        {`${String(n?.from_user?.name || 'Alguém')} reagiu ao seu elogio ${
+                          String(n?.praise?.from_user_id || '') === String(user?.id || '') ? 'enviado' : 'recebido'
+                        }!`}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brs-gray-800)' }}>Você recebeu um elogio!</div>
+                    )}
+                    <div style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>
+                      {new Date(String(n.created_at || '')).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+        </div>
 
         <div style={{ position: 'relative' }}>
           <button 
@@ -132,7 +335,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
                 right: '0', 
                 zIndex: 1000,
                 width: '320px',
-                background: '#fff',
+                background: 'var(--brs-surface)',
                 borderRadius: '16px',
                 boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
                 border: '1px solid var(--brs-gray-100)',
@@ -220,7 +423,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
                 top: '55px', 
                 right: '0', 
                 width: '320px',
-                background: '#fff',
+                background: 'var(--brs-surface)',
                 borderRadius: '28px',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
                 padding: '1.5rem',
@@ -248,6 +451,21 @@ export default function HubHeader({ user }: HubHeaderProps) {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ textAlign: 'left', marginBottom: '0.75rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--brs-gray-400)', marginBottom: '0.35rem' }}>
+                    Tema
+                  </div>
+                  <select
+                    className="form-control"
+                    value={themePref}
+                    onChange={(e) => handleThemeChange(e.target.value as ThemePreference)}
+                    style={{ width: '100%', borderRadius: '999px' }}
+                  >
+                    <option value="light">Claro</option>
+                    <option value="dark">Escuro</option>
+                    <option value="system">Navegador (Sistema)</option>
+                  </select>
+                </div>
                 {hasPermission('sistema-usuarios-root') && (
                   <Link 
                     href="/usuarios" 

@@ -1,5 +1,7 @@
 export type UserRole = 'admin' | 'rh' | 'gestor' | 'consulta'
 
+export type ThemePreference = 'light' | 'dark' | 'system'
+
 export interface UserProfile {
   id: string
   name: string
@@ -14,6 +16,7 @@ export interface UserProfile {
   temp_password_reset_required?: boolean
   last_login?: string
   session_timeout?: number
+  theme_preference?: ThemePreference
   created_at: string
   updated_at: string
   access_profiles?: AccessProfile

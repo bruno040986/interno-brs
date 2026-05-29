@@ -72,7 +72,7 @@ export default function Sidebar() {
   }, [])
 
   const hasPermission = (resourceId: string): boolean => {
-    if (permissionsError) return true
+    if (permissionsError) return false
     if (loading) return false
     const perm = permissions.find((p) => p.resource_name === resourceId)
     return perm ? !!perm.can_view : false
@@ -173,14 +173,14 @@ export default function Sidebar() {
     if (item.href === '/rh/parceiros/config/emails') return canViewAny(['scp-emails', 'scp'])
     if (item.href === '/rh/parceiros/config/whatsapp') return canViewAny(['scp-whatsapp', 'scp'])
 
-    if (item.href === '/rh/colaboradores') return canViewAny(['rh-colaboradores', 'rh-painel', 'workspace-rh'])
-    if (item.href === '/rh/importacoes') return canViewAny(['rh-importacoes', 'rh-painel', 'workspace-rh'])
-    if (item.href === '/rh/vale-transporte') return canViewAny(['rh-vale-transporte', 'rh-painel', 'workspace-rh'])
-    if (item.href === '/rh/medidas-disciplinares') return canViewAny(['rh-medidas-disciplinares', 'rh-painel', 'workspace-rh'])
-    if (item.href === '/rh/motivos') return canViewAny(['rh-motivos', 'rh-painel', 'workspace-rh'])
-    if (item.href === '/rh/unidades') return canViewAny(['rh-unidades', 'rh-painel', 'workspace-rh'])
-    if (item.href === '/rh/relatorios') return canViewAny(['rh-relatorios', 'rh-painel', 'workspace-rh'])
-    if (item.href === '/rh/auditoria') return canViewAny(['rh-auditoria', 'rh-painel', 'workspace-rh'])
+    if (item.href === '/rh/colaboradores') return canViewAny(['rh-colaboradores', 'workspace-rh'])
+    if (item.href === '/rh/importacoes') return canViewAny(['rh-importacoes', 'workspace-rh'])
+    if (item.href === '/rh/vale-transporte') return canViewAny(['rh-vale-transporte', 'workspace-rh'])
+    if (item.href === '/rh/medidas-disciplinares') return canViewAny(['rh-medidas-disciplinares', 'workspace-rh'])
+    if (item.href === '/rh/motivos') return canViewAny(['rh-motivos', 'workspace-rh'])
+    if (item.href === '/rh/unidades') return canViewAny(['rh-unidades', 'workspace-rh'])
+    if (item.href === '/rh/relatorios') return canViewAny(['rh-relatorios', 'workspace-rh'])
+    if (item.href === '/rh/auditoria') return canViewAny(['rh-auditoria', 'workspace-rh'])
 
     return true
   })

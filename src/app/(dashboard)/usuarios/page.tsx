@@ -71,6 +71,7 @@ const SYSTEM_MODULES = [
   { id: 'sistema-config-crm', name: 'API CRM', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-config-empresa', name: 'Cadastro da Empresa', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-comunicados', name: 'Comunicados', parentId: 'cat-sistema', level: 1 },
+  { id: 'sistema-mural-elogios', name: 'Mural de Elogios', parentId: 'cat-sistema', level: 1 },
   { id: 'sistema-links', name: 'Links', parentId: 'cat-sistema', level: 1 },
   { id: 'sistema-ajuda', name: 'Ajuda', parentId: 'cat-sistema', level: 1 },
 ]
@@ -103,7 +104,7 @@ export default function UsuariosPage() {
     name: '',
     permissions: SYSTEM_MODULES.map(m => ({
       resource_name: m.id,
-      can_view: false,
+      can_view: m.id === 'sistema-mural-elogios',
       can_include: false,
       can_edit: false,
       can_delete: false,

@@ -12,6 +12,7 @@ import {
 import { getLinksBySector } from './links/actions'
 import { createClient } from '@/lib/supabase/client'
 import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import PraiseBoard from './_components/PraiseBoard'
 
 export default function HubPage() {
   const searchParams = useSearchParams()
@@ -27,9 +28,20 @@ export default function HubPage() {
 
   const [permissions, setPermissions] = useState<any[]>([])
   const [loadingPerms, setLoadingPerms] = useState(true)
+  const [bannerSrc, setBannerSrc] = useState<string>('/banners/banner-inicial-9mm.png')
+
+  const praiseTabParam = searchParams.get('praiseTab')
+  const initialPraiseTab =
+    praiseTabParam === 'send' || praiseTabParam === 'received' || praiseTabParam === 'feed'
+      ? (praiseTabParam as 'feed' | 'send' | 'received')
+      : undefined
+  const focusPraiseId = searchParams.get('praiseId') || undefined
 
   useEffect(() => {
     // 1. Saudação dinâmica baseada na hora
+    // Evita cache agressivo do browser quando o arquivo é substituído mantendo o mesmo nome.
+    setBannerSrc(`/banners/banner-inicial-9mm.png?v=${Date.now()}`)
+
     const hour = new Date().getHours()
     if (hour >= 5 && hour < 12) {
       setGreeting('Bom dia')
@@ -182,8 +194,8 @@ export default function HubPage() {
       icon: UserCircle2, 
       color: 'adm',
       links: [
-        { label: 'Documentos da Empresa', href: '#', disabled: true },
-        { label: 'Documentos do Sócio', href: '#', disabled: true },
+        { label: 'Documentos da Empresa', href: 'https://drive.google.com/drive/folders/1VLre1sfTrywcZUwt1Q1_zdeXVyMFjhKu?usp=sharing', external: true },
+        { label: 'Documentos do Sócio', href: 'https://drive.google.com/drive/folders/1PSvm8lQABhusuOuMSgB0SHM3U-iUcl5Y?usp=sharing', external: true },
         { label: 'Correios', href: 'https://empresas.correios.com.br/#/login', external: true },
       ]
     },
@@ -197,6 +209,9 @@ export default function HubPage() {
         { label: 'BluePay', href: 'https://app.bluepaysolutions.com.br/auth/users/sign_in?_gl=1*3n59ks*_gcl_au*MTQyNTExODg5Ny4xNzQxNjE0Nzky*_ga*Mzc0NjY5NTMzLjE3NDE2MTQ3OTE.*_ga_3GXPGWJ0SL*czE3NDc2NTY1NjckbzMkZzEkdDE3NDc2NTgzMzAkajAkbDAkaDA&utm_source=site&utm_medium=menu&utm_campaign=inb', external: true },
         { label: 'Portal Nacional da NFSe', href: 'https://www.nfse.gov.br/EmissorNacional/Login?ReturnUrl=%2fEmissorNacional', external: true },
         { label: 'Reembolsos', href: '#', disabled: true },
+        { label: 'Planilhas de Conversão de Dados', href: 'https://drive.google.com/drive/folders/1fbp8SneQfQ4wjE0gsBFPpF2n1Gf4BcEU?usp=sharing', external: true },
+        { label: 'Conciliação Diária de Recebimentos', href: '#', disabled: true },
+        { label: 'Manual de Rotinas Financeiras', href: '#', disabled: true },
         { label: 'Portho Contabilidade', href: 'https://vip.acessorias.com/porthocontabil', external: true },
       ]
     },
@@ -209,6 +224,7 @@ export default function HubPage() {
         { label: 'Painel de Controle RH', href: '/rh' },
         { label: 'QuarkRH Gestão', href: 'https://rh-colaborador.quark.tec.br/', external: true },
         { label: 'QuarkRH Portal do Colaborador', href: 'https://rh-colaborador.quark.tec.br/', external: true },
+        { label: 'Canal de Denúncias Anônimas', href: 'https://rh-colaborador.quark.tec.br/app/colaborador/denuncia/cadastrar', external: true },
         { label: 'Regimento Interno', href: 'https://drive.google.com/drive/folders/1cbLHQJdTUMOQkPS91YTXP4Ul_KL_Ib4H?usp=sharing', external: true },
         { label: 'Quadro de Cargos e Salários', href: 'https://docs.google.com/spreadsheets/d/1NzUXmVycP4jZ6-IVlNe839nzODsy5vJ7/edit?usp=sharing&ouid=102020987086611987742&rtpof=true&sd=true', external: true },
         { label: 'Portho Contabilidade', href: 'https://vip.acessorias.com/porthocontabil', external: true },
@@ -223,6 +239,9 @@ export default function HubPage() {
         { label: 'Sistema de Cadastro de Parceiros (SCP)', href: '/rh/parceiros' },
         { label: 'Links de Bancos', href: '#', disabled: true },
         { label: 'Links de Promotoras', href: '#', disabled: true },
+        { label: 'Manual de Rotinas Operacionais', href: '#', disabled: true },
+        { label: 'Propostas Digitadas Internamente', href: '#', disabled: true },
+        { label: 'Logins e Acessos Criados', href: '#', disabled: true },
         { label: 'Assinafy', href: 'https://www.assinafy.com.br/', external: true },
         { label: 'Sistema ARW', href: 'https://brspromotora.arwconsig.com.br/', external: true },
         { label: 'Nuvidio Gestão', href: 'https://empresa.nuvidio.com/login', external: true },
@@ -243,6 +262,7 @@ export default function HubPage() {
         { label: 'Instagram', href: 'https://www.instagram.com/brspromotora', external: true },
         { label: 'Facebook', href: 'https://www.facebook.com/brspromotora', external: true },
         { label: 'Solicitar Arte', href: '#', disabled: true },
+        { label: 'Sugerir Conteúdo', href: '#', disabled: true },
       ]
     },
     { 
@@ -252,11 +272,15 @@ export default function HubPage() {
       color: 'com',
       links: [
         { label: 'Estrutura Comercial', href: '/rh/parceiros/config/comercial' },
-        { label: 'Análise de Rentabilidade Gerente', href: '#', disabled: true },
-        { label: 'Análise de Rentabilidade Supervisor', href: '#', disabled: true },
-        { label: 'Análise de Rentabilidade Superintendente', href: '#', disabled: true },
-        { label: 'Mailing Higienizado Drive', href: '#', disabled: true },
-        { label: 'Mailing com Filtro', href: '#', disabled: true },
+        { label: 'Visão do Gerente', href: '#', disabled: true },
+        { label: 'Visão do Supervisor', href: '#', disabled: true },
+        { label: 'Visão do Superintendente', href: '#', disabled: true },
+        { label: 'Mailing Higienizado Drive', href: 'https://drive.google.com/drive/folders/1iIT-CtmzHwtYfeFzPFNNCTjI6YrCaYEz?usp=drive_link', external: true },
+        { label: 'Sistema de Mailing', href: '#', disabled: true },
+        { label: 'Reembolso Comercial', href: '#', disabled: true },
+        { label: 'BRS Ajuda', href: '#', disabled: true },
+        { label: 'Agentes Parceiros', href: '#', disabled: true },
+        { label: 'Negociações', href: '#', disabled: true },
         { label: 'Fechamento Mensal', href: '#', disabled: true },
       ]
     },
@@ -307,7 +331,8 @@ export default function HubPage() {
             </div>
 
             {/* Renderização 100% nativa em sandbox isolada, eliminando conflitos e perdas de nós DOM no React */}
-            <iframe 
+            <iframe
+              className="hub-weather"
               srcDoc={`<!DOCTYPE html>
 <html>
   <head>
@@ -328,13 +353,13 @@ export default function HubPage() {
             />
           </div>
 
-        <div className="hub-banner">
-          <div style={{ maxWidth: '500px' }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1rem' }}>BRS Promotora - Rumo aos R$ 9 Milhões!</h2>
-            <p style={{ opacity: 0.9, marginBottom: '1.5rem' }}>Juntos somos mais fortes. Acompanhe nossas metas e produções diárias rumo aos R$ 9 milhões de produção.</p>
-            <button className="btn btn-primary" style={{ background: '#fff', color: 'var(--brs-navy)' }}>Ver Metas</button>
-          </div>
-          {/* Aqui entraria a galeria de imagens futuramente */}
+        <div className="hub-banner" aria-label="Banner principal do Workspace">
+          <img
+            className="hub-banner-img"
+            src={bannerSrc}
+            alt="Banner principal do Workspace"
+            loading="eager"
+          />
         </div>
 
         {/* Grid de Setores ou Detalhe do Setor */}
@@ -387,20 +412,21 @@ export default function HubPage() {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                   {/* Links Fixos (Base) */}
-                  {allowedSectors.find(s => s.id === activeSector)?.links.map((link) => {
-                    if (link.disabled) {
-                      return (
-                        <div 
-                          key={link.label}
-                          className="sector-card"
-                          style={{ padding: '1.25rem', textAlign: 'center', opacity: 0.6, cursor: 'not-allowed', background: 'var(--brs-gray-50)' }}
-                        >
-                          <div style={{ fontWeight: 600, color: 'var(--brs-gray-400)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
-                            🚫 {link.label}
-                          </div>
-                        </div>
-                      )
-                    }
+                   {allowedSectors.find(s => s.id === activeSector)?.links.map((link) => {
+                     if (link.disabled) {
+                       return (
+                         <div 
+                           key={link.label}
+                           className="sector-card"
+                           title="Em Breve Será Implementado"
+                           style={{ padding: '1.25rem', textAlign: 'center', opacity: 0.6, cursor: 'not-allowed', background: 'var(--brs-gray-50)' }}
+                         >
+                           <div style={{ fontWeight: 600, color: 'var(--brs-gray-400)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                             🚫 {link.label}
+                           </div>
+                         </div>
+                       )
+                     }
                     return (
                       <a 
                         key={link.label} 
@@ -554,6 +580,8 @@ export default function HubPage() {
             </p>
           </div>
         </div>
+
+        <PraiseBoard initialTab={initialPraiseTab} focusPraiseId={focusPraiseId} />
 
       </div>
       </div>

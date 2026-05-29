@@ -11,6 +11,7 @@ import {
 import Link from 'next/link'
 import { generateVTPdf, generateDisciplinaryPdf } from '@/lib/utils/pdfGenerator'
 import type { Employee, VtRecord, DisciplinaryRecord } from '@/types'
+import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
 
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return null
@@ -28,27 +29,75 @@ export default function PerfilColaboradorPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('dados')
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [canEditOthers, setCanEditOthers] = useState(false)
+  const [forbidden, setForbidden] = useState(false)
+  const [permError, setPermError] = useState<string | null>(null)
   
   const supabase = createClient()
 
   const fetchData = useCallback(async () => {
     if (!id) return
     setLoading(true)
+    setForbidden(false)
+    setPermError(null)
+
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser()
+
+    if (userErr) {
+      console.error('Erro ao obter usuário (RH/Colaborador):', userErr)
+      setPermError('Erro ao validar usuário.')
+      setLoading(false)
+      return
+    }
+
+    if (!user) {
+      setPermError('Usuário não autenticado.')
+      setLoading(false)
+      return
+    }
+
+    const permsRes = await getEffectivePermissions(user.id)
+    if (!permsRes.success) {
+      setPermError('Erro ao carregar permissões.')
+      setLoading(false)
+      return
+    }
+
+    const perms = (permsRes.permissions || []) as any[]
+    const canEdit =
+      perms.some((p) => p?.resource_name === 'workspace-rh' && !!p?.can_edit) ||
+      perms.some((p) => p?.resource_name === 'rh-painel' && !!p?.can_edit) ||
+      perms.some((p) => p?.resource_name === 'rh-colaboradores' && !!p?.can_edit)
+
+    setCanEditOthers(!!canEdit)
+
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('employee_id, name')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const myEmployeeId = userRow?.employee_id ? String(userRow.employee_id) : null
+    setCurrentUser(userRow?.name || user.email)
+
+    if (!canEdit && myEmployeeId && String(id) !== myEmployeeId) {
+      setForbidden(true)
+      setLoading(false)
+      return
+    }
     
-    const [empRes, vtRes, discRes, userRes] = await Promise.all([
+    const [empRes, vtRes, discRes] = await Promise.all([
       supabase.from('employees').select('*').eq('id', id).single(),
       supabase.from('vt_records').select('*, unit:company_units(*), vt_routes(*)').eq('employee_id', id).order('option_date', { ascending: false }),
       supabase.from('disciplinary_records').select('*, reason:disciplinary_reasons(*)').eq('employee_id', id).order('occurrence_date', { ascending: false }),
-      supabase.auth.getUser()
     ])
     
     if (empRes.data) setEmployee(empRes.data as Employee)
     if (vtRes.data) setVtRecords(vtRes.data as VtRecord[])
     if (discRes.data) setDiscRecords(discRes.data as DisciplinaryRecord[])
-    if (userRes.data?.user) {
-      const { data: profile } = await supabase.from('users').select('name').eq('id', userRes.data.user.id).single()
-      setCurrentUser(profile?.name || userRes.data.user.email)
-    }
     
     setLoading(false)
   }, [id, supabase])
@@ -65,10 +114,46 @@ export default function PerfilColaboradorPage() {
     )
   }
 
+  if (forbidden) {
+    return (
+      <div className="page-content">
+        <div className="alert alert-error">Voce nao tem permissao para visualizar este colaborador.</div>
+        <button className="btn btn-outline" onClick={() => router.back()}>Voltar</button>
+      </div>
+    )
+  }
+
+  if (permError) {
+    return (
+      <div className="page-content">
+        <div className="alert alert-error">{permError}</div>
+        <button className="btn btn-outline" onClick={() => router.back()}>Voltar</button>
+      </div>
+    )
+  }
+
   if (!employee) {
     return (
       <div className="page-content">
         <div className="alert alert-error">Colaborador não encontrado.</div>
+        <button className="btn btn-outline" onClick={() => router.back()}>Voltar</button>
+      </div>
+    )
+  }
+
+  if (forbidden) {
+    return (
+      <div className="page-content">
+        <div className="alert alert-error">Você não tem permissão para visualizar este colaborador.</div>
+        <button className="btn btn-outline" onClick={() => router.back()}>Voltar</button>
+      </div>
+    )
+  }
+
+  if (permError) {
+    return (
+      <div className="page-content">
+        <div className="alert alert-error">{permError}</div>
         <button className="btn btn-outline" onClick={() => router.back()}>Voltar</button>
       </div>
     )
@@ -93,16 +178,18 @@ export default function PerfilColaboradorPage() {
             {employee.job_title} • {employee.department}
           </p>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem' }}>
-          <Link href={`/rh/vale-transporte/novo/${employee.id}`} className="btn btn-primary">
-            <Bus size={16} />
-            Gerar Termo VT
-          </Link>
-          <Link href={`/rh/medidas-disciplinares/nova?employee=${employee.id}`} className="btn btn-danger">
-            <AlertTriangle size={16} />
-            Aplicar Medida
-          </Link>
-        </div>
+        {canEditOthers && (
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem' }}>
+            <Link href={`/rh/vale-transporte/novo/${employee.id}`} className="btn btn-primary">
+              <Bus size={16} />
+              Gerar Termo VT
+            </Link>
+            <Link href={`/rh/medidas-disciplinares/nova?employee=${employee.id}`} className="btn btn-danger">
+              <AlertTriangle size={16} />
+              Aplicar Medida
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="tabs-list">

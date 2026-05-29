@@ -7,6 +7,7 @@ import {
   Trash2, Edit2, X, Save, Loader2 
 } from 'lucide-react'
 import type { CompanyUnit } from '@/types'
+import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
 
 export default function UnidadesPage() {
   const [units, setUnits] = useState<CompanyUnit[]>([])
@@ -14,8 +15,38 @@ export default function UnidadesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUnit, setEditingUnit] = useState<Partial<CompanyUnit> | null>(null)
   const [saving, setSaving] = useState(false)
+  const [canEdit, setCanEdit] = useState(false)
+  const [permReady, setPermReady] = useState(false)
   
   const supabase = createClient()
+
+  const loadPermission = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        setCanEdit(false)
+        setPermReady(true)
+        return
+      }
+
+      const permsRes = await getEffectivePermissions(user.id)
+      const perms = (permsRes.success ? permsRes.permissions : []) as any[]
+      const allowed =
+        perms.some((p) => p?.resource_name === 'workspace-rh' && !!p?.can_edit) ||
+        perms.some((p) => p?.resource_name === 'rh-painel' && !!p?.can_edit) ||
+        perms.some((p) => p?.resource_name === 'rh-unidades' && !!p?.can_edit)
+
+      setCanEdit(!!allowed)
+      setPermReady(true)
+    } catch (err) {
+      console.error('Erro ao carregar permissões (RH/Unidades):', err)
+      setCanEdit(false)
+      setPermReady(true)
+    }
+  }, [supabase])
 
   const fetchUnits = useCallback(async () => {
     setLoading(true)
@@ -31,11 +62,16 @@ export default function UnidadesPage() {
   }, [supabase])
 
   useEffect(() => {
+    loadPermission()
+  }, [loadPermission])
+
+  useEffect(() => {
     fetchUnits()
   }, [fetchUnits])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
+    if (!canEdit) return
     if (!editingUnit?.name) return
     
     setSaving(true)
@@ -63,16 +99,19 @@ export default function UnidadesPage() {
   }
 
   function openCreateModal() {
+    if (!canEdit) return
     setEditingUnit({ name: '', active: true })
     setIsModalOpen(true)
   }
 
   function openEditModal(unit: CompanyUnit) {
+    if (!canEdit) return
     setEditingUnit(unit)
     setIsModalOpen(true)
   }
 
   async function toggleStatus(unit: CompanyUnit) {
+    if (!canEdit) return
     const { error } = await supabase
       .from('company_units')
       .update({ active: !unit.active })
@@ -92,7 +131,7 @@ export default function UnidadesPage() {
             Gerencie os endereços das sedes e unidades para documentos
           </p>
         </div>
-        <button className="btn btn-primary" onClick={openCreateModal}>
+        <button className="btn btn-primary" onClick={openCreateModal} disabled={!canEdit}>
           <Plus size={16} />
           Nova Unidade
         </button>
@@ -146,16 +185,19 @@ export default function UnidadesPage() {
                       <button 
                         onClick={() => toggleStatus(unit)}
                         className={`badge ${unit.active ? 'badge-success' : 'badge-gray'}`}
-                        style={{ border: 'none', cursor: 'pointer' }}
+                        disabled={!canEdit}
+                        style={{ border: 'none', cursor: canEdit ? 'pointer' : 'not-allowed' }}
                       >
                         {unit.active ? 'Ativa' : 'Inativa'}
                       </button>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEditModal(unit)}>
-                          <Edit2 size={16} />
-                        </button>
+                        {canEdit && (
+                          <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEditModal(unit)}>
+                            <Edit2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import type { Employee } from '@/types'
+import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
 
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return '-'
@@ -22,15 +23,78 @@ export default function ColaboradoresPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
   const [departmentFilter, setDepartmentFilter] = useState('all')
+  const [canEditOthers, setCanEditOthers] = useState(false)
+  const [myEmployeeId, setMyEmployeeId] = useState<string | null>(null)
+  const [permReady, setPermReady] = useState(false)
+  const [permError, setPermError] = useState<string | null>(null)
   
   const supabase = createClient()
+
+  const loadAccessContext = useCallback(async () => {
+    try {
+      setPermError(null)
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser()
+
+      if (userErr) throw userErr
+      if (!user) {
+        setPermError('Usuário não autenticado.')
+        setPermReady(true)
+        return
+      }
+
+      const permsRes = await getEffectivePermissions(user.id)
+      if (!permsRes.success) {
+        setPermError('Erro ao carregar permissões.')
+        setPermReady(true)
+        return
+      }
+
+      const perms = (permsRes.permissions || []) as any[]
+      const canEdit =
+        perms.some((p) => p?.resource_name === 'workspace-rh' && !!p?.can_edit) ||
+        perms.some((p) => p?.resource_name === 'rh-painel' && !!p?.can_edit) ||
+        perms.some((p) => p?.resource_name === 'rh-colaboradores' && !!p?.can_edit)
+
+      setCanEditOthers(!!canEdit)
+
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('employee_id')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      setMyEmployeeId(userRow?.employee_id ? String(userRow.employee_id) : null)
+      setPermReady(true)
+    } catch (err) {
+      console.error('Erro ao carregar contexto de acesso (RH/Colaboradores):', err)
+      setPermError('Erro ao carregar permissões.')
+      setPermReady(true)
+    }
+  }, [supabase])
 
   const fetchEmployees = useCallback(async () => {
     setLoading(true)
     let query = supabase.from('employees').select('*')
+
+    if (!permReady) {
+      setLoading(false)
+      return
+    }
     
     if (statusFilter !== 'all') {
       query = query.eq('status', statusFilter)
+    }
+
+    if (!canEditOthers) {
+      if (!myEmployeeId) {
+        setEmployees([])
+        setLoading(false)
+        return
+      }
+      query = query.eq('id', myEmployeeId)
     }
     
     const { data, error } = await query.order('name', { ascending: true })
@@ -39,7 +103,11 @@ export default function ColaboradoresPage() {
       setEmployees(data as Employee[])
     }
     setLoading(false)
-  }, [statusFilter, supabase])
+  }, [statusFilter, supabase, permReady, canEditOthers, myEmployeeId])
+
+  useEffect(() => {
+    loadAccessContext()
+  }, [loadAccessContext])
 
   useEffect(() => {
     fetchEmployees()
@@ -67,6 +135,11 @@ export default function ColaboradoresPage() {
 
   return (
     <div className="page-content">
+      {permError && (
+        <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+          {permError}
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--brs-gray-800)', margin: 0 }}>
@@ -77,11 +150,16 @@ export default function ColaboradoresPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="btn btn-outline" style={{ background: '#fff' }}>
+          <button className="btn btn-outline" style={{ background: '#fff' }} disabled={!canEditOthers}>
             <Download size={16} />
             Exportar Lista
           </button>
-          <Link href="/rh/importacoes" className="btn btn-primary">
+          <Link
+            href="/rh/importacoes"
+            className={`btn btn-primary${!canEditOthers ? ' disabled' : ''}`}
+            aria-disabled={!canEditOthers}
+            tabIndex={!canEditOthers ? -1 : 0}
+          >
             <Upload size={16} />
             Importar QuarkRH
           </Link>
@@ -185,12 +263,16 @@ export default function ColaboradoresPage() {
                         <Link href={`/rh/colaboradores/${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Ver Perfil">
                           <Eye size={16} />
                         </Link>
-                        <Link href={`/rh/vale-transporte/novo/${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Vale-Transporte">
-                          <Bus size={16} />
-                        </Link>
-                        <Link href={`/rh/medidas-disciplinares/nova?employee=${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Aplicar Medida">
-                          <AlertTriangle size={16} />
-                        </Link>
+                        {canEditOthers && (
+                          <>
+                            <Link href={`/rh/vale-transporte/novo/${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Vale-Transporte">
+                              <Bus size={16} />
+                            </Link>
+                            <Link href={`/rh/medidas-disciplinares/nova?employee=${emp.id}`} className="btn btn-ghost btn-sm btn-icon" title="Aplicar Medida">
+                              <AlertTriangle size={16} />
+                            </Link>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

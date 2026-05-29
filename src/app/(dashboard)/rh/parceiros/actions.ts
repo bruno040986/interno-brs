@@ -2,6 +2,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
 
 // Inicialização do cliente Supabase Admin para operações privilegiadas
 const supabaseAdmin = createClient(
@@ -14,6 +16,25 @@ const supabaseAdmin = createClient(
     }
   }
 )
+
+async function requireCurrentUserId() {
+  const supabase = await createServerClient()
+  const { data, error } = await supabase.auth.getUser()
+  if (error) throw error
+  const userId = data?.user?.id
+  if (!userId) throw new Error('Usuário não autenticado.')
+  return userId
+}
+
+async function requirePermission(resourceName: string, action: 'can_view' | 'can_edit' = 'can_view') {
+  const userId = await requireCurrentUserId()
+  const permsRes = await getEffectivePermissions(userId)
+  if (!permsRes.success) throw new Error('Não foi possível validar permissões.')
+  const perms = (permsRes.permissions || []) as any[]
+  const perm = perms.find((p) => p?.resource_name === resourceName)
+  if (!perm || !perm[action]) throw new Error('Sem permissão para esta ação.')
+  return { userId, perms }
+}
 
 async function getPartnerFormsColumnSet(): Promise<Set<string> | null> {
   try {
@@ -41,6 +62,19 @@ async function getPartnerFormsColumnSet(): Promise<Set<string> | null> {
 
 export async function getProvedoresConfig() {
   try {
+    const userId = await requireCurrentUserId()
+    const permsRes = await getEffectivePermissions(userId)
+    if (!permsRes.success) throw new Error('Não foi possível validar permissões.')
+    const perms = (permsRes.permissions || []) as any[]
+    const canViewAny =
+      perms.some((p) => p?.resource_name === 'sistema-config-root' && !!p?.can_view) ||
+      perms.some((p) => p?.resource_name === 'sistema-config-empresa' && !!p?.can_view) ||
+      perms.some((p) => p?.resource_name === 'sistema-config-email' && !!p?.can_view) ||
+      perms.some((p) => p?.resource_name === 'sistema-config-whatsapp' && !!p?.can_view) ||
+      perms.some((p) => p?.resource_name === 'sistema-config-assinatura' && !!p?.can_view)
+
+    if (!canViewAny) throw new Error('Sem permissão para visualizar configurações.')
+
     let resend = { id: '', api_key: '', from_email: '', is_active: false }
     try {
       const { data, error } = await supabaseAdmin
@@ -98,6 +132,20 @@ export async function saveProvedoresConfig(data: {
   assinafy?: { id?: string; api_key: string; is_active: boolean }
 }) {
   try {
+    const userId = await requireCurrentUserId()
+    const permsRes = await getEffectivePermissions(userId)
+    if (!permsRes.success) throw new Error('Não foi possível validar permissões.')
+    const perms = (permsRes.permissions || []) as any[]
+
+    const canEditRoot = perms.some((p) => p?.resource_name === 'sistema-config-root' && !!p?.can_edit)
+    const canEditEmail = perms.some((p) => p?.resource_name === 'sistema-config-email' && !!p?.can_edit)
+    const canEditWhatsapp = perms.some((p) => p?.resource_name === 'sistema-config-whatsapp' && !!p?.can_edit)
+    const canEditAssinatura = perms.some((p) => p?.resource_name === 'sistema-config-assinatura' && !!p?.can_edit)
+
+    if (data.resend && !(canEditRoot || canEditEmail)) throw new Error('Sem permissão para salvar configurações de e-mail.')
+    if (data.zapi && !(canEditRoot || canEditWhatsapp)) throw new Error('Sem permissão para salvar configurações de WhatsApp.')
+    if (data.assinafy && !(canEditRoot || canEditAssinatura)) throw new Error('Sem permissão para salvar configurações de assinatura.')
+
     // 1. Salvar Resend
     if (data.resend) {
       try {
@@ -619,6 +667,16 @@ export async function getContractTemplates() {
   }
 }
 
+export async function getEmailTemplates() {
+  try {
+    const res = await getTemplates()
+    if (!res.success) return { success: false, error: res.error || 'Erro ao carregar modelos de e-mail.' }
+    return { success: true, templates: res.emails || [] }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
 // =========================================================================
 // 6. Cadastro da Empresa (multi-CNPJ)
 // =========================================================================
@@ -1127,6 +1185,23 @@ export async function validateProcessModel(id: string) {
       if (template?.name) templateByName.set(String(template.name).toLowerCase(), template)
     }
 
+    const EMAIL_AUTOFILL_TOKENS = new Set(['{{assinatura.link}}', '{{processo.id}}', '{{campo.email_destino}}'])
+    const extractTokens = (text: string) => Array.from(new Set(String(text || '').match(/\{\{[^}]+\}\}/g) || []))
+    const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+
+    const { data: emailTemplates, error: eTplErr } = await supabaseAdmin
+      .from('email_templates')
+      .select('id, name, subject, body')
+
+    if (eTplErr) throw eTplErr
+
+    const emailById = new Map<string, any>()
+    const emailByName = new Map<string, any>()
+    for (const template of emailTemplates || []) {
+      if (template?.id) emailById.set(String(template.id), template)
+      if (template?.name) emailByName.set(String(template.name).toLowerCase(), template)
+    }
+
     const hasSignatureAction =
       docs.some((d: any) => d?.enabled !== false) ||
       stageList.some((s: any) => {
@@ -1164,6 +1239,58 @@ export async function validateProcessModel(id: string) {
     checkTemplates(whats, 'WhatsApp')
     requireSignatureTriggerConfig(mails, 'E-mail')
     requireSignatureTriggerConfig(whats, 'WhatsApp')
+
+    for (const mail of mails) {
+      const template =
+        emailById.get(String(mail?.template_id || '')) ||
+        emailByName.get(String(mail?.template_name || '').toLowerCase())
+
+      if (!template) {
+        blocking.push(`E-mail "${mail?.name || 'sem nome'}" sem modelo de e-mail selecionado.`)
+        continue
+      }
+
+      const templateText = `${String(template?.subject || '')}\n${String(template?.body || '')}`
+      if (templateText.includes('{{assinatura.link}}') && !hasSignatureAction) {
+        blocking.push(`E-mail "${mail?.name || template?.name || 'sem nome'}" usa {{assinatura.link}} sem ação de assinatura.`)
+      }
+
+      const periodValue = Number(mail?.resend_period_value || 0)
+      const periodUnit = String(mail?.resend_period_unit || '')
+      const resendTrigger = String(mail?.resend_trigger || '')
+      const repeatCount = Number(mail?.resend_repeat_count || 0)
+      const wantsResend = !!resendTrigger || periodValue > 0 || !!periodUnit || repeatCount > 0
+      if (wantsResend) {
+        if (!(periodValue >= 1 && periodValue <= 60)) blocking.push(`E-mail "${mail?.name || template?.name || 'sem nome'}" com período de reenvio inválido (1 a 60).`)
+        if (!['minutes', 'hours', 'days'].includes(periodUnit)) blocking.push(`E-mail "${mail?.name || template?.name || 'sem nome'}" com unidade de reenvio inválida.`)
+        if (!['signature_not_finished', 'elapsed_time'].includes(resendTrigger)) blocking.push(`E-mail "${mail?.name || template?.name || 'sem nome'}" com gatilho de reenvio inválido.`)
+        if (!(repeatCount >= 1)) blocking.push(`E-mail "${mail?.name || template?.name || 'sem nome'}" precisa do número de repetições do reenvio.`)
+      }
+
+      const copyRecipients = Array.isArray(mail?.copy_recipients) ? mail.copy_recipients : []
+      for (const entry of copyRecipients) {
+        const kind = String(entry?.type || '').trim()
+        const value = String(entry?.value || '').trim()
+        if (!kind || !value) {
+          blocking.push(`E-mail "${mail?.name || template?.name || 'sem nome'}" possui um e-mail de cópia inválido.`)
+          continue
+        }
+        if (kind === 'email' && !isValidEmail(value)) {
+          blocking.push(`E-mail "${mail?.name || template?.name || 'sem nome'}" possui e-mail de cópia inválido: ${value}.`)
+        }
+      }
+
+      const tokenMapping = mail?.token_mapping && typeof mail.token_mapping === 'object' ? mail.token_mapping : {}
+      const subjectTokens = extractTokens(template?.subject || '')
+      const bodyTokens = extractTokens(template?.body || '')
+      const needed = [...new Set([...subjectTokens, ...bodyTokens])].filter((t) => !EMAIL_AUTOFILL_TOKENS.has(t))
+      for (const token of needed) {
+        const mapped = String(tokenMapping?.[token] || '').trim()
+        if (!mapped) {
+          blocking.push(`E-mail "${mail?.name || template?.name || 'sem nome'}" sem vínculo para tag ${token}.`)
+        }
+      }
+    }
 
     for (const doc of docs) {
       const template =
@@ -1365,11 +1492,28 @@ export async function saveEmailTemplate(templateData: {
   body: string
 }) {
   try {
+    const normalizedName = String(templateData.name || '').trim()
+    if (!normalizedName) return { success: false, error: 'Nome do modelo Ã© obrigatÃ³rio.' }
+
+    let checkQuery = supabaseAdmin
+      .from('email_templates')
+      .select('id')
+      .ilike('name', normalizedName)
+      .limit(1)
+
+    if (templateData.id) checkQuery = checkQuery.neq('id', templateData.id)
+
+    const { data: existing, error: checkErr } = await checkQuery.maybeSingle()
+    if (checkErr) throw checkErr
+    if (existing?.id) {
+      return { success: false, error: 'JÃ¡ existe um modelo de e-mail com esse nome.' }
+    }
+
     if (templateData.id) {
       const { error } = await supabaseAdmin
         .from('email_templates')
         .update({
-          name: templateData.name,
+          name: normalizedName,
           subject: templateData.subject,
           body: templateData.body
         })
@@ -1379,7 +1523,7 @@ export async function saveEmailTemplate(templateData: {
       const { error } = await supabaseAdmin
         .from('email_templates')
         .insert({
-          name: templateData.name,
+          name: normalizedName,
           subject: templateData.subject,
           body: templateData.body
         })

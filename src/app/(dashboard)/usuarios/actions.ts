@@ -53,9 +53,17 @@ export async function saveProfile(profileData: {
       }
     })
 
-    const { error: permErr } = await supabaseAdmin
+    let { error: permErr } = await supabaseAdmin
       .from('profile_permissions')
       .upsert(permsToSave, { onConflict: 'profile_id,resource_name' })
+
+    if (permErr && String(permErr.message || '').includes("Could not find the 'created_at' column")) {
+      const withoutCreatedAt = permsToSave.map(({ created_at, ...rest }: any) => rest)
+      const retry = await supabaseAdmin
+        .from('profile_permissions')
+        .upsert(withoutCreatedAt, { onConflict: 'profile_id,resource_name' })
+      permErr = retry.error as any
+    }
 
     if (permErr) throw permErr
 
