@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import type { CalendarEvent } from '@/lib/google/calendar'
+import { CreateEventModal } from './CreateEventModal'
 
 export function AgendaComponent() {
   const [activeTab, setActiveTab] = useState<'minha' | 'empresa'>('minha')
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingEvents, setIsLoadingEvents] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [selectedUser, setSelectedUser] = useState<string>('')
   const [users, setUsers] = useState<Array<{ id: string; email: string; full_name?: string }>>([])
@@ -143,7 +145,10 @@ export function AgendaComponent() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <h3 className="font-semibold">Seus Compromissos</h3>
-                  <button className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                  <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
+                  >
                     ➕ Novo Compromisso
                   </button>
                 </div>
@@ -244,6 +249,13 @@ export function AgendaComponent() {
           </div>
         )}
       </div>
+
+      <CreateEventModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={() => fetchMyEvents()}
+        attendeeEmails={users.map((u) => u.email)}
+      />
     </div>
   )
 }
