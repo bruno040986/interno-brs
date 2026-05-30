@@ -1,5 +1,3 @@
-'use server'
-
 import { googleConfig, googleScopes } from './config'
 import { createClient } from '@/lib/supabase/server'
 
