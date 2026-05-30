@@ -75,6 +75,7 @@ const exactRouteRules: Record<string, RouteAccessRule> = {
   '/rh/parceiros/config/provedores/email': any([view('sistema-config-email')]),
   '/rh/parceiros/config/provedores/whatsapp': any([view('sistema-config-whatsapp')]),
   '/rh/parceiros/config/provedores/assinatura': any([view('sistema-config-assinatura')]),
+  '/rh/parceiros/config/provedores/google': any([view('sistema-config-google')]),
 }
 
 const prefixRouteRules: Array<[string, RouteAccessRule]> = [
