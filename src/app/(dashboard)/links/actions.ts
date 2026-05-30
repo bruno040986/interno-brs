@@ -2,13 +2,11 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-
-const supabaseAdmin = async () => {
-  const cookieStore = await createClient()
-  return cookieStore
-}
+import { requireAnyPermission, requirePermission } from '@/lib/auth/server'
 
 export async function getLinksBySector(sectorId: string) {
+  await requirePermission(`workspace-${sectorId}`, 'can_view')
+
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('sector_links')
@@ -21,6 +19,8 @@ export async function getLinksBySector(sectorId: string) {
 }
 
 export async function getLinks() {
+  await requirePermission('sistema-links', 'can_view')
+
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('sector_links')
@@ -38,6 +38,13 @@ export async function saveLink(linkData: {
   url: string
   is_external: boolean
 }) {
+  await requireAnyPermission([
+    {
+      resource: 'sistema-links',
+      action: linkData.id ? 'can_edit' : 'can_include',
+    },
+  ])
+
   const supabase = await createClient()
   
   if (linkData.id) {
@@ -69,6 +76,8 @@ export async function saveLink(linkData: {
 }
 
 export async function deleteLink(id: string) {
+  await requirePermission('sistema-links', 'can_delete')
+
   const supabase = await createClient()
   const { error } = await supabase
     .from('sector_links')

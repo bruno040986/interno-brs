@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { getVisibleEffectivePermissions, requireAnyPermission } from '@/lib/auth/server'
 
 // Criamos um cliente com a Service Role para operações administrativas
 const supabaseAdmin = createClient(
@@ -22,6 +23,13 @@ export async function saveProfile(profileData: {
   schedules?: any[]
 }) {
   try {
+    await requireAnyPermission([
+      {
+        resource: 'sistema-usuarios-perfis',
+        action: profileData.id ? 'can_edit' : 'can_include',
+      },
+    ])
+
     const now = new Date().toISOString()
     let profileId = profileData.id
 
@@ -94,6 +102,11 @@ export async function saveProfile(profileData: {
 
 export async function deleteUser(userId: string) {
   try {
+    await requireAnyPermission([
+      { resource: 'sistema-usuarios-cadastro', action: 'can_activate_inactivate' },
+      { resource: 'sistema-usuarios-cadastro', action: 'can_delete' },
+    ])
+
     // Desativa no Auth e remove do perfil (ou apenas inativa conforme regra de negócio)
     // Aqui vamos apenas inativar para manter histórico de auditoria
     const { error } = await supabaseAdmin
@@ -130,6 +143,13 @@ export async function saveUserDirectly(userData: {
   employee_id?: string | null
 }) {
   try {
+    await requireAnyPermission([
+      {
+        resource: 'sistema-usuarios-cadastro',
+        action: userData.id ? 'can_edit' : 'can_include',
+      },
+    ])
+
     const now = new Date().toISOString()
     let userId = userData.id
     
@@ -275,6 +295,12 @@ export async function saveUserDirectly(userData: {
 
 export async function getAccessData() {
   try {
+    await requireAnyPermission([
+      { resource: 'sistema-usuarios-root', action: 'can_view' },
+      { resource: 'sistema-usuarios-cadastro', action: 'can_view' },
+      { resource: 'sistema-usuarios-perfis', action: 'can_view' },
+    ])
+
     const { data: profiles, error: pErr } = await supabaseAdmin
       .from('access_profiles')
       .select('*')
@@ -324,6 +350,11 @@ export async function getAccessData() {
 
 export async function getProfilePermissions(profileId: string) {
   try {
+    await requireAnyPermission([
+      { resource: 'sistema-usuarios-root', action: 'can_view' },
+      { resource: 'sistema-usuarios-perfis', action: 'can_view' },
+    ])
+
     // Buscar permissões
     const { data: perms, error: pErr } = await supabaseAdmin
       .from('profile_permissions')
@@ -350,6 +381,11 @@ export async function getProfilePermissions(profileId: string) {
 
 export async function getUserPermissions(userId: string) {
   try {
+    await requireAnyPermission([
+      { resource: 'sistema-usuarios-root', action: 'can_view' },
+      { resource: 'sistema-usuarios-cadastro', action: 'can_view' },
+    ])
+
     // Buscar permissões
     const { data: perms, error: pErr } = await supabaseAdmin
       .from('user_permissions')
@@ -376,51 +412,7 @@ export async function getUserPermissions(userId: string) {
 
 export async function getEffectivePermissions(userId: string) {
   try {
-    const { data: user, error: uErr } = await supabaseAdmin
-      .from('users')
-      .select('profile_id, role')
-      .eq('id', userId)
-      .single()
-    if (uErr) throw uErr
-
-    const { data: userPerms, error: upErr } = await supabaseAdmin
-      .from('user_permissions')
-      .select('*')
-      .eq('user_id', userId)
-    if (upErr) throw upErr
-
-    let finalPerms = (userPerms || []).map((p: any) => ({
-      resource_name: p.resource_name,
-      can_view: p.can_view,
-      can_include: p.can_include,
-      can_edit: p.can_edit,
-      can_delete: p.can_delete,
-      can_activate_inactivate: p.can_activate_inactivate
-    }))
-
-    if (user?.profile_id) {
-      const { data: profilePerms, error: ppErr } = await supabaseAdmin
-        .from('profile_permissions')
-        .select('*')
-        .eq('profile_id', user.profile_id)
-      if (ppErr) throw ppErr
-
-      const userPermResourceNames = new Set(finalPerms.map(p => p.resource_name))
-      if (profilePerms) {
-        profilePerms.forEach(pp => {
-          if (!userPermResourceNames.has(pp.resource_name)) {
-            finalPerms.push({
-              resource_name: pp.resource_name,
-              can_view: pp.can_view,
-              can_include: pp.can_include,
-              can_edit: pp.can_edit,
-              can_delete: pp.can_delete,
-              can_activate_inactivate: pp.can_activate_inactivate
-            })
-          }
-        })
-      }
-    }
+    const finalPerms = await getVisibleEffectivePermissions(userId)
 
     return {
       success: true,

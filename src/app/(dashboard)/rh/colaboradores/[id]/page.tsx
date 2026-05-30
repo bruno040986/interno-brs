@@ -11,7 +11,8 @@ import {
 import Link from 'next/link'
 import { generateVTPdf, generateDisciplinaryPdf } from '@/lib/utils/pdfGenerator'
 import type { Employee, VtRecord, DisciplinaryRecord } from '@/types'
-import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import { getMyEffectivePermissions } from '@/lib/auth/actions'
+import { hasPermission } from '@/lib/auth/permissions'
 
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return null
@@ -59,7 +60,7 @@ export default function PerfilColaboradorPage() {
       return
     }
 
-    const permsRes = await getEffectivePermissions(user.id)
+    const permsRes = await getMyEffectivePermissions()
     if (!permsRes.success) {
       setPermError('Erro ao carregar permissões.')
       setLoading(false)
@@ -67,10 +68,7 @@ export default function PerfilColaboradorPage() {
     }
 
     const perms = (permsRes.permissions || []) as any[]
-    const canEdit =
-      perms.some((p) => p?.resource_name === 'workspace-rh' && !!p?.can_edit) ||
-      perms.some((p) => p?.resource_name === 'rh-painel' && !!p?.can_edit) ||
-      perms.some((p) => p?.resource_name === 'rh-colaboradores' && !!p?.can_edit)
+    const canEdit = hasPermission(perms, 'rh-colaboradores', 'can_edit')
 
     setCanEditOthers(!!canEdit)
 

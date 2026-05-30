@@ -8,7 +8,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import type { Employee } from '@/types'
-import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import { getMyEffectivePermissions } from '@/lib/auth/actions'
+import { hasPermission } from '@/lib/auth/permissions'
 
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return '-'
@@ -45,7 +46,7 @@ export default function ColaboradoresPage() {
         return
       }
 
-      const permsRes = await getEffectivePermissions(user.id)
+      const permsRes = await getMyEffectivePermissions()
       if (!permsRes.success) {
         setPermError('Erro ao carregar permissões.')
         setPermReady(true)
@@ -53,10 +54,7 @@ export default function ColaboradoresPage() {
       }
 
       const perms = (permsRes.permissions || []) as any[]
-      const canEdit =
-        perms.some((p) => p?.resource_name === 'workspace-rh' && !!p?.can_edit) ||
-        perms.some((p) => p?.resource_name === 'rh-painel' && !!p?.can_edit) ||
-        perms.some((p) => p?.resource_name === 'rh-colaboradores' && !!p?.can_edit)
+      const canEdit = hasPermission(perms, 'rh-colaboradores', 'can_edit')
 
       setCanEditOthers(!!canEdit)
 

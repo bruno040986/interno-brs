@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard,
   LayoutGrid,
@@ -23,37 +22,28 @@ import {
   Globe,
   Key,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import { useEffect, useState, type ComponentType } from 'react'
+import { getMyEffectivePermissions } from '@/lib/auth/actions'
+import { hasAnyPermission, hasPermission, type EffectivePermission } from '@/lib/auth/permissions'
 
 type NavItem = {
   section?: string
   label?: string
   href?: string
-  icon?: any
+  icon?: ComponentType<{ size?: number }>
 }
 
 export default function Sidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const [permissions, setPermissions] = useState<any[]>([])
+  const [permissions, setPermissions] = useState<EffectivePermission[]>([])
   const [loading, setLoading] = useState(true)
   const [permissionsError, setPermissionsError] = useState(false)
 
   useEffect(() => {
     async function loadPerms() {
       try {
-        const supabase = createClient()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!user) {
-          setPermissionsError(true)
-          return
-        }
-
-        const res = await getEffectivePermissions(user.id)
+        const res = await getMyEffectivePermissions()
         if (res.success) {
           setPermissions(res.permissions || [])
           setPermissionsError(false)
@@ -71,15 +61,19 @@ export default function Sidebar() {
     loadPerms()
   }, [])
 
-  const hasPermission = (resourceId: string): boolean => {
+  const canView = (resourceId: string): boolean => {
     if (permissionsError) return false
     if (loading) return false
-    const perm = permissions.find((p) => p.resource_name === resourceId)
-    return perm ? !!perm.can_view : false
+    return hasPermission(permissions, resourceId)
   }
 
   const canViewAny = (resourceIds: string[]): boolean => {
-    return resourceIds.some((id) => hasPermission(id))
+    if (permissionsError) return false
+    if (loading) return false
+    return hasAnyPermission(
+      permissions,
+      resourceIds.map((resource) => ({ resource })),
+    )
   }
 
   let navItems: NavItem[] = []
@@ -153,36 +147,37 @@ export default function Sidebar() {
     if (item.section) return true
 
     if (item.href === '/rh/parceiros/config/comercial') return canViewAny(['comercial-agentes', 'comercial-estrutura'])
-    if (item.href === '/rh/parceiros/config/provedores/email') return hasPermission('sistema-config-email')
-    if (item.href === '/rh/parceiros/config/provedores/whatsapp') return hasPermission('sistema-config-whatsapp')
-    if (item.href === '/rh/parceiros/config/provedores/assinatura') return hasPermission('sistema-config-assinatura')
-    if (item.href === '/rh/parceiros/config/provedores/empresas') {
-      return hasPermission('sistema-config-empresa') || hasPermission('sistema-config-root')
-    }
-    if (item.href?.includes('Google')) return hasPermission('sistema-config-google')
-    if (item.href?.includes('QuarkRH')) return hasPermission('sistema-config-quarkrh')
-    if (item.href?.includes('ContaAzul')) return hasPermission('sistema-config-contaazul')
-    if (item.href?.includes('ARW')) return hasPermission('sistema-config-arw')
-    if (item.href?.includes('Instituicoes')) return hasPermission('sistema-config-instituicoes')
-    if (item.href?.includes('CRM')) return hasPermission('sistema-config-crm')
+    if (item.href === '/') return true
+    if (item.href === '/?sector=rh') return canView('workspace-rh')
 
-    if (item.href === '/rh/parceiros') return canViewAny(['scp-crm', 'scp'])
-    if (item.href === '/rh/parceiros/config/processos') return canViewAny(['scp-processos', 'scp'])
-    if (item.href === '/rh/parceiros/config/formularios') return canViewAny(['scp-construtor', 'scp'])
-    if (item.href === '/rh/parceiros/config/documentos') return canViewAny(['scp-documentos', 'scp'])
-    if (item.href === '/rh/parceiros/config/emails') return canViewAny(['scp-emails', 'scp'])
-    if (item.href === '/rh/parceiros/config/whatsapp') return canViewAny(['scp-whatsapp', 'scp'])
+    if (item.href === '/rh/parceiros/config/provedores/email') return canView('sistema-config-email')
+    if (item.href === '/rh/parceiros/config/provedores/whatsapp') return canView('sistema-config-whatsapp')
+    if (item.href === '/rh/parceiros/config/provedores/assinatura') return canView('sistema-config-assinatura')
+    if (item.href === '/rh/parceiros/config/provedores/empresas') return canView('sistema-config-empresa')
+    if (item.href?.includes('Google')) return canView('sistema-config-google')
+    if (item.href?.includes('QuarkRH')) return canView('sistema-config-quarkrh')
+    if (item.href?.includes('ContaAzul')) return canView('sistema-config-contaazul')
+    if (item.href?.includes('ARW')) return canView('sistema-config-arw')
+    if (item.href?.includes('Instituicoes')) return canView('sistema-config-instituicoes')
+    if (item.href?.includes('CRM')) return canView('sistema-config-crm')
 
-    if (item.href === '/rh/colaboradores') return canViewAny(['rh-colaboradores', 'workspace-rh'])
-    if (item.href === '/rh/importacoes') return canViewAny(['rh-importacoes', 'workspace-rh'])
-    if (item.href === '/rh/vale-transporte') return canViewAny(['rh-vale-transporte', 'workspace-rh'])
-    if (item.href === '/rh/medidas-disciplinares') return canViewAny(['rh-medidas-disciplinares', 'workspace-rh'])
-    if (item.href === '/rh/motivos') return canViewAny(['rh-motivos', 'workspace-rh'])
-    if (item.href === '/rh/unidades') return canViewAny(['rh-unidades', 'workspace-rh'])
-    if (item.href === '/rh/relatorios') return canViewAny(['rh-relatorios', 'workspace-rh'])
-    if (item.href === '/rh/auditoria') return canViewAny(['rh-auditoria', 'workspace-rh'])
+    if (item.href === '/rh/parceiros') return canView('scp-crm')
+    if (item.href === '/rh/parceiros/config/processos') return canView('scp-processos')
+    if (item.href === '/rh/parceiros/config/formularios') return canView('scp-construtor')
+    if (item.href === '/rh/parceiros/config/documentos') return canView('scp-documentos')
+    if (item.href === '/rh/parceiros/config/emails') return canView('scp-emails')
+    if (item.href === '/rh/parceiros/config/whatsapp') return canView('scp-whatsapp')
 
-    return true
+    if (item.href === '/rh/colaboradores') return canView('rh-colaboradores')
+    if (item.href === '/rh/importacoes') return canView('rh-importacoes')
+    if (item.href === '/rh/vale-transporte') return canView('rh-vale-transporte')
+    if (item.href === '/rh/medidas-disciplinares') return canView('rh-medidas-disciplinares')
+    if (item.href === '/rh/motivos') return canView('rh-motivos')
+    if (item.href === '/rh/unidades') return canView('rh-unidades')
+    if (item.href === '/rh/relatorios') return canView('rh-relatorios')
+    if (item.href === '/rh/auditoria') return canView('rh-auditoria')
+
+    return false
   })
 
   const finalNavItems: NavItem[] = []

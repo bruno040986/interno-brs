@@ -2,8 +2,12 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
-import { createClient as createServerClient } from '@/lib/supabase/server'
-import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import {
+  requireAnyPermission,
+  requireCurrentUser,
+  requirePermission as requireServerPermission,
+} from '@/lib/auth/server'
+import { systemConfigRouteOptions, type PermissionAction, type PermissionRequirement } from '@/lib/auth/permissions'
 
 // Inicialização do cliente Supabase Admin para operações privilegiadas
 const supabaseAdmin = createClient(
@@ -18,22 +22,26 @@ const supabaseAdmin = createClient(
 )
 
 async function requireCurrentUserId() {
-  const supabase = await createServerClient()
-  const { data, error } = await supabase.auth.getUser()
-  if (error) throw error
-  const userId = data?.user?.id
+  const user = await requireCurrentUser()
+  const userId = user.id
   if (!userId) throw new Error('Usuário não autenticado.')
   return userId
 }
 
-async function requirePermission(resourceName: string, action: 'can_view' | 'can_edit' = 'can_view') {
+async function requirePermission(resourceName: string, action: PermissionAction = 'can_view') {
+  const { permissions } = await requireServerPermission(resourceName, action)
   const userId = await requireCurrentUserId()
-  const permsRes = await getEffectivePermissions(userId)
+  const permsRes: { success: boolean; permissions: typeof permissions } = { success: true, permissions }
   if (!permsRes.success) throw new Error('Não foi possível validar permissões.')
-  const perms = (permsRes.permissions || []) as any[]
+  const perms = permsRes.permissions || []
   const perm = perms.find((p) => p?.resource_name === resourceName)
   if (!perm || !perm[action]) throw new Error('Sem permissão para esta ação.')
   return { userId, perms }
+}
+
+async function requireAny(requirements: PermissionRequirement[]) {
+  const { user, permissions } = await requireAnyPermission(requirements)
+  return { userId: user.id, perms: permissions }
 }
 
 async function getPartnerFormsColumnSet(): Promise<Set<string> | null> {
@@ -47,7 +55,7 @@ async function getPartnerFormsColumnSet(): Promise<Set<string> | null> {
 
     if (error) throw error
     const set = new Set<string>()
-    for (const row of (data as any[]) || []) {
+    for (const row of (data as Array<{ column_name?: string | null }>) || []) {
       if (row?.column_name) set.add(String(row.column_name))
     }
     return set
@@ -62,56 +70,67 @@ async function getPartnerFormsColumnSet(): Promise<Set<string> | null> {
 
 export async function getProvedoresConfig() {
   try {
-    const userId = await requireCurrentUserId()
-    const permsRes = await getEffectivePermissions(userId)
+    const providerAccess = await requireAny([
+      { resource: 'sistema-config-email' },
+      { resource: 'sistema-config-whatsapp' },
+      { resource: 'sistema-config-assinatura' },
+    ])
+    const permsRes: { success: boolean; permissions: typeof providerAccess.perms } = {
+      success: true,
+      permissions: providerAccess.perms,
+    }
     if (!permsRes.success) throw new Error('Não foi possível validar permissões.')
-    const perms = (permsRes.permissions || []) as any[]
-    const canViewAny =
-      perms.some((p) => p?.resource_name === 'sistema-config-root' && !!p?.can_view) ||
-      perms.some((p) => p?.resource_name === 'sistema-config-empresa' && !!p?.can_view) ||
-      perms.some((p) => p?.resource_name === 'sistema-config-email' && !!p?.can_view) ||
-      perms.some((p) => p?.resource_name === 'sistema-config-whatsapp' && !!p?.can_view) ||
-      perms.some((p) => p?.resource_name === 'sistema-config-assinatura' && !!p?.can_view)
+    const perms = permsRes.permissions || []
+    const canViewEmail = perms.some((p) => p?.resource_name === 'sistema-config-email' && !!p?.can_view)
+    const canViewWhatsapp = perms.some((p) => p?.resource_name === 'sistema-config-whatsapp' && !!p?.can_view)
+    const canViewAssinatura = perms.some((p) => p?.resource_name === 'sistema-config-assinatura' && !!p?.can_view)
+    const canViewAny = canViewEmail || canViewWhatsapp || canViewAssinatura
 
     if (!canViewAny) throw new Error('Sem permissão para visualizar configurações.')
 
     let resend = { id: '', api_key: '', from_email: '', is_active: false }
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('resend_config')
-        .select('*')
-        .limit(1)
-        .maybeSingle()
-      if (error && error.code !== 'PGRST205') throw error
-      if (data) resend = data
-    } catch (err) {
-      console.warn('resend_config table not found, using fallback')
+    if (canViewEmail) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('resend_config')
+          .select('*')
+          .limit(1)
+          .maybeSingle()
+        if (error && error.code !== 'PGRST205') throw error
+        if (data) resend = data
+      } catch (err) {
+        console.warn('resend_config table not found, using fallback')
+      }
     }
 
     let zapi = { id: '', instance_id: '', token: '', client_key: '', is_active: false }
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('zapi_config')
-        .select('*')
-        .limit(1)
-        .maybeSingle()
-      if (error && error.code !== 'PGRST205') throw error
-      if (data) zapi = data
-    } catch (err) {
-      console.warn('zapi_config table not found, using fallback')
+    if (canViewWhatsapp) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('zapi_config')
+          .select('*')
+          .limit(1)
+          .maybeSingle()
+        if (error && error.code !== 'PGRST205') throw error
+        if (data) zapi = data
+      } catch (err) {
+        console.warn('zapi_config table not found, using fallback')
+      }
     }
 
     let assinafy = { id: '', api_key: '', is_active: false }
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('assinafy_config')
-        .select('*')
-        .limit(1)
-        .maybeSingle()
-      if (error && error.code !== 'PGRST205') throw error
-      if (data) assinafy = data
-    } catch (err) {
-      console.warn('assinafy_config table not found, using fallback')
+    if (canViewAssinatura) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('assinafy_config')
+          .select('*')
+          .limit(1)
+          .maybeSingle()
+        if (error && error.code !== 'PGRST205') throw error
+        if (data) assinafy = data
+      } catch (err) {
+        console.warn('assinafy_config table not found, using fallback')
+      }
     }
 
     return {
@@ -132,10 +151,17 @@ export async function saveProvedoresConfig(data: {
   assinafy?: { id?: string; api_key: string; is_active: boolean }
 }) {
   try {
-    const userId = await requireCurrentUserId()
-    const permsRes = await getEffectivePermissions(userId)
+    const requiredConfigPermissions: PermissionRequirement[] = []
+    if (data.resend) requiredConfigPermissions.push({ resource: 'sistema-config-email', action: 'can_edit' })
+    if (data.zapi) requiredConfigPermissions.push({ resource: 'sistema-config-whatsapp', action: 'can_edit' })
+    if (data.assinafy) requiredConfigPermissions.push({ resource: 'sistema-config-assinatura', action: 'can_edit' })
+    const providerAccess = await requireAny(requiredConfigPermissions.length ? requiredConfigPermissions : systemConfigRouteOptions)
+    const permsRes: { success: boolean; permissions: typeof providerAccess.perms } = {
+      success: true,
+      permissions: providerAccess.perms,
+    }
     if (!permsRes.success) throw new Error('Não foi possível validar permissões.')
-    const perms = (permsRes.permissions || []) as any[]
+    const perms = permsRes.permissions || []
 
     const canEditRoot = perms.some((p) => p?.resource_name === 'sistema-config-root' && !!p?.can_edit)
     const canEditEmail = perms.some((p) => p?.resource_name === 'sistema-config-email' && !!p?.can_edit)
@@ -253,6 +279,8 @@ export async function saveProvedoresConfig(data: {
 
 export async function getCommercialEntities() {
   try {
+    await requireAny([{ resource: 'comercial-agentes' }, { resource: 'comercial-estrutura' }])
+
     const { data, error } = await supabaseAdmin
       .from('commercial_entities')
       .select(`
@@ -297,6 +325,8 @@ export async function saveCommercialEntity(entityData: {
   google_drive_url?: string
 }) {
   try {
+    await requirePermission('comercial-agentes', entityData.id ? 'can_edit' : 'can_include')
+
     const payload = {
       name: entityData.name,
       cpf_cnpj: entityData.cpf_cnpj,
@@ -338,6 +368,8 @@ export async function saveCommercialEntity(entityData: {
 
 export async function deleteCommercialEntity(id: string) {
   try {
+    await requirePermission('comercial-agentes', 'can_activate_inactivate')
+
     const { error } = await supabaseAdmin
       .from('commercial_entities')
       .update({ status: 'inativo', updated_at: new Date().toISOString() })
@@ -359,6 +391,8 @@ export async function deleteCommercialEntity(id: string) {
 
 export async function getPartnerForms() {
   try {
+    await requirePermission('scp-construtor')
+
     const columns = await getPartnerFormsColumnSet()
     const selectColumns = columns
       ? ['id', 'title', 'is_active', 'schema', 'created_at', 'updated_at']
@@ -390,6 +424,8 @@ export async function savePartnerForm(formData: {
   config?: unknown
 }) {
   try {
+    await requirePermission('scp-construtor', formData.id ? 'can_edit' : 'can_include')
+
     const columns = await getPartnerFormsColumnSet()
     const payload = {
       title: formData.title,
@@ -436,6 +472,8 @@ export async function savePartnerForm(formData: {
 
 export async function isPartnerFormSlugAvailable(slug: string, excludeId?: string) {
   try {
+    await requirePermission('scp-construtor')
+
     const normalized = String(slug || '')
       .trim()
       .toLowerCase()
@@ -464,6 +502,8 @@ export async function isPartnerFormSlugAvailable(slug: string, excludeId?: strin
 
 export async function deletePartnerForm(id: string) {
   try {
+    await requirePermission('scp-construtor', 'can_delete')
+
     if (!id) return { success: false, error: 'ID inválido' }
 
     const { error } = await supabaseAdmin.from('partner_forms').delete().eq('id', id)
@@ -483,6 +523,8 @@ export async function deletePartnerForm(id: string) {
 
 export async function getCRMData() {
   try {
+    await requirePermission('scp-crm')
+
     const { data: partners, error: pErr } = await supabaseAdmin
       .from('agentes_parceiros')
       .select(`
@@ -531,6 +573,8 @@ export async function updatePartnerCRM(partnerData: {
   assinafy_signature_url?: string | null
 }) {
   try {
+    await requirePermission('scp-crm', 'can_edit')
+
     const { error } = await supabaseAdmin
       .from('agentes_parceiros')
       .update({
@@ -555,6 +599,8 @@ export async function updatePartnerCRM(partnerData: {
 
 export async function getTemplates() {
   try {
+    await requireAny([{ resource: 'scp-documentos' }, { resource: 'scp-emails' }])
+
     const { data: contracts, error: cErr } = await supabaseAdmin
       .from('contract_templates')
       .select('*')
@@ -613,6 +659,8 @@ export async function saveContractTemplate(templateData: {
   placeholders?: Array<{ id: string; token: string; label: string; required?: boolean }>
 }) {
   try {
+    await requirePermission('scp-documentos', templateData.id ? 'can_edit' : 'can_include')
+
     const normalizedPlaceholders = (templateData.placeholders || [])
       .filter((p) => p?.token)
       .map((p) => ({
@@ -659,6 +707,8 @@ export async function saveContractTemplate(templateData: {
 
 export async function getContractTemplates() {
   try {
+    await requirePermission('scp-documentos')
+
     const res = await getTemplates()
     if (!res.success) return { success: false, error: res.error || 'Erro ao carregar modelos de documentos.' }
     return { success: true, templates: res.contracts || [] }
@@ -669,6 +719,8 @@ export async function getContractTemplates() {
 
 export async function getEmailTemplates() {
   try {
+    await requirePermission('scp-emails')
+
     const res = await getTemplates()
     if (!res.success) return { success: false, error: res.error || 'Erro ao carregar modelos de e-mail.' }
     return { success: true, templates: res.emails || [] }
@@ -700,6 +752,8 @@ function sanitizeDigits(value: any) {
 
 export async function getCompanyProfiles() {
   try {
+    await requirePermission('sistema-config-empresa')
+
     const { data, error } = await supabaseAdmin
       .from('company_profiles')
       .select('*')
@@ -714,6 +768,8 @@ export async function getCompanyProfiles() {
 
 export async function saveCompanyProfile(payload: CompanyProfileRow) {
   try {
+    await requirePermission('sistema-config-empresa', payload.id ? 'can_edit' : 'can_include')
+
     const row: any = {
       nickname: String(payload.nickname || '').trim(),
       is_active: payload.is_active !== false,
@@ -764,6 +820,8 @@ export async function saveCompanyProfile(payload: CompanyProfileRow) {
 
 export async function archiveCompanyProfile(id: string) {
   try {
+    await requirePermission('sistema-config-empresa', 'can_activate_inactivate')
+
     if (!id) return { success: false, error: 'ID inválido.' }
     const { error } = await supabaseAdmin
       .from('company_profiles')
@@ -782,6 +840,8 @@ export async function archiveCompanyProfile(id: string) {
 
 export async function deleteCompanyProfile(id: string) {
   try {
+    await requirePermission('sistema-config-empresa', 'can_delete')
+
     if (!id) return { success: false, error: 'ID inválido.' }
     let { data: linked, error: lErr } = await supabaseAdmin
       .from('process_models')
@@ -850,6 +910,8 @@ function normalizeSlug(input: string): string {
 
 export async function getProcessModels() {
   try {
+    await requirePermission('scp-processos')
+
     const { data, error } = await supabaseAdmin
       .from('process_models')
       .select('*')
@@ -864,6 +926,8 @@ export async function getProcessModels() {
 
 export async function getProcessStages(processId: string) {
   try {
+    await requirePermission('scp-processos')
+
     if (!processId) return { success: true, stages: [] }
     const { data, error } = await supabaseAdmin
       .from('process_stage_models')
@@ -880,6 +944,8 @@ export async function getProcessStages(processId: string) {
 
 export async function isProcessSlugAvailable(slug: string, excludeId?: string) {
   try {
+    await requirePermission('scp-processos')
+
     const normalized = normalizeSlug(slug)
     if (!normalized) return { success: true, available: false, normalized }
 
@@ -914,6 +980,8 @@ export async function saveProcessModel(payload: {
   stages?: Array<Partial<StageModelRow> & { id?: string }>
 }) {
   try {
+    await requirePermission('scp-processos', payload.id ? 'can_edit' : 'can_include')
+
     const modelData: any = {
       name: payload.name,
       type: payload.type || 'generic',
@@ -1029,6 +1097,8 @@ export async function saveProcessModel(payload: {
 
 export async function deleteProcessModel(id: string) {
   try {
+    await requirePermission('scp-processos', 'can_delete')
+
     if (!id) return { success: false, error: 'ID inválido' }
     const { error } = await supabaseAdmin.from('process_models').delete().eq('id', id)
     if (error) throw error
@@ -1042,6 +1112,8 @@ export async function deleteProcessModel(id: string) {
 
 export async function archiveProcessModel(id: string) {
   try {
+    await requirePermission('scp-processos', 'can_activate_inactivate')
+
     if (!id) return { success: false, error: 'ID inválido' }
     const { error } = await supabaseAdmin
       .from('process_models')
@@ -1058,6 +1130,8 @@ export async function archiveProcessModel(id: string) {
 
 export async function duplicateProcessModel(id: string) {
   try {
+    await requirePermission('scp-processos', 'can_include')
+
     if (!id) return { success: false, error: 'ID inválido' }
 
     const { data: current, error: cErr } = await supabaseAdmin
@@ -1136,6 +1210,8 @@ export async function duplicateProcessModel(id: string) {
 
 export async function validateProcessModel(id: string) {
   try {
+    await requirePermission('scp-processos')
+
     if (!id) return { success: false, error: 'ID inválido', blocking: [], warnings: [] }
 
     const { data: process, error: pErr } = await supabaseAdmin
@@ -1334,6 +1410,8 @@ export async function validateProcessModel(id: string) {
 
 export async function getProcessCRMData(processId?: string) {
   try {
+    await requirePermission('scp-crm')
+
     const { data: processes, error: pErr } = await supabaseAdmin
       .from('process_models')
       .select('id, name, type, is_active, is_public, public_slug, form_id, entry_config, config')
@@ -1385,6 +1463,8 @@ export async function updateProcessInstance(data: {
   status?: 'active' | 'archived' | 'completed' | 'canceled'
 }) {
   try {
+    await requirePermission('scp-crm', 'can_edit')
+
     if (!data.id) return { success: false, error: 'ID inválido' }
 
     const payload: any = {
@@ -1410,6 +1490,8 @@ export async function updateProcessInstance(data: {
 
 export async function getProcessInstanceDetail(instanceId: string) {
   try {
+    await requirePermission('scp-crm')
+
     if (!instanceId) return { success: false, error: 'ID inválido' }
 
     const { data: instance, error: iErr } = await supabaseAdmin
@@ -1492,6 +1574,8 @@ export async function saveEmailTemplate(templateData: {
   body: string
 }) {
   try {
+    await requirePermission('scp-emails', templateData.id ? 'can_edit' : 'can_include')
+
     const normalizedName = String(templateData.name || '').trim()
     if (!normalizedName) return { success: false, error: 'Nome do modelo Ã© obrigatÃ³rio.' }
 
@@ -1541,6 +1625,8 @@ export async function saveEmailTemplate(templateData: {
 
 export async function getWhatsappTemplates() {
   try {
+    await requirePermission('scp-whatsapp')
+
     const { data, error } = await supabaseAdmin
       .from('whatsapp_templates')
       .select('*')
@@ -1560,6 +1646,8 @@ export async function saveWhatsappTemplate(templateData: {
   body: string
 }) {
   try {
+    await requirePermission('scp-whatsapp', templateData.id ? 'can_edit' : 'can_include')
+
     if (templateData.id) {
       const { error } = await supabaseAdmin
         .from('whatsapp_templates')
@@ -1598,6 +1686,8 @@ export async function executePartnerAutomation(
   params?: any
 ) {
   try {
+    await requirePermission('scp-crm', 'can_edit')
+
     // 1. Buscar dados do parceiro
     const { data: partner, error: pErr } = await supabaseAdmin
       .from('agentes_parceiros')

@@ -11,7 +11,12 @@ import {
 } from 'lucide-react'
 import { getLinksBySector } from './links/actions'
 import { createClient } from '@/lib/supabase/client'
-import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import { getMyEffectivePermissions } from '@/lib/auth/actions'
+import {
+  hasAnyPermission,
+  hasPermission as permissionAllows,
+  type EffectivePermission,
+} from '@/lib/auth/permissions'
 import PraiseBoard from './_components/PraiseBoard'
 
 export default function HubPage() {
@@ -26,7 +31,7 @@ export default function HubPage() {
   const [formattedDate, setFormattedDate] = useState<string>('')
   const [birthdays, setBirthdays] = useState<any[]>([])
 
-  const [permissions, setPermissions] = useState<any[]>([])
+  const [permissions, setPermissions] = useState<EffectivePermission[]>([])
   const [loadingPerms, setLoadingPerms] = useState(true)
   const [bannerSrc, setBannerSrc] = useState<string>('/banners/banner-inicial-9mm.png')
 
@@ -85,7 +90,7 @@ export default function HubPage() {
             setUserName(user.email?.split('@')[0] || '')
           }
 
-          const permsResult = await getEffectivePermissions(user.id)
+          const permsResult = await getMyEffectivePermissions()
           if (permsResult.success) {
             setPermissions(permsResult.permissions || [])
           }
@@ -166,12 +171,18 @@ export default function HubPage() {
 
   useEffect(() => {
     const sector = searchParams.get('sector')
-    if (sector) {
-      handleSelectSector(sector)
-    }
-  }, [searchParams])
+    if (!sector || loadingPerms) return
+    handleSelectSector(sector)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loadingPerms, permissions])
 
   const handleSelectSector = async (sectorId: string) => {
+    if (loadingPerms || !permissionAllows(permissions, `workspace-${sectorId}`)) {
+      setActiveSector(null)
+      setSectorLinks([])
+      return
+    }
+
     setActiveSector(sectorId)
     setLoadingLinks(true)
     const result = await getLinksBySector(sectorId)
@@ -181,10 +192,9 @@ export default function HubPage() {
     setLoadingLinks(false)
   }
 
-  const hasPermission = (resourceId: string): boolean => {
-    if (loadingPerms) return true
-    const perm = permissions.find(p => p.resource_name === resourceId)
-    return perm ? !!perm.can_view : false
+  const canView = (resourceId: string): boolean => {
+    if (loadingPerms) return false
+    return permissionAllows(permissions, resourceId)
   }
 
   const sectors = [
@@ -298,18 +308,21 @@ export default function HubPage() {
   ]
 
   const allowedSectors = sectors
-    .filter(sec => hasPermission(`workspace-${sec.id}`))
+    .filter(sec => canView(`workspace-${sec.id}`))
     .map(sec => ({
       ...sec,
       links: sec.links.filter(link => {
         if (link.href === '/rh') {
-          return hasPermission('workspace-rh')
+          return canView('rh-painel')
         }
         if (link.href === '/rh/parceiros') {
-          return hasPermission('scp')
+          return canView('scp-crm')
         }
         if (link.href === '/rh/parceiros/config/comercial') {
-          return hasPermission('comercial-agentes')
+          return hasAnyPermission(permissions, [
+            { resource: 'comercial-agentes' },
+            { resource: 'comercial-estrutura' },
+          ])
         }
         return true
       })

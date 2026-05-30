@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { hasPermissionForUser } from '@/lib/auth/server'
 import {
   QUARKRH_COLUMN_MAP, DATE_FIELDS, MONEY_FIELDS, BOOLEAN_FIELDS,
   normalizeCpf, validateCpf, parseDate, parseMoney, parseBoolean
@@ -8,8 +9,11 @@ import * as XLSX from 'xlsx'
 
 export async function POST(request: NextRequest) {
   try {
+    const authClient = await createClient()
+    const { data: { user } } = await authClient.auth.getUser()
+    const canImport = user ? await hasPermissionForUser(user.id, 'rh-importacoes', 'can_include') : false
+    if (user && !canImport) return NextResponse.json({ error: 'Sem permissao.' }, { status: 403 })
     const supabase = await createAdminClient()
-    const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
     const formData = await request.formData()

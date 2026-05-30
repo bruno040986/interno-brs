@@ -11,7 +11,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { ThemePreference, UserProfile } from '@/types'
 import { createClient } from '@/lib/supabase/client'
-import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import { getMyEffectivePermissions } from '@/lib/auth/actions'
+import { hasAnyPermission, hasPermission, type EffectivePermission } from '@/lib/auth/permissions'
 import { getPraiseNotifications, getPraiseUnreadCount, markPraiseNotificationsRead } from '@/app/(dashboard)/praises/actions'
 import { setMyThemePreference } from '@/app/(dashboard)/theme/actions'
 import { applyResolvedTheme, readStoredThemePreference, resolveTheme, storeThemePreference } from '@/components/theme/theme'
@@ -25,7 +26,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
   const [showApps, setShowApps] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
-  const [permissions, setPermissions] = useState<any[]>([])
+  const [permissions, setPermissions] = useState<EffectivePermission[]>([])
   const [loading, setLoading] = useState(true)
 
   const [praiseUnread, setPraiseUnread] = useState<number>(0)
@@ -38,7 +39,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
     async function loadPerms() {
       if (!user?.id) return
       try {
-        const res = await getEffectivePermissions(user.id)
+        const res = await getMyEffectivePermissions()
         if (res.success) {
           setPermissions(res.permissions || [])
         }
@@ -131,11 +132,24 @@ export default function HubHeader({ user }: HubHeaderProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
 
-  const hasPermission = (resourceId: string): boolean => {
+  const canView = (resourceId: string): boolean => {
     if (loading) return false
-    const perm = permissions.find(p => p.resource_name === resourceId)
-    return perm ? !!perm.can_view : false
+    return hasPermission(permissions, resourceId)
   }
+
+  const configEntries = [
+    { resource: 'sistema-config-email', href: '/rh/parceiros/config/provedores/email' },
+    { resource: 'sistema-config-whatsapp', href: '/rh/parceiros/config/provedores/whatsapp' },
+    { resource: 'sistema-config-assinatura', href: '/rh/parceiros/config/provedores/assinatura' },
+    { resource: 'sistema-config-empresa', href: '/rh/parceiros/config/provedores/empresas' },
+    { resource: 'sistema-config-google', href: '/rh/parceiros/config/provedores/breve?api=Google' },
+    { resource: 'sistema-config-quarkrh', href: '/rh/parceiros/config/provedores/breve?api=QuarkRH' },
+    { resource: 'sistema-config-contaazul', href: '/rh/parceiros/config/provedores/breve?api=ContaAzul' },
+    { resource: 'sistema-config-arw', href: '/rh/parceiros/config/provedores/breve?api=ARW' },
+    { resource: 'sistema-config-instituicoes', href: '/rh/parceiros/config/provedores/breve?api=Instituicoes' },
+    { resource: 'sistema-config-crm', href: '/rh/parceiros/config/provedores/breve?api=CRM' },
+  ]
+  const firstConfigHref = configEntries.find((entry) => canView(entry.resource))?.href
 
   const systemApps = [
     { label: 'Home HUB', icon: LayoutGrid, href: '/', color: '#475569', id: 'home' },
@@ -145,6 +159,10 @@ export default function HubHeader({ user }: HubHeaderProps) {
     { label: 'Links', icon: ExternalLink, href: '/links', color: '#ea580c', id: 'sistema-links' },
     { label: 'Ajuda', icon: HelpCircle, href: '#', color: '#db2777', id: 'sistema-ajuda' },
   ]
+
+  const resolvedSystemApps = systemApps.map((app) =>
+    app.id === 'sistema-config-root' ? { ...app, href: firstConfigHref || '#' } : app,
+  )
 
   const sectorApps = [
     { label: 'Adm', icon: UserCircle2, href: '/?sector=adm', color: '#7c3aed', id: 'workspace-adm' },
@@ -156,13 +174,19 @@ export default function HubHeader({ user }: HubHeaderProps) {
     { label: 'Acessos', icon: Key, href: '/?sector=acc', color: '#475569', id: 'workspace-acc' },
   ]
 
-  const filteredSystemApps = systemApps.filter(app => {
+  const filteredSystemApps = resolvedSystemApps.filter(app => {
     if (app.id === 'home') return true
-    return hasPermission(app.id)
+    if (app.id === 'sistema-config-root') {
+      return hasAnyPermission(
+        permissions,
+        configEntries.map((entry) => ({ resource: entry.resource })),
+      )
+    }
+    return canView(app.id)
   })
 
   const filteredSectorApps = sectorApps.filter(app => {
-    return hasPermission(app.id)
+    return canView(app.id)
   })
 
   async function handleLogout() {
@@ -466,7 +490,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
                     <option value="system">Navegador (Sistema)</option>
                   </select>
                 </div>
-                {hasPermission('sistema-usuarios-root') && (
+                {canView('sistema-usuarios-root') && (
                   <Link 
                     href="/usuarios" 
                     className="btn btn-outline" 

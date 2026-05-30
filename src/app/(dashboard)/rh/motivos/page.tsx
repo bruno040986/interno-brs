@@ -7,7 +7,8 @@ import {
   AlertCircle, ChevronRight, FileText
 } from 'lucide-react'
 import type { DisciplinaryReason } from '@/types'
-import { getEffectivePermissions } from '@/app/(dashboard)/usuarios/actions'
+import { getMyEffectivePermissions } from '@/lib/auth/actions'
+import { hasPermission } from '@/lib/auth/permissions'
 
 export default function MotivosPage() {
   const [reasons, setReasons] = useState<DisciplinaryReason[]>([])
@@ -16,37 +17,21 @@ export default function MotivosPage() {
   const [editingReason, setEditingReason] = useState<Partial<DisciplinaryReason> | null>(null)
   const [saving, setSaving] = useState(false)
   const [canEdit, setCanEdit] = useState(false)
-  const [permReady, setPermReady] = useState(false)
   
   const supabase = createClient()
 
   const loadPermission = useCallback(async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
-        setCanEdit(false)
-        setPermReady(true)
-        return
-      }
-
-      const permsRes = await getEffectivePermissions(user.id)
+      const permsRes = await getMyEffectivePermissions()
       const perms = (permsRes.success ? permsRes.permissions : []) as any[]
-      const allowed =
-        perms.some((p) => p?.resource_name === 'workspace-rh' && !!p?.can_edit) ||
-        perms.some((p) => p?.resource_name === 'rh-painel' && !!p?.can_edit) ||
-        perms.some((p) => p?.resource_name === 'rh-motivos' && !!p?.can_edit)
+      const allowed = hasPermission(perms, 'rh-motivos', 'can_edit')
 
       setCanEdit(!!allowed)
-      setPermReady(true)
     } catch (err) {
       console.error('Erro ao carregar permissões (RH/Motivos):', err)
       setCanEdit(false)
-      setPermReady(true)
     }
-  }, [supabase])
+  }, [])
 
   const fetchReasons = useCallback(async () => {
     setLoading(true)
