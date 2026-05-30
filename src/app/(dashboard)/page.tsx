@@ -238,6 +238,7 @@ export default function HubPage() {
       links: [
         { label: 'Sistema de Cadastro de Parceiros (SCP)', href: '/rh/parceiros' },
         { label: 'Links de Bancos', href: '#', disabled: true },
+        { label: 'Link de Averbadores', href: '#', disabled: true },
         { label: 'Links de Promotoras', href: '#', disabled: true },
         { label: 'Manual de Rotinas Operacionais', href: '#', disabled: true },
         { label: 'Propostas Digitadas Internamente', href: '#', disabled: true },
@@ -276,6 +277,7 @@ export default function HubPage() {
         { label: 'Visão do Supervisor', href: '#', disabled: true },
         { label: 'Visão do Superintendente', href: '#', disabled: true },
         { label: 'Mailing Higienizado Drive', href: 'https://drive.google.com/drive/folders/1iIT-CtmzHwtYfeFzPFNNCTjI6YrCaYEz?usp=drive_link', external: true },
+        { label: 'Promosys', href: 'https://www.promosysweb.com/apex/f?p=101:LOGIN_DESKTOP:2083723502586:::::', external: true },
         { label: 'Sistema de Mailing', href: '#', disabled: true },
         { label: 'Reembolso Comercial', href: '#', disabled: true },
         { label: 'BRS Ajuda', href: '#', disabled: true },
