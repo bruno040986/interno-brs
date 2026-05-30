@@ -1,20 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-
-interface CalendarEvent {
-  id: string
-  title: string
-  start: string
-  end: string
-  description?: string
-  attendees?: Array<{ email: string; displayName?: string }>
-}
+import { generateGoogleAuthUrl } from '@/lib/google/oauth'
+import type { CalendarEvent } from '@/lib/google/calendar'
 
 export function AgendaComponent() {
   const [activeTab, setActiveTab] = useState<'minha' | 'empresa'>('minha')
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [selectedUser, setSelectedUser] = useState<string>('')
   const [users, setUsers] = useState<Array<{ id: string; email: string; full_name?: string }>>([])
@@ -47,20 +41,38 @@ export function AgendaComponent() {
   }
 
   async function handleConnectGoogle() {
-    // Será implementado quando tivermos as credenciais
     const state = Math.random().toString(36).substring(7)
     sessionStorage.setItem('oauth_state', state)
-    // window.location.href = generateGoogleAuthUrl(state)
+    const authUrl = await generateGoogleAuthUrl(state)
+    window.location.href = authUrl
   }
 
   async function fetchMyEvents() {
-    // Será implementado quando tivermos os tokens
-    setEvents([])
+    setIsLoadingEvents(true)
+    try {
+      const response = await fetch('/api/calendar/events')
+      const data = await response.json()
+      setEvents(data)
+    } catch (error) {
+      console.error('Error fetching events:', error)
+      setEvents([])
+    } finally {
+      setIsLoadingEvents(false)
+    }
   }
 
   async function fetchUserEvents(userEmail: string) {
-    // Será implementado quando tivermos os tokens
-    setEvents([])
+    setIsLoadingEvents(true)
+    try {
+      const response = await fetch(`/api/calendar/events?user=${encodeURIComponent(userEmail)}`)
+      const data = await response.json()
+      setEvents(data)
+    } catch (error) {
+      console.error('Error fetching user events:', error)
+      setEvents([])
+    } finally {
+      setIsLoadingEvents(false)
+    }
   }
 
   useEffect(() => {
@@ -127,14 +139,26 @@ export function AgendaComponent() {
                   </button>
                 </div>
 
-                {events.length === 0 ? (
+                {isLoadingEvents ? (
+                  <p className="text-gray-500 text-center py-8">⏳ Carregando eventos...</p>
+                ) : events.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">Nenhum compromisso para hoje</p>
                 ) : (
                   <div className="space-y-2">
                     {events.map((event) => (
                       <div key={event.id} className="border rounded-lg p-3 hover:bg-gray-50">
                         <p className="font-medium">{event.title}</p>
-                        <p className="text-sm text-gray-600">{event.start}</p>
+                        <p className="text-sm text-gray-600">
+                          {new Date(event.start).toLocaleTimeString('pt-BR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                          {' - '}
+                          {new Date(event.end).toLocaleTimeString('pt-BR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
                         {event.attendees && event.attendees.length > 0 && (
                           <p className="text-xs text-gray-500 mt-1">
                             👥 {event.attendees.map((a) => a.displayName || a.email).join(', ')}
@@ -177,14 +201,26 @@ export function AgendaComponent() {
                 {selectedUser && (
                   <div className="space-y-2">
                     <h3 className="font-semibold">Agenda de {selectedUser}</h3>
-                    {events.length === 0 ? (
+                    {isLoadingEvents ? (
+                      <p className="text-gray-500 text-center py-8">⏳ Carregando eventos...</p>
+                    ) : events.length === 0 ? (
                       <p className="text-gray-500 text-center py-8">Nenhum compromisso para exibir</p>
                     ) : (
                       <div className="space-y-2">
                         {events.map((event) => (
                           <div key={event.id} className="border rounded-lg p-3 hover:bg-gray-50 bg-gray-50">
                             <p className="font-medium">{event.title}</p>
-                            <p className="text-sm text-gray-600">{event.start}</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(event.start).toLocaleTimeString('pt-BR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                              {' - '}
+                              {new Date(event.end).toLocaleTimeString('pt-BR', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
                             {event.description && (
                               <p className="text-xs text-gray-500 mt-1">{event.description}</p>
                             )}
