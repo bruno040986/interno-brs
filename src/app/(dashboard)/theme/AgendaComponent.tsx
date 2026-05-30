@@ -35,9 +35,10 @@ export function AgendaComponent() {
     try {
       const response = await fetch('/api/users/list')
       const data = await response.json()
-      setUsers(data)
+      setUsers(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching users:', error)
+      setUsers([])
     }
   }
 
@@ -254,7 +255,7 @@ export function AgendaComponent() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={() => fetchMyEvents()}
-        attendeeEmails={users.map((u) => u.email)}
+        attendeeEmails={Array.isArray(users) ? users.map((u) => u.email) : []}
       />
     </div>
   )
