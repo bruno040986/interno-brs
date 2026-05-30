@@ -18,11 +18,12 @@ import {
   type EffectivePermission,
 } from '@/lib/auth/permissions'
 import PraiseBoard from './_components/PraiseBoard'
+import { AgendaComponent } from './theme/AgendaComponent'
+import { GoogleChatComponent } from './theme/GoogleChatComponent'
 
 export default function HubPage() {
   const searchParams = useSearchParams()
   const [activeSector, setActiveSector] = useState<string | null>(null)
-  const [agendaTab, setAgendaTab] = useState<'user' | 'company'>('user')
   const [sectorLinks, setSectorLinks] = useState<any[]>([])
   const [loadingLinks, setLoadingLinks] = useState(false)
 
@@ -538,32 +539,16 @@ export default function HubPage() {
           </div>
         </div>
 
-        {/* Widget de Agenda */}
+        {/* Widget de Google Agenda */}
         <div className="widget-card">
           <div className="widget-header">
             <h3 className="widget-title">
-              <Clock size={18} style={{ color: 'var(--brs-navy)' }} />
-              Agenda
+              <Calendar size={18} style={{ color: 'var(--brs-navy)' }} />
+              Google Agenda
             </h3>
           </div>
-          <div className="tab-nav">
-            <div 
-              className={`tab-button ${agendaTab === 'user' ? 'active' : ''}`}
-              onClick={() => setAgendaTab('user')}
-            >
-              Minha
-            </div>
-            <div 
-              className={`tab-button ${agendaTab === 'company' ? 'active' : ''}`}
-              onClick={() => setAgendaTab('company')}
-            >
-              Empresa
-            </div>
-          </div>
-          <div className="widget-content" style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--brs-gray-400)', margin: 0 }}>
-              Nenhum compromisso agendado.
-            </p>
+          <div className="widget-content" style={{ padding: '1rem' }}>
+            <AgendaComponent />
           </div>
         </div>
 
@@ -575,9 +560,8 @@ export default function HubPage() {
               Google Chat
             </h3>
           </div>
-          <div className="widget-content" style={{ textAlign: 'center', padding: '2rem 1.25rem' }}>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--brs-gray-400)', marginBottom: '1rem' }}>Mantenha-se conectado com a equipe em tempo real.</p>
-            <button className="btn btn-outline btn-sm" style={{ width: '100%' }}>Abrir Chat</button>
+          <div className="widget-content" style={{ padding: '1rem' }}>
+            <GoogleChatComponent />
           </div>
         </div>
 

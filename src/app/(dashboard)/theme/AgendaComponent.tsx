@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { generateGoogleAuthUrl } from '@/lib/google/oauth'
 import type { CalendarEvent } from '@/lib/google/calendar'
 
 export function AgendaComponent() {
@@ -43,8 +42,18 @@ export function AgendaComponent() {
   async function handleConnectGoogle() {
     const state = Math.random().toString(36).substring(7)
     sessionStorage.setItem('oauth_state', state)
-    const authUrl = await generateGoogleAuthUrl(state)
-    window.location.href = authUrl
+
+    const response = await fetch('/api/auth/google/url', {
+      headers: { 'x-oauth-state': state },
+    })
+
+    if (!response.ok) {
+      console.error('Failed to generate Google auth URL')
+      return
+    }
+
+    const data = await response.json()
+    window.location.href = data.authUrl
   }
 
   async function fetchMyEvents() {
