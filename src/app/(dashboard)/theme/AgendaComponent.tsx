@@ -46,17 +46,24 @@ export function AgendaComponent() {
     const state = Math.random().toString(36).substring(7)
     sessionStorage.setItem('oauth_state', state)
 
-    const response = await fetch('/api/auth/google/url', {
-      headers: { 'x-oauth-state': state },
-    })
+    try {
+      const response = await fetch('/api/auth/google/url', {
+        headers: { 'x-oauth-state': state },
+      })
 
-    if (!response.ok) {
-      console.error('Failed to generate Google auth URL')
-      return
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('Failed to generate Google auth URL:', errorData.error)
+        alert(`Erro ao conectar Google: ${errorData.error || 'Falha desconhecida'}`)
+        return
+      }
+
+      const data = await response.json()
+      window.location.href = data.authUrl
+    } catch (error) {
+      console.error('Error during Google connection:', error)
+      alert('Erro ao conectar ao Google. Verifique as credenciais.')
     }
-
-    const data = await response.json()
-    window.location.href = data.authUrl
   }
 
   async function fetchMyEvents() {

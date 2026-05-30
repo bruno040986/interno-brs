@@ -1,4 +1,4 @@
-import { googleConfig, googleScopes } from './config'
+import { googleConfig, googleScopes, isGoogleConfigured } from './config'
 import { createClient } from '@/lib/supabase/server'
 
 /**
@@ -122,3 +122,6 @@ export async function disconnectGoogleAccount(userId: string): Promise<void> {
     throw new Error(`Failed to disconnect Google account: ${error.message}`)
   }
 }
+
+// Re-export para conveniência
+export { isGoogleConfigured }
