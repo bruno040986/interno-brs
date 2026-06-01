@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentUserEffectivePermissions, requireCurrentUser } from '@/lib/auth/server'
+import { hasPermission } from '@/lib/auth/permissions'
 import {
   Users, UserX, Bus, AlertTriangle, TrendingUp, FileText, Clock, CheckCircle
 } from 'lucide-react'
@@ -38,17 +40,33 @@ async function getDashboardStats(supabase: Awaited<ReturnType<typeof createClien
   return { totalActive, totalTerminated, noVt, vtOption, vtRefusal, warningsMonth, suspensionsMonth }
 }
 
-async function getRecentDocs(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const [{ data: vtDocs }, { data: discDocs }] = await Promise.all([
-    supabase.from('vt_records')
-      .select('id, type, option_date, employee:employees(name, cpf)')
-      .order('option_date', { ascending: false })
-      .limit(5),
-    supabase.from('disciplinary_records')
-      .select('id, type, application_date, employee:employees(name, cpf), reason:disciplinary_reasons(name)')
-      .order('application_date', { ascending: false })
-      .limit(5),
-  ])
+async function getRecentDocs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opts: { scopedEmployeeId: string | null; canEditVt: boolean; canEditDisciplinary: boolean }
+) {
+  let vtQuery = supabase
+    .from('vt_records')
+    .select('id, type, option_date, employee_id, employee:employees(name, cpf)')
+    .order('option_date', { ascending: false })
+    .limit(5)
+
+  if (!opts.canEditVt) {
+    if (!opts.scopedEmployeeId) return { vtDocs: [], discDocs: [] }
+    vtQuery = vtQuery.eq('employee_id', opts.scopedEmployeeId)
+  }
+
+  let discQuery = supabase
+    .from('disciplinary_records')
+    .select('id, type, application_date, employee_id, employee:employees(name, cpf), reason:disciplinary_reasons(name)')
+    .order('application_date', { ascending: false })
+    .limit(5)
+
+  if (!opts.canEditDisciplinary) {
+    if (!opts.scopedEmployeeId) return { vtDocs: [], discDocs: [] }
+    discQuery = discQuery.eq('employee_id', opts.scopedEmployeeId)
+  }
+
+  const [{ data: vtDocs }, { data: discDocs }] = await Promise.all([vtQuery, discQuery])
   return { vtDocs: vtDocs ?? [], discDocs: discDocs ?? [] }
 }
 
@@ -70,8 +88,26 @@ function discTypeLabel(type: string) {
 
 export default async function DashboardPage() {
   const supabase = await createClient()
+  const currentUser = await requireCurrentUser()
+  const permissions = await getCurrentUserEffectivePermissions()
+
+  const canEditVt = hasPermission(permissions, 'rh-vale-transporte', 'can_edit')
+  const canEditDisciplinary = hasPermission(permissions, 'rh-medidas-disciplinares', 'can_edit')
+
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('employee_id')
+    .eq('id', currentUser.id)
+    .single()
+
+  const scopedEmployeeId = (userRow as { employee_id?: string | null } | null)?.employee_id ?? null
+
   const stats = await getDashboardStats(supabase)
-  const { vtDocs, discDocs } = await getRecentDocs(supabase)
+  const { vtDocs, discDocs } = await getRecentDocs(supabase, {
+    scopedEmployeeId,
+    canEditVt,
+    canEditDisciplinary,
+  })
 
   const now = new Date()
   const monthName = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })

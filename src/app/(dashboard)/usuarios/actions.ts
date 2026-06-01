@@ -186,8 +186,23 @@ export async function saveUserDirectly(userData: {
     }
 
     if (userId) {
-      // 1.1 Atualizar senha no Auth se houver temp_password
+      // 1.1 Atualizar senha no Auth apenas quando a senha provisoria for alterada.
+      // Isso evita invalidar a sessao atual ao editar o proprio usuario sem trocar senha.
+      let shouldRotatePassword = false
       if (userData.temp_password) {
+        const { data: existingUser, error: existingUserErr } = await supabaseAdmin
+          .from('users')
+          .select('temp_password')
+          .eq('id', userId)
+          .single()
+
+        if (existingUserErr) throw existingUserErr
+
+        const currentTempPassword = (existingUser as { temp_password?: string | null } | null)?.temp_password || null
+        shouldRotatePassword = currentTempPassword !== userData.temp_password
+      }
+
+      if (shouldRotatePassword) {
         await supabaseAdmin.auth.admin.updateUserById(userId, {
           password: userData.temp_password
         })

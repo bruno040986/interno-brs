@@ -34,6 +34,7 @@ type ChatMessage = {
     bgColor?: string
   } | null
   attachments?: Array<{ name?: string; url?: string; size?: number; type?: string }>
+  delivery_status?: 'sending' | 'sent' | 'read' | null
 }
 
 type Conversation = {
@@ -114,13 +115,36 @@ export function GoogleChatComponent() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const heartbeatRef = useRef<number | null>(null)
+  const conversationPollRef = useRef<number | null>(null)
+  const messagesPollRef = useRef<number | null>(null)
 
   useEffect(() => {
     bootstrap()
     return () => {
       if (heartbeatRef.current) window.clearInterval(heartbeatRef.current)
+      if (conversationPollRef.current) window.clearInterval(conversationPollRef.current)
+      if (messagesPollRef.current) window.clearInterval(messagesPollRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (conversationPollRef.current) window.clearInterval(conversationPollRef.current)
+    conversationPollRef.current = window.setInterval(() => void fetchConversations(), 3000)
+    return () => {
+      if (conversationPollRef.current) window.clearInterval(conversationPollRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (messagesPollRef.current) window.clearInterval(messagesPollRef.current)
+    if (!selectedConversation) return
+    messagesPollRef.current = window.setInterval(() => {
+      void loadMessages(selectedConversation.id, true)
+    }, 2000)
+    return () => {
+      if (messagesPollRef.current) window.clearInterval(messagesPollRef.current)
+    }
+  }, [selectedConversation?.id])
 
   async function bootstrap() {
     setIsLoading(true)
@@ -195,12 +219,14 @@ export function GoogleChatComponent() {
     await loadMessages(conversation.id)
   }
 
-  async function loadMessages(conversationId: string) {
-    setLoadingMessages(true)
+  async function loadMessages(conversationId: string, silent = false) {
+    if (!silent) setLoadingMessages(true)
     const response = await fetch(`/api/chat/messages?conversationId=${conversationId}`)
     const data = await response.json()
-    setMessages(Array.isArray(data) ? data : [])
-    setLoadingMessages(false)
+    if (Array.isArray(data)) {
+      setMessages(data)
+    }
+    if (!silent) setLoadingMessages(false)
     setTimeout(() => {
       if (messagesContainerRef.current) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
@@ -212,6 +238,21 @@ export function GoogleChatComponent() {
   async function sendMessage() {
     if (!selectedConversation) return
     if (!text.trim() && attachedFiles.length === 0) return
+    const optimisticId = `temp-${Date.now()}`
+    const optimisticMessage: ChatMessage = {
+      id: optimisticId,
+      text: text.trim() || '[Arquivo]',
+      timestamp: new Date().toISOString(),
+      sender: {
+        id: myProfile.user?.id || 'me',
+        email: myProfile.user?.email || '',
+        full_name: myProfile.user?.name,
+      },
+      text_style: style,
+      attachments: attachedFiles,
+      delivery_status: 'sending',
+    }
+    setMessages((prev) => [...prev, optimisticMessage])
     setIsSending(true)
     const response = await fetch('/api/chat/messages', {
       method: 'POST',
@@ -225,16 +266,19 @@ export function GoogleChatComponent() {
     })
     const data = await response.json()
     setIsSending(false)
-    if (!response.ok) return
-      setMessages((prev) => [...prev, data])
-      setText('')
-      setAttachedFiles([])
-      setTimeout(() => {
-        if (messagesContainerRef.current) {
-          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
-        }
-      }, 50)
-      await fetchConversations()
+    if (!response.ok) {
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
+      return
+    }
+    setMessages((prev) => prev.map((m) => (m.id === optimisticId ? data : m)))
+    setText('')
+    setAttachedFiles([])
+    setTimeout(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+      }
+    }, 50)
+    await fetchConversations()
   }
 
   async function onPickFile(fileList: FileList | null) {
@@ -554,6 +598,16 @@ export function GoogleChatComponent() {
                               )}
                               <div className="mt-1 text-[10px] text-gray-500">
                                 {new Date(m.timestamp).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                {mine ? (
+                                  <>
+                                    {' '}
+                                    {m.delivery_status === 'sending'
+                                      ? '⏱️ enviando'
+                                      : m.delivery_status === 'read'
+                                        ? '✔️✔️ lido'
+                                        : '✔️ enviado'}
+                                  </>
+                                ) : null}
                               </div>
                             </div>
                           </div>

@@ -22,6 +22,13 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
     if (!membership) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+    const { data: otherParticipant } = await admin
+      .from('workspace_chat_participants')
+      .select('last_read_at')
+      .eq('conversation_id', conversationId)
+      .neq('user_id', user.id)
+      .maybeSingle()
+
     const { data: messages, error } = await admin
       .from('workspace_chat_messages')
       .select('id, sender_id, body, created_at, text_style, attachments')
@@ -36,6 +43,12 @@ export async function GET(request: NextRequest) {
 
     const normalized = (messages || []).map((m) => {
       const sender = userMap.get(m.sender_id)
+      const sentByMe = m.sender_id === user.id
+      const isReadByOther =
+        sentByMe &&
+        Boolean(otherParticipant?.last_read_at) &&
+        new Date(m.created_at).getTime() <= new Date(otherParticipant?.last_read_at || 0).getTime()
+
       return {
         id: m.id,
         text: m.body,
@@ -47,6 +60,7 @@ export async function GET(request: NextRequest) {
         },
         text_style: m.text_style || null,
         attachments: Array.isArray(m.attachments) ? m.attachments : [],
+        delivery_status: sentByMe ? (isReadByOther ? 'read' : 'sent') : null,
       }
     })
 
@@ -122,6 +136,7 @@ export async function POST(request: NextRequest) {
       },
       text_style: inserted.text_style || null,
       attachments: Array.isArray(inserted.attachments) ? inserted.attachments : [],
+      delivery_status: 'sent',
     })
   } catch (error) {
     console.error('Error sending message:', error)
