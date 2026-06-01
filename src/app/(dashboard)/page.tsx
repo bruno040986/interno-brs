@@ -420,7 +420,7 @@ export default function HubPage() {
                         className="sector-card"
                         style={{ padding: '1.25rem', textAlign: 'center', textDecoration: 'none' }}
                       >
-                        <div style={{ fontWeight: 600, color: 'var(--brs-navy)' }}>{link.label}</div>
+                        <div style={{ fontWeight: 600, color: 'var(--brs-gray-800)' }}>{link.label}</div>
                         {link.external && <div style={{ fontSize: '0.7rem', color: 'var(--brs-gray-400)' }}>Externo <ExternalLink size={10} /></div>}
                       </a>
                     )
@@ -435,7 +435,7 @@ export default function HubPage() {
                       className="sector-card"
                       style={{ padding: '1.25rem', textAlign: 'center', textDecoration: 'none', borderColor: 'var(--brs-gold)' }}
                     >
-                      <div style={{ fontWeight: 600, color: 'var(--brs-navy)' }}>{link.label}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--brs-gray-800)' }}>{link.label}</div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--brs-gold)', fontWeight: 600 }}>Ferramenta Setorial</div>
                     </a>
                   ))}
@@ -494,7 +494,7 @@ export default function HubPage() {
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--brs-navy)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person.name.split(' ')[0]}</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--brs-gray-800)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person.name.split(' ')[0]}</div>
                       <div style={{ fontSize: '0.8rem', color: person.daysUntil === 0 ? 'var(--brs-gold)' : 'var(--brs-gray-400)', fontWeight: person.daysUntil <= 1 ? 700 : 400 }}>{person.day}</div>
                     </div>
                   </div>

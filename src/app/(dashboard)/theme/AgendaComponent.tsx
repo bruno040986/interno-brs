@@ -18,10 +18,22 @@ export function AgendaComponent() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [selectedUser, setSelectedUser] = useState<string>('')
   const [users, setUsers] = useState<Array<{ id: string; email: string; full_name?: string }>>([])
+  const [isDarkTheme, setIsDarkTheme] = useState(false)
 
   useEffect(() => {
     checkGoogleConnection()
     fetchUsers()
+  }, [])
+
+  useEffect(() => {
+    const updateTheme = () => {
+      const current = document.documentElement.getAttribute('data-theme')
+      setIsDarkTheme(current === 'dark')
+    }
+    updateTheme()
+    const observer = new MutationObserver(updateTheme)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
   }, [])
 
   async function checkGoogleConnection() {
@@ -115,7 +127,11 @@ export function AgendaComponent() {
         <button
           onClick={() => setActiveTab('minha')}
           className={`px-4 py-2 font-medium ${
-            activeTab === 'minha' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900'
+            activeTab === 'minha'
+              ? 'border-b-2 border-blue-600 text-blue-600'
+              : isDarkTheme
+                ? 'text-slate-300 hover:text-white'
+                : 'text-gray-600 hover:text-gray-900'
           }`}
         >
           Minha Agenda
@@ -123,21 +139,37 @@ export function AgendaComponent() {
         <button
           onClick={() => setActiveTab('empresa')}
           className={`px-4 py-2 font-medium ${
-            activeTab === 'empresa' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900'
+            activeTab === 'empresa'
+              ? 'border-b-2 border-blue-600 text-blue-600'
+              : isDarkTheme
+                ? 'text-slate-300 hover:text-white'
+                : 'text-gray-600 hover:text-gray-900'
           }`}
         >
           Agenda da Empresa
         </button>
       </div>
 
-      <div className="bg-white rounded-lg p-6">
+      <div
+        className="rounded-lg p-6"
+        style={{
+          background: isDarkTheme ? '#0f1a2e' : '#ffffff',
+          border: `1px solid ${isDarkTheme ? '#334155' : '#e2e8f0'}`,
+        }}
+      >
         {activeTab === 'minha' && (
           <div className="space-y-4">
             {isLoading ? (
               <p className="text-gray-500">Verificando conexao...</p>
             ) : !connection.connected ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                <p className="text-blue-900 mb-3">{connectionHint}</p>
+              <div
+                className="rounded-lg p-4 text-center"
+                style={{
+                  background: isDarkTheme ? '#14233b' : '#eff6ff',
+                  border: `1px solid ${isDarkTheme ? '#31507c' : '#bfdbfe'}`,
+                }}
+              >
+                <p style={{ color: isDarkTheme ? '#dbeafe' : '#1e3a8a', marginBottom: '0.75rem' }}>{connectionHint}</p>
                 <button onClick={handleConnectGoogle} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                   Conectar Google
                 </button>
@@ -152,18 +184,25 @@ export function AgendaComponent() {
                 </div>
 
                 {isLoadingEvents ? (
-                  <p className="text-gray-500 text-center py-8">Carregando eventos...</p>
-                ) : events.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">Nenhum compromisso para hoje.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {events.map((event) => (
-                      <div key={event.id} className="border rounded-lg p-3 hover:bg-gray-50">
-                        <p className="font-medium">{event.title}</p>
-                        <p className="text-sm text-gray-600">
-                          {new Date(event.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          {' - '}
-                          {new Date(event.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                <p className="text-center py-8" style={{ color: isDarkTheme ? '#cbd5e1' : '#6b7280' }}>Carregando eventos...</p>
+              ) : events.length === 0 ? (
+                <p className="text-center py-8" style={{ color: isDarkTheme ? '#cbd5e1' : '#6b7280' }}>Nenhum compromisso para hoje.</p>
+              ) : (
+                <div className="space-y-2">
+                  {events.map((event) => (
+                    <div
+                      key={event.id}
+                      className="border rounded-lg p-3"
+                      style={{
+                        borderColor: isDarkTheme ? '#334155' : '#e5e7eb',
+                        background: isDarkTheme ? '#0b1220' : '#ffffff',
+                      }}
+                    >
+                      <p className="font-medium">{event.title}</p>
+                      <p className="text-sm" style={{ color: isDarkTheme ? '#cbd5e1' : '#4b5563' }}>
+                        {new Date(event.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        {' - '}
+                        {new Date(event.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
                     ))}
@@ -177,8 +216,14 @@ export function AgendaComponent() {
         {activeTab === 'empresa' && (
           <div className="space-y-4">
             {!connection.connected ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                <p className="text-blue-900">Voce precisa conectar sua conta Google primeiro.</p>
+              <div
+                className="rounded-lg p-4 text-center"
+                style={{
+                  background: isDarkTheme ? '#14233b' : '#eff6ff',
+                  border: `1px solid ${isDarkTheme ? '#31507c' : '#bfdbfe'}`,
+                }}
+              >
+                <p style={{ color: isDarkTheme ? '#dbeafe' : '#1e3a8a' }}>Voce precisa conectar sua conta Google primeiro.</p>
               </div>
             ) : (
               <div className="space-y-3">

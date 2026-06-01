@@ -55,6 +55,11 @@ type MyProfile = {
   } | null
 }
 
+type MessengerToast = {
+  id: string
+  text: string
+}
+
 const moods: Array<{ key: MoodKey; label: string }> = [
   { key: 'very_happy', label: 'Muito Feliz' },
   { key: 'well', label: 'Bem' },
@@ -113,11 +118,19 @@ export function GoogleChatComponent() {
     underline: false,
     bgColor: '#ffffff',
   })
+  const [popupToasts, setPopupToasts] = useState<MessengerToast[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const heartbeatRef = useRef<number | null>(null)
   const conversationPollRef = useRef<number | null>(null)
   const messagesPollRef = useRef<number | null>(null)
+  const contactsPollRef = useRef<number | null>(null)
+  const activeTabRef = useRef<1 | 2 | 3>(1)
+  const selectedConversationIdRef = useRef<string | null>(null)
+  const initializedContactsRef = useRef(false)
+  const initializedConversationsRef = useRef(false)
+  const lastContactStatusRef = useRef<Record<string, ChatStatus>>({})
+  const lastUnreadByConversationRef = useRef<Record<string, number>>({})
 
   useEffect(() => {
     bootstrap()
@@ -125,6 +138,7 @@ export function GoogleChatComponent() {
       if (heartbeatRef.current) window.clearInterval(heartbeatRef.current)
       if (conversationPollRef.current) window.clearInterval(conversationPollRef.current)
       if (messagesPollRef.current) window.clearInterval(messagesPollRef.current)
+      if (contactsPollRef.current) window.clearInterval(contactsPollRef.current)
     }
   }, [])
 
@@ -142,10 +156,26 @@ export function GoogleChatComponent() {
   }, [])
 
   useEffect(() => {
+    activeTabRef.current = activeTab
+  }, [activeTab])
+
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversation?.id || null
+  }, [selectedConversation?.id])
+
+  useEffect(() => {
     if (conversationPollRef.current) window.clearInterval(conversationPollRef.current)
     conversationPollRef.current = window.setInterval(() => void fetchConversations(), 3000)
     return () => {
       if (conversationPollRef.current) window.clearInterval(conversationPollRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (contactsPollRef.current) window.clearInterval(contactsPollRef.current)
+    contactsPollRef.current = window.setInterval(() => void fetchContacts(), 4000)
+    return () => {
+      if (contactsPollRef.current) window.clearInterval(contactsPollRef.current)
     }
   }, [])
 
@@ -188,13 +218,76 @@ export function GoogleChatComponent() {
   async function fetchContacts() {
     const response = await fetch('/api/chat/contacts')
     const data = await response.json()
-    setContacts(Array.isArray(data) ? data : [])
+    const nextContacts = Array.isArray(data) ? (data as Contact[]) : []
+
+    if (initializedContactsRef.current) {
+      const previous = lastContactStatusRef.current
+      for (const contact of nextContacts) {
+        const prevStatus = previous[contact.id] || 'offline'
+        const nextStatus = (contact.status || 'offline') as ChatStatus
+        if (prevStatus === 'offline' && nextStatus !== 'offline') {
+          const label = contact.nickname || contact.short_name || formatName(contact.full_name) || contact.email
+          pushToast(`${label} acabou de entrar.`)
+        }
+      }
+    }
+
+    const statusMap: Record<string, ChatStatus> = {}
+    for (const c of nextContacts) {
+      statusMap[c.id] = (c.status || 'offline') as ChatStatus
+    }
+    lastContactStatusRef.current = statusMap
+    initializedContactsRef.current = true
+    setContacts(nextContacts)
   }
 
   async function fetchConversations() {
     const response = await fetch('/api/chat/conversations')
     const data = await response.json()
-    setConversations(Array.isArray(data) ? data : [])
+    const nextConversations = Array.isArray(data) ? (data as Conversation[]) : []
+
+    if (initializedConversationsRef.current) {
+      const previousUnread = lastUnreadByConversationRef.current
+      for (const conv of nextConversations) {
+        const prev = previousUnread[conv.id] || 0
+        const next = conv.unreadCount || 0
+        const hasNewUnread = next > prev
+        if (!hasNewUnread) continue
+
+        const isCurrentChatOpen =
+          activeTabRef.current === 3 &&
+          selectedConversationIdRef.current === conv.id &&
+          !document.hidden
+
+        if (!isCurrentChatOpen) {
+          const label =
+            conv.participant.nickname ||
+            conv.participant.short_name ||
+            formatName(conv.participant.full_name) ||
+            conv.participant.email
+          pushToast(`${label} te enviou uma mensagem.`)
+        }
+      }
+    }
+
+    const unreadMap: Record<string, number> = {}
+    for (const conv of nextConversations) {
+      unreadMap[conv.id] = conv.unreadCount || 0
+    }
+    lastUnreadByConversationRef.current = unreadMap
+    initializedConversationsRef.current = true
+    setConversations(nextConversations)
+  }
+
+  function pushToast(text: string) {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setPopupToasts((prev) => {
+      const next = [...prev, { id, text }]
+      return next.slice(-4)
+    })
+    window.setTimeout(() => {
+      setPopupToasts((prev) => prev.filter((t) => t.id !== id))
+    }, 4800)
   }
 
   async function saveProfile() {
@@ -708,6 +801,14 @@ export function GoogleChatComponent() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="brs-messenger-toast-stack" aria-live="polite">
+        {popupToasts.map((toast) => (
+          <div key={toast.id} className="brs-messenger-toast-item">
+            {toast.text}
+          </div>
+        ))}
       </div>
     </div>
   )

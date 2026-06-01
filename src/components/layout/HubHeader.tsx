@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   Bell, Grid, User, LogOut, Settings, X,
   ShieldCheck, ExternalLink, HelpCircle, LayoutGrid,
@@ -35,6 +35,9 @@ export default function HubHeader({ user }: HubHeaderProps) {
   const [toast, setToast] = useState<{ id: string; text: string } | null>(null)
   const [themePref, setThemePref] = useState<ThemePreference>('light')
   const [isDarkTheme, setIsDarkTheme] = useState(false)
+  const notificationsRef = useRef<HTMLDivElement | null>(null)
+  const appsRef = useRef<HTMLDivElement | null>(null)
+  const userMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     async function loadPerms() {
@@ -70,6 +73,26 @@ export default function HubHeader({ user }: HubHeaderProps) {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+
+      if (showNotifications && notificationsRef.current && !notificationsRef.current.contains(target)) {
+        setShowNotifications(false)
+      }
+      if (showApps && appsRef.current && !appsRef.current.contains(target)) {
+        setShowApps(false)
+      }
+      if (showUserMenu && userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setShowUserMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [showNotifications, showApps, showUserMenu])
 
   async function handleThemeChange(next: ThemePreference) {
     setThemePref(next)
@@ -278,7 +301,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
             {toast.text}
           </div>
         )}
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} ref={notificationsRef}>
         <button
           className="icon-button"
           onClick={async () => {
@@ -301,7 +324,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
               right: 0,
               zIndex: 1000,
               width: '320px',
-              background: '#fff',
+              background: 'var(--brs-surface)',
               borderRadius: '16px',
               boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
               border: '1px solid var(--brs-gray-100)',
@@ -367,7 +390,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
         )}
         </div>
 
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} ref={appsRef}>
           <button 
             className="icon-button"
             onClick={() => setShowApps(!showApps)}
@@ -450,7 +473,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
           )}
         </div>
 
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} ref={userMenuRef}>
           <button 
             className="user-profile-button"
             onClick={() => setShowUserMenu(!showUserMenu)}
@@ -494,7 +517,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
                 )}
               </div>
 
-              <div style={{ fontSize: '1.5rem', fontWeight: 500, color: 'var(--brs-navy)', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 500, color: isDarkTheme ? 'var(--brs-gray-800)' : 'var(--brs-navy)', marginBottom: '1.5rem' }}>
                 Olá, {user.name.split(' ')[0]}!
               </div>
 
@@ -518,7 +541,14 @@ export default function HubHeader({ user }: HubHeaderProps) {
                   <Link 
                     href="/usuarios" 
                     className="btn btn-outline" 
-                    style={{ borderRadius: '100px', padding: '0.6rem', fontSize: '0.875rem', fontWeight: 600, justifyContent: 'center' }}
+                    style={{
+                      borderRadius: '100px',
+                      padding: '0.6rem',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      justifyContent: 'center',
+                      color: isDarkTheme ? 'var(--brs-gray-800)' : 'var(--brs-navy)',
+                    }}
                     onClick={() => setShowUserMenu(false)}
                   >
                     Gerenciar sua conta
