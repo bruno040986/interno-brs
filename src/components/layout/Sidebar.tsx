@@ -92,8 +92,8 @@ export default function Sidebar() {
       { label: 'API E-mail', href: '/rh/parceiros/config/provedores/email', icon: Mail },
       { label: 'API WhatsApp', href: '/rh/parceiros/config/provedores/whatsapp', icon: MessageSquare },
       { label: 'API Assinatura Eletrônica', href: '/rh/parceiros/config/provedores/assinatura', icon: FileText },
+      { label: 'Google', href: '/rh/parceiros/config/provedores/google', icon: Globe },
       { section: 'Integrações (Em breve)' },
-      { label: 'Google', href: '/rh/parceiros/config/provedores/breve?api=Google', icon: Globe },
       { label: 'API QuarkRH', href: '/rh/parceiros/config/provedores/breve?api=QuarkRH', icon: Users },
       { label: 'API Conta Azul', href: '/rh/parceiros/config/provedores/breve?api=ContaAzul', icon: BarChart2 },
       { label: 'API ARW', href: '/rh/parceiros/config/provedores/breve?api=ARW', icon: Key },
@@ -154,7 +154,7 @@ export default function Sidebar() {
     if (item.href === '/rh/parceiros/config/provedores/whatsapp') return canView('sistema-config-whatsapp')
     if (item.href === '/rh/parceiros/config/provedores/assinatura') return canView('sistema-config-assinatura')
     if (item.href === '/rh/parceiros/config/provedores/empresas') return canView('sistema-config-empresa')
-    if (item.href?.includes('Google')) return canView('sistema-config-google')
+    if (item.href === '/rh/parceiros/config/provedores/google') return canView('sistema-config-google')
     if (item.href?.includes('QuarkRH')) return canView('sistema-config-quarkrh')
     if (item.href?.includes('ContaAzul')) return canView('sistema-config-contaazul')
     if (item.href?.includes('ARW')) return canView('sistema-config-arw')
@@ -244,4 +244,3 @@ export default function Sidebar() {
     </>
   )
 }
-

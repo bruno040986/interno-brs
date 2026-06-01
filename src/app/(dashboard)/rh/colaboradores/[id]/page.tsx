@@ -13,6 +13,7 @@ import { generateVTPdf, generateDisciplinaryPdf } from '@/lib/utils/pdfGenerator
 import type { Employee, VtRecord, DisciplinaryRecord } from '@/types'
 import { getMyEffectivePermissions } from '@/lib/auth/actions'
 import { hasPermission } from '@/lib/auth/permissions'
+import { deleteLatestVtRecord } from '../../server-actions'
 
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return null
@@ -349,12 +350,11 @@ export default function PerfilColaboradorPage() {
                                   alert('Somente o último registro pode ser excluído.')
                                   return
                                 }
-                                const { error } = await supabase.from('vt_records').delete().eq('id', record.id)
-                                if (!error) {
-                                  const { data: prev } = await supabase.from('vt_records').select('type').eq('employee_id', id).order('option_date', { ascending: false }).limit(1).single()
-                                  const newStatus = prev ? (prev.type === 'option' ? 'optante' : 'recusou') : 'pendente'
-                                  await supabase.from('employees').update({ vt_status: newStatus }).eq('id', id)
+                                try {
+                                  await deleteLatestVtRecord(String(id), record.id)
                                   fetchData()
+                                } catch (err) {
+                                  console.error('Erro ao excluir registro VT:', err)
                                 }
                               }}
                               title="Excluir"

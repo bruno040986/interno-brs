@@ -7,6 +7,8 @@ interface GoogleConfig {
   id: string
   client_id: string
   client_secret: string
+  has_client_secret?: boolean
+  can_edit?: boolean
 }
 
 export function GoogleConfigForm({ config }: { config: GoogleConfig | null }) {
@@ -15,9 +17,16 @@ export function GoogleConfigForm({ config }: { config: GoogleConfig | null }) {
   const [clientId, setClientId] = useState(config?.client_id || '')
   const [clientSecret, setClientSecret] = useState(config?.client_secret || '')
   const [showSecret, setShowSecret] = useState(false)
+  const hasSavedSecret = Boolean(config?.has_client_secret)
+  const canEdit = config?.can_edit !== false
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!canEdit) {
+      setMessage('Sem permissao para editar a configuracao do Google.')
+      return
+    }
+
     setIsLoading(true)
     setMessage('')
 
@@ -28,9 +37,10 @@ export function GoogleConfigForm({ config }: { config: GoogleConfig | null }) {
       formData.append('client_secret', clientSecret)
 
       await updateGoogleConfig(formData)
-      setMessage('✓ Credenciais salvas com sucesso!')
+      setClientSecret('')
+      setMessage('Credenciais salvas com sucesso.')
     } catch (error) {
-      setMessage(`✗ Erro ao salvar: ${error instanceof Error ? error.message : 'Desconhecido'}`)
+      setMessage(`Erro ao salvar: ${error instanceof Error ? error.message : 'Desconhecido'}`)
     } finally {
       setIsLoading(false)
     }
@@ -41,11 +51,11 @@ export function GoogleConfigForm({ config }: { config: GoogleConfig | null }) {
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-900 mb-2">📋 Instruções</h3>
+        <h3 className="font-semibold text-blue-900 mb-2">Instrucoes</h3>
         <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-          <li>Configure o projeto no Google Cloud Console (ver instruções em documento anexo)</li>
-          <li>Copie o <strong>Client ID</strong> e o <strong>Client Secret</strong></li>
-          <li>Cole nos campos abaixo</li>
+          <li>Configure o projeto no Google Cloud Console.</li>
+          <li>Copie o <strong>Client ID</strong> e o <strong>Client Secret</strong>.</li>
+          <li>Cole nos campos abaixo.</li>
           <li>Adicione esta URI de redirecionamento no Google Cloud: <code className="bg-white px-2 py-1 rounded text-xs">{redirectUri}</code></li>
         </ol>
       </div>
@@ -60,8 +70,9 @@ export function GoogleConfigForm({ config }: { config: GoogleConfig | null }) {
             placeholder="XXXXXXXXXXXXXXXX.apps.googleusercontent.com"
             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
+            disabled={!canEdit}
           />
-          <p className="text-xs text-gray-500 mt-1">Encontrado em: Google Cloud Console → Credenciais → OAuth Client ID</p>
+          <p className="text-xs text-gray-500 mt-1">Encontrado em Google Cloud Console, Credenciais, OAuth Client ID.</p>
         </div>
 
         <div>
@@ -71,23 +82,25 @@ export function GoogleConfigForm({ config }: { config: GoogleConfig | null }) {
               type={showSecret ? 'text' : 'password'}
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
-              placeholder="GOCSPX-XXXXXXXXXXXXXXXXXX"
+              placeholder={hasSavedSecret ? 'Preencha apenas se quiser trocar o segredo' : 'GOCSPX-XXXXXXXXXXXXXXXXXX'}
               className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+              required={!hasSavedSecret}
+              disabled={!canEdit}
             />
             <button
               type="button"
               onClick={() => setShowSecret(!showSecret)}
               className="px-3 py-2 bg-gray-200 rounded-lg text-sm font-medium hover:bg-gray-300"
+              disabled={!canEdit}
             >
-              {showSecret ? '🙈' : '👁️'}
+              {showSecret ? 'Ocultar' : 'Mostrar'}
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-1">Mantenha seguro! Nunca compartilhe esta chave.</p>
+          <p className="text-xs text-gray-500 mt-1">O segredo salvo nao e exibido novamente.</p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-2">Redirect URI (Apenas Leitura)</label>
+          <label className="block text-sm font-medium mb-2">Redirect URI</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -100,38 +113,38 @@ export function GoogleConfigForm({ config }: { config: GoogleConfig | null }) {
               onClick={() => navigator.clipboard.writeText(redirectUri)}
               className="px-3 py-2 bg-gray-200 rounded-lg text-sm font-medium hover:bg-gray-300"
             >
-              📋
+              Copiar
             </button>
           </div>
         </div>
 
         <div className="bg-green-50 border border-green-200 rounded-lg p-3">
           <p className="text-xs text-green-800">
-            <strong>Status:</strong> {clientId && clientSecret ? '✓ Configurado' : '⚠️ Aguardando credenciais'}
+            <strong>Status:</strong> {clientId && (clientSecret || hasSavedSecret) ? 'Configurado' : 'Aguardando credenciais'}
           </p>
         </div>
 
         {message && (
-          <div className={`p-3 rounded-lg text-sm ${message.includes('✓') ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          <div className={`p-3 rounded-lg text-sm ${message.includes('sucesso') ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
             {message}
           </div>
         )}
 
         <button
           type="submit"
-          disabled={isLoading || !clientId || !clientSecret}
+          disabled={isLoading || !canEdit || !clientId || (!clientSecret && !hasSavedSecret)}
           className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          {isLoading ? '⏳ Salvando...' : '💾 Salvar Configurações'}
+          {isLoading ? 'Salvando...' : 'Salvar configuracoes'}
         </button>
       </form>
 
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
-        <p className="font-semibold text-amber-900 mb-2">⚠️ Importante</p>
+        <p className="font-semibold text-amber-900 mb-2">Importante</p>
         <ul className="text-amber-800 space-y-1 list-disc list-inside">
-          <li>As credenciais são armazenadas de forma segura no banco de dados Supabase</li>
-          <li>Apenas administradores com acesso a esta página podem visualizar as chaves</li>
-          <li>Se suspeitar de vazamento, regenere as chaves no Google Cloud Console imediatamente</li>
+          <li>As credenciais ficam no banco e nunca sao enviadas ao navegador depois de salvas.</li>
+          <li>A edicao exige permissao especifica de Google.</li>
+          <li>Se suspeitar de vazamento, regenere as chaves no Google Cloud Console.</li>
         </ul>
       </div>
     </div>

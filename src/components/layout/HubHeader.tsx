@@ -142,7 +142,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
     { resource: 'sistema-config-whatsapp', href: '/rh/parceiros/config/provedores/whatsapp' },
     { resource: 'sistema-config-assinatura', href: '/rh/parceiros/config/provedores/assinatura' },
     { resource: 'sistema-config-empresa', href: '/rh/parceiros/config/provedores/empresas' },
-    { resource: 'sistema-config-google', href: '/rh/parceiros/config/provedores/breve?api=Google' },
+    { resource: 'sistema-config-google', href: '/rh/parceiros/config/provedores/google' },
     { resource: 'sistema-config-quarkrh', href: '/rh/parceiros/config/provedores/breve?api=QuarkRH' },
     { resource: 'sistema-config-contaazul', href: '/rh/parceiros/config/provedores/breve?api=ContaAzul' },
     { resource: 'sistema-config-arw', href: '/rh/parceiros/config/provedores/breve?api=ARW' },
@@ -176,6 +176,13 @@ export default function HubHeader({ user }: HubHeaderProps) {
 
   const filteredSystemApps = resolvedSystemApps.filter(app => {
     if (app.id === 'home') return true
+    if (app.id === 'sistema-usuarios-root') {
+      return hasAnyPermission(permissions, [
+        { resource: 'sistema-usuarios-root' },
+        { resource: 'sistema-usuarios-cadastro' },
+        { resource: 'sistema-usuarios-perfis' },
+      ])
+    }
     if (app.id === 'sistema-config-root') {
       return hasAnyPermission(
         permissions,

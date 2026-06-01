@@ -1,34 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
-  const state = searchParams.get('state')
   const error = searchParams.get('error')
+  const state = searchParams.get('state')
+  const savedState = request.cookies.get('google_oauth_state')?.value
 
   if (error) {
-    return NextResponse.redirect(new URL(`/dashboard?error=${error}`, request.url))
+    return NextResponse.redirect(new URL(`/?error=${error}`, request.url))
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/dashboard?error=no_code', request.url))
+    return NextResponse.redirect(new URL('/?error=no_code', request.url))
+  }
+  if (!state || !savedState || state !== savedState) {
+    return NextResponse.redirect(new URL('/?error=invalid_oauth_state', request.url))
   }
 
   try {
+    const adminSupabase = await createAdminClient()
     const supabase = await createClient()
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
 
-    // Buscar credenciais do banco
-    const { data: config } = await supabase
+    if (!currentUser) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    const { data: config, error: configError } = await adminSupabase
       .from('system_google_config')
       .select('client_id, client_secret')
       .single()
 
-    if (!config?.client_id || !config?.client_secret) {
+    if (configError || !config?.client_id || !config?.client_secret) {
       throw new Error('Google credentials not configured')
     }
 
-    // Trocar o código por tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -47,7 +55,6 @@ export async function GET(request: NextRequest) {
 
     const tokens = await tokenResponse.json()
 
-    // Buscar informações do usuário do Google
     const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     })
@@ -57,43 +64,46 @@ export async function GET(request: NextRequest) {
     }
 
     const googleUser = await userResponse.json()
-
-    // Buscar o usuário atual do Supabase
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-
-    if (!currentUser) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-
-    // Salvar ou atualizar os tokens do usuário
     const expiryDate = new Date()
     expiryDate.setSeconds(expiryDate.getSeconds() + tokens.expires_in)
 
-    const { error: upsertError } = await supabase
+    let refreshTokenToSave = tokens.refresh_token || null
+    if (!refreshTokenToSave) {
+      const { data: existingAuth } = await adminSupabase
+        .from('user_google_auth')
+        .select('refresh_token')
+        .eq('user_id', currentUser.id)
+        .maybeSingle()
+      if (!existingAuth?.refresh_token) {
+        throw new Error('Google nao retornou refresh_token. Revogue o acesso do app no Google e conecte novamente.')
+      }
+      refreshTokenToSave = existingAuth.refresh_token
+    }
+
+    const { error: upsertError } = await adminSupabase
       .from('user_google_auth')
       .upsert(
         {
           user_id: currentUser.id,
           email_vinculado: googleUser.email,
           access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
+          refresh_token: refreshTokenToSave,
           expiry_date: expiryDate.toISOString(),
         },
-        { onConflict: 'user_id' }
+        { onConflict: 'user_id' },
       )
 
     if (upsertError) {
       throw new Error(`Failed to save tokens: ${upsertError.message}`)
     }
 
-    // Redirecionar para a Dashboard com sucesso
-    return NextResponse.redirect(
-      new URL('/dashboard?google_auth=success', request.url)
-    )
-  } catch (error) {
-    console.error('Google OAuth callback error:', error)
-    return NextResponse.redirect(
-      new URL(`/dashboard?error=auth_failed`, request.url)
-    )
+    const response = NextResponse.redirect(new URL('/?google_auth=success', request.url))
+    response.cookies.set('google_oauth_state', '', { path: '/', maxAge: 0 })
+    return response
+  } catch (err) {
+    console.error('Google OAuth callback error:', err)
+    const response = NextResponse.redirect(new URL('/?error=auth_failed', request.url))
+    response.cookies.set('google_oauth_state', '', { path: '/', maxAge: 0 })
+    return response
   }
 }

@@ -9,6 +9,7 @@ import {
 import type { CompanyUnit } from '@/types'
 import { getMyEffectivePermissions } from '@/lib/auth/actions'
 import { hasPermission } from '@/lib/auth/permissions'
+import { saveCompanyUnit, toggleCompanyUnitStatus } from '../server-actions'
 
 export default function UnidadesPage() {
   const [units, setUnits] = useState<CompanyUnit[]>([])
@@ -60,19 +61,19 @@ export default function UnidadesPage() {
     if (!editingUnit?.name) return
     
     setSaving(true)
-    let error
-    
-    if (editingUnit.id) {
-      const { error: err } = await supabase
-        .from('company_units')
-        .update(editingUnit)
-        .eq('id', editingUnit.id)
-      error = err
-    } else {
-      const { error: err } = await supabase
-        .from('company_units')
-        .insert([editingUnit])
-      error = err
+    let error: Error | null = null
+    try {
+      await saveCompanyUnit({
+        id: editingUnit.id,
+        name: String(editingUnit.name || ''),
+        active: editingUnit.active !== false,
+        address: editingUnit.address || null,
+        city: editingUnit.city || null,
+        state: editingUnit.state || null,
+        zip_code: editingUnit.zip_code || null,
+      })
+    } catch (err: unknown) {
+      error = err instanceof Error ? err : new Error('Falha ao salvar unidade.')
     }
     
     if (!error) {
@@ -97,12 +98,12 @@ export default function UnidadesPage() {
 
   async function toggleStatus(unit: CompanyUnit) {
     if (!canEdit) return
-    const { error } = await supabase
-      .from('company_units')
-      .update({ active: !unit.active })
-      .eq('id', unit.id)
-    
-    if (!error) fetchUnits()
+    try {
+      await toggleCompanyUnitStatus(unit.id, !unit.active)
+      fetchUnits()
+    } catch (err) {
+      console.error('Erro ao alterar status da unidade:', err)
+    }
   }
 
   return (

@@ -4,9 +4,14 @@ import { useState, useEffect } from 'react'
 import type { CalendarEvent } from '@/lib/google/calendar'
 import { CreateEventModal } from './CreateEventModal'
 
+type ConnectionState = {
+  connected: boolean
+  reason?: string
+}
+
 export function AgendaComponent() {
   const [activeTab, setActiveTab] = useState<'minha' | 'empresa'>('minha')
-  const [isConnected, setIsConnected] = useState(false)
+  const [connection, setConnection] = useState<ConnectionState>({ connected: false })
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingEvents, setIsLoadingEvents] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -23,9 +28,13 @@ export function AgendaComponent() {
     try {
       const response = await fetch('/api/calendar/check-connection')
       const data = await response.json()
-      setIsConnected(data.connected)
+      setConnection({
+        connected: Boolean(data.connected),
+        reason: typeof data.reason === 'string' ? data.reason : undefined,
+      })
     } catch (error) {
       console.error('Error checking connection:', error)
+      setConnection({ connected: false, reason: 'network_error' })
     } finally {
       setIsLoading(false)
     }
@@ -43,26 +52,19 @@ export function AgendaComponent() {
   }
 
   async function handleConnectGoogle() {
-    const state = Math.random().toString(36).substring(7)
-    sessionStorage.setItem('oauth_state', state)
-
     try {
-      const response = await fetch('/api/auth/google/url', {
-        headers: { 'x-oauth-state': state },
-      })
+      const response = await fetch('/api/auth/google/url')
+      const data = await response.json()
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error('Failed to generate Google auth URL:', errorData.error)
-        alert(`Erro ao conectar Google: ${errorData.error || 'Falha desconhecida'}`)
+      if (!response.ok || !data?.authUrl) {
+        alert(`Erro ao conectar Google: ${data?.error || 'Falha desconhecida'}`)
         return
       }
 
-      const data = await response.json()
       window.location.href = data.authUrl
     } catch (error) {
       console.error('Error during Google connection:', error)
-      alert('Erro ao conectar ao Google. Verifique as credenciais.')
+      alert('Erro ao conectar ao Google. Verifique as credenciais na configuracao.')
     }
   }
 
@@ -71,7 +73,7 @@ export function AgendaComponent() {
     try {
       const response = await fetch('/api/calendar/events')
       const data = await response.json()
-      setEvents(data)
+      setEvents(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching events:', error)
       setEvents([])
@@ -85,7 +87,7 @@ export function AgendaComponent() {
     try {
       const response = await fetch(`/api/calendar/events?user=${encodeURIComponent(userEmail)}`)
       const data = await response.json()
-      setEvents(data)
+      setEvents(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching user events:', error)
       setEvents([])
@@ -95,97 +97,74 @@ export function AgendaComponent() {
   }
 
   useEffect(() => {
-    if (activeTab === 'minha' && isConnected) {
-      fetchMyEvents()
-    }
-  }, [activeTab, isConnected])
+    if (activeTab === 'minha' && connection.connected) fetchMyEvents()
+  }, [activeTab, connection.connected])
 
   useEffect(() => {
-    if (activeTab === 'empresa' && selectedUser) {
-      fetchUserEvents(selectedUser)
-    }
+    if (activeTab === 'empresa' && selectedUser) fetchUserEvents(selectedUser)
   }, [selectedUser, activeTab])
+
+  const connectionHint =
+    connection.reason === 'token_invalid'
+      ? 'Conexao expirada. Reconecte sua conta Google.'
+      : 'Conecte sua conta Google para visualizar sua agenda.'
 
   return (
     <div className="w-full space-y-4">
-      {/* Abas */}
       <div className="flex border-b">
         <button
           onClick={() => setActiveTab('minha')}
           className={`px-4 py-2 font-medium ${
-            activeTab === 'minha'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
+            activeTab === 'minha' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          📅 Minha Agenda
+          Minha Agenda
         </button>
         <button
           onClick={() => setActiveTab('empresa')}
           className={`px-4 py-2 font-medium ${
-            activeTab === 'empresa'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
+            activeTab === 'empresa' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          👥 Agenda da Empresa
+          Agenda da Empresa
         </button>
       </div>
 
-      {/* Conteúdo das Abas */}
       <div className="bg-white rounded-lg p-6">
-        {/* Aba: Minha Agenda */}
         {activeTab === 'minha' && (
           <div className="space-y-4">
             {isLoading ? (
-              <p className="text-gray-500">⏳ Verificando conexão...</p>
-            ) : !isConnected ? (
+              <p className="text-gray-500">Verificando conexao...</p>
+            ) : !connection.connected ? (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                <p className="text-blue-900 mb-3">Conecte sua conta Google para visualizar sua agenda</p>
-                <button
-                  onClick={handleConnectGoogle}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  🔗 Conectar Google
+                <p className="text-blue-900 mb-3">{connectionHint}</p>
+                <button onClick={handleConnectGoogle} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  Conectar Google
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <h3 className="font-semibold">Seus Compromissos</h3>
-                  <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
-                  >
-                    ➕ Novo Compromisso
+                  <h3 className="font-semibold">Seus compromissos</h3>
+                  <button onClick={() => setIsModalOpen(true)} className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                    Novo Compromisso
                   </button>
                 </div>
 
                 {isLoadingEvents ? (
-                  <p className="text-gray-500 text-center py-8">⏳ Carregando eventos...</p>
+                  <p className="text-gray-500 text-center py-8">Carregando eventos...</p>
                 ) : events.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">Nenhum compromisso para hoje</p>
+                  <p className="text-gray-500 text-center py-8">Nenhum compromisso para hoje.</p>
                 ) : (
                   <div className="space-y-2">
                     {events.map((event) => (
                       <div key={event.id} className="border rounded-lg p-3 hover:bg-gray-50">
                         <p className="font-medium">{event.title}</p>
                         <p className="text-sm text-gray-600">
-                          {new Date(event.start).toLocaleTimeString('pt-BR', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {new Date(event.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           {' - '}
-                          {new Date(event.end).toLocaleTimeString('pt-BR', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {new Date(event.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                         </p>
-                        {event.attendees && event.attendees.length > 0 && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            👥 {event.attendees.map((a) => a.displayName || a.email).join(', ')}
-                          </p>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -195,23 +174,22 @@ export function AgendaComponent() {
           </div>
         )}
 
-        {/* Aba: Agenda da Empresa */}
         {activeTab === 'empresa' && (
           <div className="space-y-4">
-            {!isConnected ? (
+            {!connection.connected ? (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                <p className="text-blue-900">Você precisa conectar sua conta Google primeiro</p>
+                <p className="text-blue-900">Voce precisa conectar sua conta Google primeiro.</p>
               </div>
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Selecione um usuário:</label>
+                  <label className="block text-sm font-medium mb-2">Selecione um usuario:</label>
                   <select
                     value={selectedUser}
                     onChange={(e) => setSelectedUser(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">-- Escolha um usuário --</option>
+                    <option value="">-- Escolha um usuario --</option>
                     {users.map((user) => (
                       <option key={user.id} value={user.email}>
                         {user.full_name || user.email}
@@ -219,39 +197,6 @@ export function AgendaComponent() {
                     ))}
                   </select>
                 </div>
-
-                {selectedUser && (
-                  <div className="space-y-2">
-                    <h3 className="font-semibold">Agenda de {selectedUser}</h3>
-                    {isLoadingEvents ? (
-                      <p className="text-gray-500 text-center py-8">⏳ Carregando eventos...</p>
-                    ) : events.length === 0 ? (
-                      <p className="text-gray-500 text-center py-8">Nenhum compromisso para exibir</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {events.map((event) => (
-                          <div key={event.id} className="border rounded-lg p-3 hover:bg-gray-50 bg-gray-50">
-                            <p className="font-medium">{event.title}</p>
-                            <p className="text-sm text-gray-600">
-                              {new Date(event.start).toLocaleTimeString('pt-BR', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                              {' - '}
-                              {new Date(event.end).toLocaleTimeString('pt-BR', {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </p>
-                            {event.description && (
-                              <p className="text-xs text-gray-500 mt-1">{event.description}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </div>

@@ -6,6 +6,7 @@ import { Bus, Search, Plus, Filter, FileText, ChevronRight, Loader2, Trash2 } fr
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { deleteLatestVtRecord } from '../server-actions'
 
 export default function ValeTransportePage() {
   const [records, setRecords] = useState<any[]>([])
@@ -202,24 +203,12 @@ export default function ValeTransportePage() {
                             return
                           }
 
-                          const { error } = await supabase.from('vt_records').delete().eq('id', record.id)
-                          
-                          if (!error) {
-                            // Buscar o termo anterior para restaurar o status do colaborador
-                            const { data: prev } = await supabase
-                              .from('vt_records')
-                              .select('type')
-                              .eq('employee_id', record.employee_id)
-                              .order('option_date', { ascending: false })
-                              .limit(1)
-                              .single()
-                            
-                            const newStatus = prev ? (prev.type === 'option' ? 'optante' : 'recusou') : 'pendente'
-                            await supabase.from('employees').update({ vt_status: newStatus }).eq('id', record.employee_id)
-                            
+                          try {
+                            await deleteLatestVtRecord(record.employee_id, record.id)
                             fetchRecords()
-                          } else {
-                            alert('Erro ao excluir: ' + error.message)
+                          } catch (err: unknown) {
+                            const message = err instanceof Error ? err.message : 'Falha ao excluir registro.'
+                            alert('Erro ao excluir: ' + message)
                           }
                         }}
                         className="btn btn-ghost btn-sm text-danger"

@@ -65,11 +65,20 @@ const all = (requirements: PermissionRequirement[]): RouteAccessRule => ({
 })
 
 const exactRouteRules: Record<string, RouteAccessRule> = {
-  '/usuarios': any([view('sistema-usuarios-root')]),
+  '/usuarios': any([
+    view('sistema-usuarios-root'),
+    view('sistema-usuarios-cadastro'),
+    view('sistema-usuarios-perfis'),
+  ]),
   '/links': any([view('sistema-links')]),
   '/rh': any([view('rh-painel')]),
   '/api/import': any([include('rh-importacoes')]),
-  '/rh/parceiros/config/provedores': any([view('sistema-config-email')]),
+  '/api/users/list': any([
+    view('sistema-usuarios-root'),
+    view('sistema-usuarios-cadastro'),
+    view('sistema-usuarios-perfis'),
+  ]),
+  '/rh/parceiros/config/provedores': any(systemConfigRouteOptions),
   '/rh/parceiros/config/empresas': any([view('sistema-config-empresa')]),
   '/rh/parceiros/config/provedores/empresas': any([view('sistema-config-empresa')]),
   '/rh/parceiros/config/provedores/email': any([view('sistema-config-email')]),
@@ -77,6 +86,20 @@ const exactRouteRules: Record<string, RouteAccessRule> = {
   '/rh/parceiros/config/provedores/assinatura': any([view('sistema-config-assinatura')]),
   '/rh/parceiros/config/provedores/google': any([view('sistema-config-google')]),
 }
+
+const authenticatedOpenRoutes = new Set([
+  '/api/auth/google/url',
+  '/api/auth/google/callback',
+  '/api/calendar/check-connection',
+  '/api/calendar/create-event',
+  '/api/calendar/events',
+  '/api/chat/contacts',
+  '/api/chat/profile',
+  '/api/chat/presence',
+  '/api/chat/upload',
+  '/api/chat/conversations',
+  '/api/chat/messages',
+])
 
 const prefixRouteRules: Array<[string, RouteAccessRule]> = [
   ['/rh/vale-transporte/novo', any([include('rh-vale-transporte')])],
@@ -88,7 +111,7 @@ const prefixRouteRules: Array<[string, RouteAccessRule]> = [
   ['/rh/parceiros/config/processos', any([view('scp-processos')])],
   ['/rh/parceiros/config/formularios', any([view('scp-construtor')])],
   ['/rh/parceiros/config/documentos', any([view('scp-documentos')])],
-  ['/rh/parceiros/config/templates', any([view('scp-documentos')])],
+  ['/rh/parceiros/config/templates', any([view('scp-documentos'), view('scp-emails')])],
   ['/rh/parceiros/config/emails', any([view('scp-emails')])],
   ['/rh/parceiros/config/whatsapp', any([view('scp-whatsapp')])],
   ['/rh/colaboradores', any([view('rh-colaboradores')])],
@@ -129,6 +152,8 @@ export function getRouteAccessDecision(
 
   const exactRule = exactRouteRules[normalizedPath]
   if (exactRule) return { type: 'permission', rule: exactRule }
+
+  if (authenticatedOpenRoutes.has(normalizedPath)) return { type: 'open' }
 
   const prefixRule = prefixRouteRules
     .sort((a, b) => b[0].length - a[0].length)

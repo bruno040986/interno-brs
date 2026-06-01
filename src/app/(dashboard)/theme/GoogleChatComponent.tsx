@@ -1,370 +1,612 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { Search, Send, Smile, Paperclip, Zap } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { EllipsisVertical, MessageSquareText, Paperclip, Search, Send, Users } from 'lucide-react'
 
-interface ChatUser {
+type MoodKey = 'very_happy' | 'well' | 'thinking' | 'tired' | 'irritated' | 'down'
+type ChatStatus = 'online' | 'offline' | 'busy' | 'away'
+
+type Contact = {
   id: string
   email: string
   full_name?: string
-  avatar?: string
+  short_name?: string
+  avatar_url?: string | null
+  nickname?: string | null
+  status?: ChatStatus
+  mood?: MoodKey | null
+  status_message?: string | null
 }
 
-interface ChatMessage {
+type ChatMessage = {
   id: string
   text: string
   timestamp: string
-  sender: ChatUser
-  attachments?: Array<{ id: string; name: string; url: string }>
+  sender: {
+    id: string
+    email: string
+    full_name?: string
+  }
+  text_style?: {
+    bold?: boolean
+    italic?: boolean
+    underline?: boolean
+    bgColor?: string
+  } | null
+  attachments?: Array<{ name?: string; url?: string; size?: number; type?: string }>
 }
 
-interface ChatConversation {
+type Conversation = {
   id: string
-  participant: ChatUser
+  participant: Contact
   lastMessage?: ChatMessage
   unreadCount: number
 }
 
+type MyProfile = {
+  user: { id: string; name?: string; email?: string; avatar_url?: string | null } | null
+  profile: {
+    nickname?: string | null
+    status?: ChatStatus
+    mood?: MoodKey | null
+    mood_date?: string | null
+    status_message?: string | null
+  } | null
+}
+
+const moods: Array<{ key: MoodKey; label: string }> = [
+  { key: 'very_happy', label: 'Muito Feliz' },
+  { key: 'well', label: 'Bem' },
+  { key: 'thinking', label: 'Pensativo' },
+  { key: 'tired', label: 'Cansado' },
+  { key: 'irritated', label: 'Irritado' },
+  { key: 'down', label: 'Desanimado' },
+]
+
+const moodEmoji: Record<MoodKey, string> = {
+  very_happy: '🌟',
+  well: '🙂',
+  thinking: '😐',
+  tired: '🥱',
+  irritated: '😒',
+  down: '😢',
+}
+
+const statusIcon: Record<ChatStatus, string> = {
+  online: '🟢',
+  offline: '⚪',
+  busy: '⛔',
+  away: '🚫',
+}
+
+const bgPalette = ['#fef3c7', '#dbeafe', '#dcfce7', '#fee2e2', '#f3e8ff', '#ffffff']
+
+function formatName(label?: string | null) {
+  if (!label) return ''
+  const parts = label.trim().split(' ').filter(Boolean)
+  return parts.slice(0, 2).join(' ')
+}
+
 export function GoogleChatComponent() {
-  const [activeTab, setActiveTab] = useState<'contatos' | 'conversas'>('contatos')
-  const [isConnected, setIsConnected] = useState(false)
+  const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1)
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null)
-  const [showConversationView, setShowConversationView] = useState(false)
-  
-  // Estados da conversa
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [messageText, setMessageText] = useState('')
-  const [isSending, setIsSending] = useState(false)
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [showGifPicker, setShowGifPicker] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
-  
-  // Dados
-  const [contacts, setContacts] = useState<ChatUser[]>([])
-  const [conversations, setConversations] = useState<ChatConversation[]>([])
-  const [searchQuery, setSearchQuery] = useState('')
+  const [search, setSearch] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [text, setText] = useState('')
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; url: string; size: number; type: string }>>([])
+  const [menuConversationId, setMenuConversationId] = useState<string | null>(null)
+  const [myProfile, setMyProfile] = useState<MyProfile>({ user: null, profile: null })
+  const [nickname, setNickname] = useState('')
+  const [status, setStatus] = useState<ChatStatus>('online')
+  const [mood, setMood] = useState<MoodKey | ''>('')
+  const [statusMessage, setStatusMessage] = useState('')
+  const [style, setStyle] = useState<{ bold: boolean; italic: boolean; underline: boolean; bgColor: string }>({
+    bold: false,
+    italic: false,
+    underline: false,
+    bgColor: '#ffffff',
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const heartbeatRef = useRef<number | null>(null)
 
   useEffect(() => {
-    checkGoogleConnection()
+    bootstrap()
+    return () => {
+      if (heartbeatRef.current) window.clearInterval(heartbeatRef.current)
+    }
   }, [])
 
-  async function checkGoogleConnection() {
-    try {
-      const response = await fetch('/api/calendar/check-connection')
-      const data = await response.json()
-      setIsConnected(data.connected)
-      if (data.connected) {
-        fetchContacts()
-        fetchConversations()
-      }
-    } catch (error) {
-      console.error('Error checking connection:', error)
-    } finally {
-      setIsLoading(false)
-    }
+  async function bootstrap() {
+    setIsLoading(true)
+    await Promise.all([fetchMyProfile(), fetchContacts(), fetchConversations()])
+    await heartbeat()
+    heartbeatRef.current = window.setInterval(() => void heartbeat(), 60000)
+    setIsLoading(false)
+  }
+
+  async function fetchMyProfile() {
+    const response = await fetch('/api/chat/profile')
+    const data = await response.json()
+    if (!response.ok) return
+    setMyProfile(data)
+    setNickname(data.profile?.nickname || '')
+    setStatus(data.profile?.status || 'online')
+    const today = new Date().toISOString().slice(0, 10)
+    const currentMood = data.profile?.mood && data.profile?.mood_date === today ? data.profile.mood : ''
+    setMood(currentMood || '')
+    setStatusMessage(data.profile?.status_message || '')
+  }
+
+  async function heartbeat() {
+    await fetch('/api/chat/presence', { method: 'POST' })
   }
 
   async function fetchContacts() {
-    try {
-      const response = await fetch('/api/users/list')
-      const data = await response.json()
-      setContacts(data)
-    } catch (error) {
-      console.error('Error fetching contacts:', error)
-    }
+    const response = await fetch('/api/chat/contacts')
+    const data = await response.json()
+    setContacts(Array.isArray(data) ? data : [])
   }
 
   async function fetchConversations() {
-    try {
-      const response = await fetch('/api/chat/conversations')
+    const response = await fetch('/api/chat/conversations')
+    const data = await response.json()
+    setConversations(Array.isArray(data) ? data : [])
+  }
+
+  async function saveProfile() {
+    await fetch('/api/chat/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nickname: nickname || null,
+        status,
+        mood: mood || null,
+        status_message: statusMessage || null,
+      }),
+    })
+    await Promise.all([fetchMyProfile(), fetchContacts(), fetchConversations()])
+  }
+
+  async function openConversation(contact: Contact) {
+    let conversation = conversations.find((c) => c.participant.id === contact.id) || null
+    if (!conversation) {
+      const response = await fetch('/api/chat/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participantId: contact.id }),
+      })
       const data = await response.json()
-      setConversations(data)
-    } catch (error) {
-      console.error('Error fetching conversations:', error)
+      if (!response.ok || !data?.id) return
+      await fetchConversations()
+      conversation = {
+        id: data.id,
+        participant: contact,
+        unreadCount: 0,
+      }
     }
+    setSelectedConversation(conversation)
+    setActiveTab(3)
+    await loadMessages(conversation.id)
   }
 
   async function loadMessages(conversationId: string) {
     setLoadingMessages(true)
-    try {
-      const response = await fetch(`/api/chat/messages?conversationId=${conversationId}`)
-      const data = await response.json()
-      setMessages(data)
-      scrollToBottom()
-    } catch (error) {
-      console.error('Error loading messages:', error)
-    } finally {
-      setLoadingMessages(false)
-    }
+    const response = await fetch(`/api/chat/messages?conversationId=${conversationId}`)
+    const data = await response.json()
+    setMessages(Array.isArray(data) ? data : [])
+    setLoadingMessages(false)
+    setTimeout(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+      }
+    }, 50)
+    await fetchConversations()
   }
 
   async function sendMessage() {
-    if (!messageText.trim() || !selectedConversation) return
-
+    if (!selectedConversation) return
+    if (!text.trim() && attachedFiles.length === 0) return
     setIsSending(true)
-    try {
-      const response = await fetch('/api/chat/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId: selectedConversation.id,
-          text: messageText,
-        }),
-      })
+    const response = await fetch('/api/chat/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversationId: selectedConversation.id,
+        text: text.trim() || '[Arquivo]',
+        textStyle: style,
+        attachments: attachedFiles,
+      }),
+    })
+    const data = await response.json()
+    setIsSending(false)
+    if (!response.ok) return
+      setMessages((prev) => [...prev, data])
+      setText('')
+      setAttachedFiles([])
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+        }
+      }, 50)
+      await fetchConversations()
+  }
 
+  async function onPickFile(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return
+    for (const file of Array.from(fileList)) {
+      if (file.size > 15 * 1024 * 1024) {
+        alert(`Arquivo ${file.name} excede 15MB.`)
+        continue
+      }
+      const form = new FormData()
+      form.append('file', file)
+      const response = await fetch('/api/chat/upload', { method: 'POST', body: form })
+      const uploaded = await response.json()
       if (response.ok) {
-        const newMessage = await response.json()
-        setMessages([...messages, newMessage])
-        setMessageText('')
-        scrollToBottom()
+        setAttachedFiles((prev) => [...prev, uploaded])
       }
-    } catch (error) {
-      console.error('Error sending message:', error)
-    } finally {
-      setIsSending(false)
     }
   }
 
-  function scrollToBottom() {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData.items
+    const files: File[] = []
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile()
+        if (file) files.push(file)
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault()
+      const dt = new DataTransfer()
+      files.forEach((f) => dt.items.add(f))
+      void onPickFile(dt.files)
+    }
   }
 
-  function handleContactClick(contact: ChatUser) {
-    // Procurar conversa existente ou criar nova
-    const existingConv = conversations.find((c) => c.participant.id === contact.id)
-    if (existingConv) {
-      setSelectedConversation(existingConv)
-      loadMessages(existingConv.id)
-    } else {
-      const newConv: ChatConversation = {
-        id: `temp-${contact.id}`,
-        participant: contact,
-        unreadCount: 0,
-      }
-      setSelectedConversation(newConv)
+  async function deleteConversation(id: string) {
+    // soft local removal (historico na base pode ser mantido)
+    setConversations((prev) => prev.filter((c) => c.id !== id))
+    if (selectedConversation?.id === id) {
+      setSelectedConversation(null)
       setMessages([])
+      setActiveTab(2)
     }
-    setShowConversationView(true)
   }
 
-  function handleConversationClick(conversation: ChatConversation) {
-    setSelectedConversation(conversation)
-    loadMessages(conversation.id)
-    setShowConversationView(true)
-  }
-
-  const filteredContacts = contacts.filter((c) =>
-    (c.full_name || c.email).toLowerCase().includes(searchQuery.toLowerCase()),
+  const onlineContacts = useMemo(
+    () => contacts.filter((c) => (c.status || 'offline') !== 'offline' && `${c.nickname || c.short_name || c.full_name || c.email}`.toLowerCase().includes(search.toLowerCase())),
+    [contacts, search],
   )
-  const filteredConversations = conversations.filter((c) =>
-    (c.participant.full_name || c.participant.email).toLowerCase().includes(searchQuery.toLowerCase()),
+  const offlineContacts = useMemo(
+    () => contacts.filter((c) => (c.status || 'offline') === 'offline' && `${c.nickname || c.short_name || c.full_name || c.email}`.toLowerCase().includes(search.toLowerCase())),
+    [contacts, search],
+  )
+  const filteredConversations = useMemo(
+    () =>
+      conversations.filter((c) =>
+        `${c.participant.nickname || c.participant.short_name || c.participant.full_name || c.participant.email}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      ),
+    [conversations, search],
   )
 
-  if (isLoading) {
-    return <div className="text-center py-4 text-gray-500">⏳ Carregando...</div>
-  }
+  const unreadTotal = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0)
+  const myNameDefault = formatName(myProfile.user?.name || myProfile.user?.email || '')
+  const myNameDisplay = nickname || myNameDefault
+  const today = new Date().toISOString().slice(0, 10)
+  const hasMoodToday = Boolean(myProfile.profile?.mood && myProfile.profile?.mood_date === today)
 
-  if (!isConnected) {
-    return (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-        <p className="text-blue-900">Conecte sua conta Google para usar o Google Chat</p>
-      </div>
-    )
-  }
-
-  if (showConversationView && selectedConversation) {
-    return (
-      <div className="flex flex-col h-full bg-white rounded-lg">
-        {/* Header da Conversa */}
-        <div className="flex items-center justify-between border-b p-3">
-          <button
-            onClick={() => setShowConversationView(false)}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-          >
-            ← Voltar
-          </button>
-          <h3 className="font-semibold flex-1 text-center">
-            {selectedConversation.participant.full_name || selectedConversation.participant.email}
-          </h3>
-          <div className="w-8"></div>
-        </div>
-
-        {/* Mensagens */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
-          {loadingMessages ? (
-            <div className="text-center py-4 text-gray-500 text-sm">Carregando mensagens...</div>
-          ) : messages.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">Nenhuma mensagem ainda. Seja o primeiro a escrever!</div>
-          ) : (
-            <>
-              {messages.map((msg) => (
-                <div key={msg.id} className="flex mb-2">
-                  <div className="mr-2">
-                    <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center text-xs font-bold">
-                      {msg.sender.full_name?.[0] || msg.sender.email[0]}
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-xs text-gray-600">
-                      <span className="font-semibold">{msg.sender.full_name || msg.sender.email}</span>
-                      {' '}
-                      <span className="text-gray-400">
-                        {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <div className="bg-white p-2 rounded mt-1 text-sm">{msg.text}</div>
-                  </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </>
-          )}
-        </div>
-
-        {/* Input de Mensagem */}
-        <div className="border-t p-3 space-y-2">
-          {showEmojiPicker && (
-            <div className="grid grid-cols-8 gap-1 p-2 bg-gray-100 rounded text-sm mb-2">
-              {['😀', '😂', '❤️', '👍', '🎉', '🔥', '✨', '😍'].map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => {
-                    setMessageText(messageText + emoji)
-                    setShowEmojiPicker(false)
-                  }}
-                  className="hover:bg-gray-200 p-1 rounded"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-              placeholder="Escreva uma mensagem..."
-              className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-            <button
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="px-2 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-gray-700"
-              title="Emoji"
-            >
-              <Smile size={16} />
-            </button>
-            <button
-              onClick={() => setShowGifPicker(!showGifPicker)}
-              className="px-2 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-gray-700"
-              title="GIF"
-            >
-              <Zap size={16} />
-            </button>
-            <button
-              className="px-2 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 text-gray-700"
-              title="Arquivo"
-            >
-              <Paperclip size={16} />
-            </button>
-            <button
-              onClick={sendMessage}
-              disabled={!messageText.trim() || isSending}
-              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 text-sm font-medium"
-            >
-              <Send size={16} />
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  if (isLoading) return <div className="text-sm text-gray-500 py-4">Carregando BRS Messenger...</div>
 
   return (
-    <div className="w-full space-y-3">
-      {/* Abas */}
-      <div className="flex border-b">
+    <div
+      className="rounded-md overflow-hidden"
+      style={{
+        border: '1px solid #7aa9c2',
+        boxShadow: 'inset 0 0 0 1px #cde9f7',
+        background: 'linear-gradient(180deg,#d9f2ff 0%,#b7e7fb 25%,#ffffff 25%,#ffffff 100%)',
+        fontFamily: 'Tahoma, Arial, sans-serif',
+      }}
+    >
+      <div
+        className="px-3 py-2 border-b flex items-center justify-between"
+        style={{ background: 'linear-gradient(180deg,#9fdef9,#74c8ec)', borderBottomColor: '#6fb5d5' }}
+      >
+        <div className="text-sm font-semibold text-slate-800 tracking-tight">BRS Messenger</div>
+        <div className="text-xs text-slate-700">{statusIcon[status]}</div>
+      </div>
+
+      <div className="px-2 py-2 border-b bg-white">
+        <div className="relative">
+          <Search size={14} className="absolute left-2 top-2 text-gray-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Localizar contato..."
+            className="w-full pl-7 pr-2 py-1.5 text-xs border rounded"
+          />
+        </div>
+      </div>
+
+      <div className="flex border-b bg-slate-50 text-xs" style={{ borderBottomColor: '#bdd9e8' }}>
         <button
-          onClick={() => setActiveTab('contatos')}
-          className={`px-3 py-2 font-medium text-sm ${
-            activeTab === 'contatos'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-3 py-2 border-r ${activeTab === 1 ? 'bg-white font-semibold' : ''}`}
+          style={{ borderRightColor: '#d4e5ef' }}
+          onClick={() => setActiveTab(1)}
         >
-          👥 Contatos
+          👥 Perfil e Contatos
         </button>
         <button
-          onClick={() => setActiveTab('conversas')}
-          className={`px-3 py-2 font-medium text-sm ${
-            activeTab === 'conversas'
-              ? 'border-b-2 border-blue-600 text-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-3 py-2 border-r relative ${activeTab === 2 ? 'bg-white font-semibold' : ''}`}
+          style={{ borderRightColor: '#d4e5ef' }}
+          onClick={() => setActiveTab(2)}
         >
           💬 Conversas
+          {unreadTotal > 0 && <span className="ml-1 inline-flex min-w-4 h-4 px-1 rounded-full bg-red-600 text-white text-[10px] items-center justify-center">{unreadTotal}</span>}
+        </button>
+        <button className={`px-3 py-2 ${activeTab === 3 ? 'bg-white font-semibold' : ''}`} onClick={() => setActiveTab(3)} disabled={!selectedConversation}>
+          🗨 Chat
         </button>
       </div>
 
-      {/* Busca */}
-      <div className="relative">
-        <Search size={16} className="absolute left-2 top-2.5 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Buscar..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-8 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+      <div style={{ maxHeight: 460, minHeight: 460 }} className="overflow-y-auto bg-white">
+        {activeTab === 1 && (
+          <div className="p-2 space-y-3 text-xs">
+            <div className="border rounded p-2 bg-sky-50" style={{ borderColor: '#b7d8ea' }}>
+              <div className="flex gap-2">
+                <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex items-center justify-center text-sm font-bold">
+                  {myProfile.user?.avatar_url ? <img src={myProfile.user.avatar_url} alt={myNameDefault} className="w-full h-full object-cover" /> : myNameDefault.charAt(0)}
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold">{myNameDisplay}</div>
+                  <input
+                    value={nickname}
+                    onChange={(e) => setNickname(e.target.value.slice(0, 40))}
+                    placeholder="Nickname do Messenger"
+                    className="mt-1 w-full border rounded px-1 py-1 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <select value={status} onChange={(e) => setStatus(e.target.value as ChatStatus)} className="border rounded px-1 py-1">
+                  <option value="online">Online</option>
+                  <option value="busy">Ocupado</option>
+                  <option value="away">Ausente</option>
+                </select>
+                <select value={mood} onChange={(e) => setMood(e.target.value as MoodKey | '')} className="border rounded px-1 py-1">
+                  <option value="">{hasMoodToday ? 'Humor de hoje' : 'Humor do Dia'}</option>
+                  {moods.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {moodEmoji[m.key]} {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                value={statusMessage}
+                onChange={(e) => setStatusMessage(e.target.value.slice(0, 50))}
+                placeholder="Mensagem de status (max 50)"
+                className="mt-2 w-full border rounded px-1 py-1"
+              />
+              <button onClick={saveProfile} className="mt-2 w-full py-1 rounded bg-blue-600 text-white">
+                Salvar Perfil
+              </button>
+            </div>
 
-      {/* Conteúdo das Abas */}
-      <div className="bg-white rounded-lg max-h-96 overflow-y-auto">
-        {activeTab === 'contatos' && (
-          <div className="space-y-1 p-2">
-            {filteredContacts.length === 0 ? (
-              <p className="text-gray-500 text-center py-4 text-sm">Nenhum contato encontrado</p>
-            ) : (
-              filteredContacts.map((contact) => (
-                <button
-                  key={contact.id}
-                  onClick={() => handleContactClick(contact)}
-                  className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-sm"
-                >
-                  <div className="font-medium">{contact.full_name || contact.email}</div>
-                  <div className="text-xs text-gray-500">{contact.email}</div>
-                </button>
-              ))
-            )}
+            <div className="border rounded">
+              <div className="px-2 py-1.5 bg-green-50 font-semibold">Online ({onlineContacts.length})</div>
+              <div>
+                {onlineContacts.map((c) => (
+                  <button
+                    key={c.id}
+                    onDoubleClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      void openConversation(c)
+                    }}
+                    className="w-full text-left px-2 py-1.5 hover:bg-slate-100 border-b"
+                  >
+                    <span>{statusIcon[(c.status as ChatStatus) || 'online']}</span>{' '}
+                    <span className="font-medium">{c.nickname || c.short_name || formatName(c.full_name) || c.email}</span>
+                    {c.status === 'busy' ? ' ⛔' : c.status === 'away' ? ' 🚫' : ''}
+                    {c.status_message ? <span className="text-gray-500"> - {c.status_message}</span> : null}
+                  </button>
+                ))}
+                {onlineContacts.length === 0 && <div className="px-2 py-2 text-gray-500">Sem contatos online.</div>}
+              </div>
+            </div>
+
+            <div className="border rounded">
+              <div className="px-2 py-1.5 bg-slate-100 font-semibold">Offline ({offlineContacts.length})</div>
+              <div>
+                {offlineContacts.map((c) => (
+                  <button
+                    key={c.id}
+                    onDoubleClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      void openConversation(c)
+                    }}
+                    className="w-full text-left px-2 py-1.5 hover:bg-slate-100 border-b"
+                  >
+                    <span>{statusIcon.offline}</span>{' '}
+                    <span className="text-gray-600">{c.nickname || c.short_name || formatName(c.full_name) || c.email}</span>
+                  </button>
+                ))}
+                {offlineContacts.length === 0 && <div className="px-2 py-2 text-gray-500">Sem contatos offline.</div>}
+              </div>
+            </div>
           </div>
         )}
 
-        {activeTab === 'conversas' && (
-          <div className="space-y-1 p-2">
-            {filteredConversations.length === 0 ? (
-              <p className="text-gray-500 text-center py-4 text-sm">Nenhuma conversa</p>
-            ) : (
-              filteredConversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  onClick={() => handleConversationClick(conv)}
-                  className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded-lg text-sm border-b"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="font-medium">{conv.participant.full_name || conv.participant.email}</div>
-                    {conv.unreadCount > 0 && (
-                      <span className="bg-blue-600 text-white text-xs rounded-full px-2 py-0.5">{conv.unreadCount}</span>
+        {activeTab === 2 && (
+          <div className="p-2 space-y-2">
+            {filteredConversations.map((conv) => (
+              <div
+                key={conv.id}
+                onDoubleClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  void openConversation(conv.participant)
+                }}
+                className="border rounded p-2 hover:bg-slate-50"
+                style={{ borderColor: '#d6e4ec' }}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex items-center justify-center text-sm font-bold">
+                    {conv.participant.avatar_url ? (
+                      <img src={conv.participant.avatar_url} alt={conv.participant.full_name || conv.participant.email} className="w-full h-full object-cover" />
+                    ) : (
+                      (conv.participant.nickname || conv.participant.short_name || conv.participant.full_name || conv.participant.email || '?').charAt(0)
                     )}
                   </div>
-                  {conv.lastMessage && (
-                    <p className="text-xs text-gray-600 truncate mt-1">{conv.lastMessage.text}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between gap-2">
+                      <p className="text-sm font-semibold truncate">
+                        {conv.participant.nickname || conv.participant.short_name || formatName(conv.participant.full_name) || conv.participant.email}
+                      </p>
+                      <div className="relative">
+                        <button onClick={() => setMenuConversationId(menuConversationId === conv.id ? null : conv.id)} className="text-gray-500 hover:text-gray-700">
+                          <EllipsisVertical size={14} />
+                        </button>
+                        {menuConversationId === conv.id && (
+                          <div className="absolute right-0 top-5 bg-white border rounded shadow z-10">
+                            <button
+                              className="block px-3 py-1.5 text-xs hover:bg-slate-100 w-full text-left"
+                              onClick={() => {
+                                setMenuConversationId(null)
+                                void openConversation(conv.participant)
+                              }}
+                            >
+                              Abrir Conversa
+                            </button>
+                            <button
+                              className="block px-3 py-1.5 text-xs hover:bg-slate-100 w-full text-left text-red-700"
+                              onClick={() => {
+                                setMenuConversationId(null)
+                                void deleteConversation(conv.id)
+                              }}
+                            >
+                              Excluir
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">{conv.lastMessage?.text || 'Sem mensagens ainda.'}</p>
+                  </div>
+                  {conv.unreadCount > 0 ? <span className="bg-red-600 text-white text-[10px] rounded-full px-1.5 py-0.5">{conv.unreadCount}</span> : null}
+                </div>
+              </div>
+            ))}
+            {filteredConversations.length === 0 && <div className="text-xs text-gray-500 p-2">Nenhuma conversa.</div>}
+          </div>
+        )}
+
+        {activeTab === 3 && (
+          <div className="h-full flex flex-col">
+            {!selectedConversation ? (
+              <div className="p-4 text-sm text-gray-500">Abra uma conversa pela aba de Contatos ou Conversas.</div>
+            ) : (
+              <>
+                <div className="px-3 py-2 border-b bg-sky-50 text-sm font-semibold flex items-center gap-2">
+                  <MessageSquareText size={14} />
+                  {selectedConversation.participant.nickname || selectedConversation.participant.short_name || formatName(selectedConversation.participant.full_name) || selectedConversation.participant.email}
+                </div>
+                <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 bg-white">
+                  {loadingMessages ? (
+                    <div className="text-xs text-gray-500">Carregando mensagens...</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {messages.map((m) => {
+                        const mine = m.sender.id === myProfile.user?.id
+                        const bgColor = m.text_style?.bgColor || (mine ? '#dbeafe' : '#f3f4f6')
+                        return (
+                          <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                            <div className="max-w-[82%] rounded px-2 py-1.5 text-xs border" style={{ background: bgColor }}>
+                              <div
+                                style={{
+                                  fontWeight: m.text_style?.bold ? 700 : 400,
+                                  fontStyle: m.text_style?.italic ? 'italic' : 'normal',
+                                  textDecoration: m.text_style?.underline ? 'underline' : 'none',
+                                  whiteSpace: 'pre-wrap',
+                                }}
+                              >
+                                {m.text}
+                              </div>
+                              {Array.isArray(m.attachments) && m.attachments.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {m.attachments.map((a, idx) => (
+                                    <a key={`${m.id}-att-${idx}`} href={a.url || '#'} target="_blank" className="block text-[11px] text-blue-700 underline">
+                                      📎 {a.name || 'anexo'}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="mt-1 text-[10px] text-gray-500">
+                                {new Date(m.timestamp).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <div ref={messagesEndRef} />
+                    </div>
                   )}
-                </button>
-              ))
+                </div>
+                <div className="border-t p-2 bg-slate-50 space-y-2">
+                  <div className="flex items-center gap-1">
+                    <button className={`px-2 py-1 text-xs border rounded ${style.bold ? 'bg-slate-200' : ''}`} onClick={() => setStyle((s) => ({ ...s, bold: !s.bold }))}>
+                      B
+                    </button>
+                    <button className={`px-2 py-1 text-xs border rounded ${style.italic ? 'bg-slate-200' : ''}`} onClick={() => setStyle((s) => ({ ...s, italic: !s.italic }))}>
+                      I
+                    </button>
+                    <button className={`px-2 py-1 text-xs border rounded ${style.underline ? 'bg-slate-200' : ''}`} onClick={() => setStyle((s) => ({ ...s, underline: !s.underline }))}>
+                      U
+                    </button>
+                    <select className="text-xs border rounded px-1 py-1" value={style.bgColor} onChange={(e) => setStyle((s) => ({ ...s, bgColor: e.target.value }))}>
+                      {bgPalette.map((c) => (
+                        <option key={c} value={c}>
+                          Cor de Fundo
+                        </option>
+                      ))}
+                    </select>
+                    <label className="px-2 py-1 text-xs border rounded cursor-pointer flex items-center gap-1">
+                      <Paperclip size={12} /> Arquivo
+                      <input type="file" className="hidden" onChange={(e) => void onPickFile(e.target.files)} />
+                    </label>
+                  </div>
+                  {attachedFiles.length > 0 && (
+                    <div className="text-[11px] text-gray-600">
+                      {attachedFiles.map((f, i) => (
+                        <div key={`${f.url}-${i}`}>📎 {f.name}</div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <textarea
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      onPaste={onPaste}
+                      className="flex-1 border rounded px-2 py-1.5 text-xs min-h-[54px]"
+                      placeholder="Digite sua mensagem, cole texto ou imagem..."
+                    />
+                    <button onClick={sendMessage} disabled={isSending || (!text.trim() && attachedFiles.length === 0)} className="px-3 rounded bg-blue-600 text-white disabled:bg-gray-400">
+                      <Send size={14} />
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}

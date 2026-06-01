@@ -1,18 +1,18 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next'
+import './globals.css'
 
 export const metadata: Metadata = {
-  title: "BRS RH — Sistema Interno",
-  description: "Sistema interno de RH — BRS 2 Promotora Ltda",
+  title: 'BRS RH - Sistema Interno',
+  description: 'Sistema interno de RH - BRS 2 Promotora Ltda',
   icons: {
-    icon: "/favicon/BRS-GESTAO-ICONE-FUNDO-TRANSPARENTE.png",
+    icon: '/favicon/FAVICON-BRS-PROMOTORA.png',
   },
-};
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
       <body suppressHydrationWarning>{children}</body>
     </html>
-  );
+  )
 }

@@ -9,6 +9,7 @@ import {
 import type { DisciplinaryReason } from '@/types'
 import { getMyEffectivePermissions } from '@/lib/auth/actions'
 import { hasPermission } from '@/lib/auth/permissions'
+import { saveDisciplinaryReason } from '../server-actions'
 
 export default function MotivosPage() {
   const [reasons, setReasons] = useState<DisciplinaryReason[]>([])
@@ -60,19 +61,16 @@ export default function MotivosPage() {
     if (!editingReason?.name) return
     
     setSaving(true)
-    let error
-    
-    if (editingReason.id) {
-      const { error: err } = await supabase
-        .from('disciplinary_reasons')
-        .update(editingReason)
-        .eq('id', editingReason.id)
-      error = err
-    } else {
-      const { error: err } = await supabase
-        .from('disciplinary_reasons')
-        .insert([editingReason])
-      error = err
+    let error: Error | null = null
+    try {
+      await saveDisciplinaryReason({
+        id: editingReason.id,
+        name: String(editingReason.name || ''),
+        default_gravity: String(editingReason.default_gravity || 'leve'),
+        active: editingReason.active !== false,
+      })
+    } catch (err: unknown) {
+      error = err instanceof Error ? err : new Error('Falha ao salvar motivo.')
     }
     
     if (!error) {

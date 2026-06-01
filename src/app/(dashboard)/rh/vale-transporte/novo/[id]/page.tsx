@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { 
-  Bus, ChevronLeft, Plus, Trash2, Save, Loader2, 
-  User, MapPin, Calculator, FileText, AlertTriangle, Calendar, Info
+import {
+  Bus, ChevronLeft, Plus, Trash2, Save, Loader2,
+  MapPin, Calculator, AlertTriangle, Calendar, Info
 } from 'lucide-react'
 import type { Employee, CompanyUnit } from '@/types'
 import { format, addMonths, startOfMonth } from 'date-fns'
+import { createVtRecord } from '../../../server-actions'
 
 interface Route {
   type: 'ida' | 'volta'
@@ -87,7 +88,7 @@ export default function VTUnifiedPage() {
     setRoutes(routes.filter((_, i) => i !== index))
   }
 
-  function updateRoute(index: number, field: keyof Route, value: any) {
+  function updateRoute(index: number, field: keyof Route, value: string | number) {
     const newRoutes = [...routes]
     newRoutes[index] = { ...newRoutes[index], [field]: value }
     setRoutes(newRoutes)
@@ -99,85 +100,23 @@ export default function VTUnifiedPage() {
     if (mode === 'option' && (!selectedUnit || !totals.isValidOption)) return
     
     setSaving(true)
-    
     try {
-      // 1. Encerrar termo vigente anterior se existir
-      const { data: prevActive } = await supabase
-        .from('vt_records')
-        .select('id, effective_date')
-        .eq('employee_id', employee.id)
-        .is('end_date', null)
-        .order('effective_date', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (prevActive) {
-        // Data de fim é um dia antes da nova vigência
-        const newEffDate = new Date(effectiveDate + 'T12:00:00')
-        const endDate = new Date(newEffDate)
-        endDate.setDate(endDate.getDate() - 1)
-        const endDateStr = format(endDate, 'yyyy-MM-dd')
-        
-        await supabase
-          .from('vt_records')
-          .update({ end_date: endDateStr })
-          .eq('id', prevActive.id)
-      }
-
-      // 2. Criar registro de VT
-      const { data: vtRecord, error: vtError } = await supabase
-        .from('vt_records')
-        .insert([{
-          employee_id: employee.id,
-          type: mode,
-          unit_id: mode === 'option' ? selectedUnit : null,
-          daily_total: mode === 'option' ? totals.daily : 0,
-          working_days_estimate: workingDays,
-          monthly_estimated_total: mode === 'option' ? totals.monthly : 0,
-          max_employee_discount: mode === 'option' ? totals.discount : 0,
-          company_estimated_cost: mode === 'option' ? totals.companyCost : 0,
-          reason_refusal: mode === 'refusal' ? refusalReason : null,
-          option_date: optionDate,
-          effective_date: effectiveDate,
-          status: 'active'
-        }])
-        .select()
-        .single()
-        
-      if (vtError) throw vtError
-
-      if (mode === 'option' && vtRecord) {
-        // 2. Criar trechos
-        const routeRecords = routes.map(r => ({
-          vt_record_id: vtRecord.id,
-          route_type: r.type,
-          line_operator: r.line,
-          unit_value: Number(r.value)
-        }))
-        
-        const { error: routeError } = await supabase.from('vt_routes').insert(routeRecords)
-        if (routeError) {
-          console.error('Erro ao salvar trechos:', routeError)
-          throw new Error('Falha ao gravar os trechos de transporte: ' + routeError.message)
-        }
-      }
-      
-      // 3. Atualizar status do colaborador
-      await supabase
-        .from('employees')
-        .update({ vt_status: mode === 'option' ? 'optante' : 'recusou' })
-        .eq('id', employee.id)
-        
-      // 4. Auditoria
-      const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from('audit_logs').insert({
-        user_id: user?.id,
-        action: mode === 'option' ? 'generate_vt_option' : 'generate_vt_refusal',
-        entity_type: 'vt_records',
-        entity_id: vtRecord.id,
-        description: `Termo de ${mode === 'option' ? 'opção' : 'recusa'} gerado para ${employee.name}`
+      await createVtRecord({
+        employeeId: employee.id,
+        mode,
+        optionDate,
+        effectiveDate,
+        selectedUnit,
+        routes,
+        workingDays,
+        dailyTotal: totals.daily,
+        monthlyTotal: totals.monthly,
+        maxDiscount: totals.discount,
+        companyCost: totals.companyCost,
+        refusalReason,
+        closePreviousActive: true,
       })
-      
+
       router.push(`/colaboradores/${employee.id}`)
     } catch (error) {
       console.error(error)
@@ -454,3 +393,4 @@ function SummaryRow({ label, value, color }: { label: string, value: number, col
     </div>
   )
 }
+

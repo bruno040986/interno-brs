@@ -7,7 +7,7 @@ import {
   requireCurrentUser,
   requirePermission as requireServerPermission,
 } from '@/lib/auth/server'
-import { systemConfigRouteOptions, type PermissionAction, type PermissionRequirement } from '@/lib/auth/permissions'
+import { type PermissionAction, type PermissionRequirement } from '@/lib/auth/permissions'
 
 // Inicialização do cliente Supabase Admin para operações privilegiadas
 const supabaseAdmin = createClient(
@@ -155,7 +155,10 @@ export async function saveProvedoresConfig(data: {
     if (data.resend) requiredConfigPermissions.push({ resource: 'sistema-config-email', action: 'can_edit' })
     if (data.zapi) requiredConfigPermissions.push({ resource: 'sistema-config-whatsapp', action: 'can_edit' })
     if (data.assinafy) requiredConfigPermissions.push({ resource: 'sistema-config-assinatura', action: 'can_edit' })
-    const providerAccess = await requireAny(requiredConfigPermissions.length ? requiredConfigPermissions : systemConfigRouteOptions)
+    if (requiredConfigPermissions.length === 0) {
+      throw new Error('Nenhuma configuracao informada para salvar.')
+    }
+    const providerAccess = await requireAny(requiredConfigPermissions)
     const permsRes: { success: boolean; permissions: typeof providerAccess.perms } = {
       success: true,
       permissions: providerAccess.perms,
@@ -163,14 +166,14 @@ export async function saveProvedoresConfig(data: {
     if (!permsRes.success) throw new Error('Não foi possível validar permissões.')
     const perms = permsRes.permissions || []
 
-    const canEditRoot = perms.some((p) => p?.resource_name === 'sistema-config-root' && !!p?.can_edit)
+    // Parent config permission is not a wildcard; each provider validates its own child permission.
     const canEditEmail = perms.some((p) => p?.resource_name === 'sistema-config-email' && !!p?.can_edit)
     const canEditWhatsapp = perms.some((p) => p?.resource_name === 'sistema-config-whatsapp' && !!p?.can_edit)
     const canEditAssinatura = perms.some((p) => p?.resource_name === 'sistema-config-assinatura' && !!p?.can_edit)
 
-    if (data.resend && !(canEditRoot || canEditEmail)) throw new Error('Sem permissão para salvar configurações de e-mail.')
-    if (data.zapi && !(canEditRoot || canEditWhatsapp)) throw new Error('Sem permissão para salvar configurações de WhatsApp.')
-    if (data.assinafy && !(canEditRoot || canEditAssinatura)) throw new Error('Sem permissão para salvar configurações de assinatura.')
+    if (data.resend && !canEditEmail) throw new Error('Sem permissão para salvar configurações de e-mail.')
+    if (data.zapi && !canEditWhatsapp) throw new Error('Sem permissão para salvar configurações de WhatsApp.')
+    if (data.assinafy && !canEditAssinatura) throw new Error('Sem permissão para salvar configurações de assinatura.')
 
     // 1. Salvar Resend
     if (data.resend) {
@@ -599,7 +602,9 @@ export async function updatePartnerCRM(partnerData: {
 
 export async function getTemplates() {
   try {
-    await requireAny([{ resource: 'scp-documentos' }, { resource: 'scp-emails' }])
+    const { perms } = await requireAny([{ resource: 'scp-documentos' }, { resource: 'scp-emails' }])
+    const canViewDocs = perms.some((p) => p?.resource_name === 'scp-documentos' && !!p?.can_view)
+    const canViewEmails = perms.some((p) => p?.resource_name === 'scp-emails' && !!p?.can_view)
 
     const { data: contracts, error: cErr } = await supabaseAdmin
       .from('contract_templates')
@@ -643,8 +648,8 @@ export async function getTemplates() {
 
     return {
       success: true,
-      contracts: normalizedContracts,
-      emails: emails || []
+      contracts: canViewDocs ? normalizedContracts : [],
+      emails: canViewEmails ? emails || [] : []
     }
   } catch (error: any) {
     console.error('Erro ao buscar templates:', error)
@@ -1687,6 +1692,10 @@ export async function executePartnerAutomation(
 ) {
   try {
     await requirePermission('scp-crm', 'can_edit')
+    if (actionType === 'contrato') await requireServerPermission('scp-documentos', 'can_view')
+    if (actionType === 'whatsapp') await requireServerPermission('scp-whatsapp', 'can_view')
+    if (actionType === 'email') await requireServerPermission('scp-emails', 'can_view')
+    if (actionType === 'aprovar') await requireServerPermission('sistema-usuarios-cadastro', 'can_include')
 
     // 1. Buscar dados do parceiro
     const { data: partner, error: pErr } = await supabaseAdmin

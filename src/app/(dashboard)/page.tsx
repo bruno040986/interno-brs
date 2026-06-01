@@ -4,14 +4,13 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { 
   Users, AlertTriangle, TrendingUp, FileText, 
-  Clock, CheckCircle, Calendar, MessageSquare, 
+  Clock, CheckCircle, Calendar,
   Megaphone, ChevronRight, X, ExternalLink,
   ShieldCheck, Briefcase, Banknote, Monitor, Key, Loader2, UserCircle2,
   Bus, BarChart3, ShoppingCart
 } from 'lucide-react'
 import { getLinksBySector } from './links/actions'
-import { createClient } from '@/lib/supabase/client'
-import { getMyEffectivePermissions } from '@/lib/auth/actions'
+import { getMyEffectivePermissions, getMyHubContext } from '@/lib/auth/actions'
 import {
   hasAnyPermission,
   hasPermission as permissionAllows,
@@ -74,64 +73,32 @@ export default function HubPage() {
     setFormattedDate(words.charAt(0).toUpperCase() + words.slice(1))
 
     // 2. Buscar o primeiro nome e permissões do usuário logado
-    async function fetchUser() {
+    async function fetchHubData() {
       try {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profile } = await supabase
-            .from('users')
-            .select('name')
-            .eq('id', user.id)
-            .single()
+        const [hubContext, permsResult] = await Promise.all([
+          getMyHubContext(),
+          getMyEffectivePermissions(),
+        ])
 
-          if (profile?.name) {
-            setUserName(profile.name.split(' ')[0])
-          } else {
-            setUserName(user.email?.split('@')[0] || '')
-          }
+        if (hubContext.success) {
+          setUserName(hubContext.userName || '')
 
-          const permsResult = await getMyEffectivePermissions()
-          if (permsResult.success) {
-            setPermissions(permsResult.permissions || [])
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao buscar usuário logado:', err)
-      } finally {
-        setLoadingPerms(false)
-      }
-    }
-    fetchUser()
-
-    // 3. Buscar aniversariantes dos próximos 60 dias
-    async function fetchBirthdays() {
-      try {
-        const supabase = createClient()
-        const { data: usersData, error } = await supabase
-          .from('users')
-          .select('name, birth_date, avatar_url')
-          .not('birth_date', 'is', null)
-        
-        if (usersData) {
           const today = new Date()
           today.setHours(0, 0, 0, 0)
           const todayYear = today.getFullYear()
-          const todayDay = today.getDate()
-          const todayMonth = today.getMonth() + 1
 
           const months = [
-            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+            'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
             'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
           ]
 
-          const withDaysUntil = usersData
+          const withDaysUntil = (hubContext.birthdays || [])
             .map((u: any) => {
-              const dateParts = u.birth_date.split('-') // YYYY-MM-DD
-              const bDay = parseInt(dateParts[2], 10)
-              const bMonth = parseInt(dateParts[1], 10)
+              const dateParts = String(u.birth_date || '').split('-')
+              const bDay = parseInt(dateParts[2] || '0', 10)
+              const bMonth = parseInt(dateParts[1] || '0', 10)
+              if (!bDay || !bMonth) return null
 
-              // Calcular aniversário neste ano ou no próximo
               let nextBirthday = new Date(todayYear, bMonth - 1, bDay)
               nextBirthday.setHours(0, 0, 0, 0)
               if (nextBirthday < today) {
@@ -141,12 +108,9 @@ export default function HubPage() {
               const diffMs = nextBirthday.getTime() - today.getTime()
               const daysUntil = Math.round(diffMs / (1000 * 60 * 60 * 24))
 
-              let dayLabel = `${bDay} de ${months[bMonth - 1]}`
-              if (daysUntil === 0) {
-                dayLabel = 'Hoje 🎉'
-              } else if (daysUntil === 1) {
-                dayLabel = 'Amanhã 🎂'
-              }
+              let dayLabel = bDay + ' de ' + months[bMonth - 1]
+              if (daysUntil === 0) dayLabel = 'Hoje'
+              if (daysUntil === 1) dayLabel = 'Amanha'
 
               return {
                 name: u.name,
@@ -157,17 +121,22 @@ export default function HubPage() {
                 bMonth
               }
             })
-            .filter((u: any) => u.daysUntil <= 60)
+            .filter((u: any) => u && u.daysUntil <= 60)
             .sort((a: any, b: any) => a.daysUntil - b.daysUntil)
 
           setBirthdays(withDaysUntil)
         }
+
+        if (permsResult.success) {
+          setPermissions(permsResult.permissions || [])
+        }
       } catch (err) {
-        console.error('Erro ao buscar aniversariantes:', err)
+        console.error('Erro ao carregar contexto do hub:', err)
+      } finally {
+        setLoadingPerms(false)
       }
     }
-    fetchBirthdays()
-
+    fetchHubData()
   }, [])
 
   useEffect(() => {
@@ -552,12 +521,12 @@ export default function HubPage() {
           </div>
         </div>
 
-        {/* Widget de Google Chat */}
+        {/* Widget de BRS Messenger */}
         <div className="widget-card">
           <div className="widget-header">
             <h3 className="widget-title">
-              <MessageSquare size={18} style={{ color: '#16a34a' }} />
-              Google Chat
+              <Users size={18} style={{ color: '#16a34a' }} />
+              BRS Messenger
             </h3>
           </div>
           <div className="widget-content" style={{ padding: '1rem' }}>

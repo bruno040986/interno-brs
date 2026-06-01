@@ -1,4 +1,4 @@
-import { googleConfig, googleScopes, isGoogleConfigured } from './config'
+import { getGoogleConfigFromDb, googleConfig, googleScopes, isGoogleConfigured } from './config'
 import { createClient } from '@/lib/supabase/server'
 
 /**
@@ -16,6 +16,10 @@ export function generateGoogleAuthUrl(state: string): string {
   })
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+}
+
+async function getOAuthConfig() {
+  return (await getGoogleConfigFromDb()) || googleConfig
 }
 
 /**
@@ -37,13 +41,16 @@ export async function refreshGoogleToken(userId: string): Promise<string | null>
   }
 
   try {
+    const oauthConfig = await getOAuthConfig()
+    if (!oauthConfig.clientId || !oauthConfig.clientSecret) return null
+
     // Chamar a API do Google para renovar
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: googleConfig.clientId,
-        client_secret: googleConfig.clientSecret,
+        client_id: oauthConfig.clientId,
+        client_secret: oauthConfig.clientSecret,
         refresh_token: googleAuth.refresh_token,
         grant_type: 'refresh_token',
       }).toString(),
