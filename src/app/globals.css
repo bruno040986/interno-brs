@@ -1072,3 +1072,125 @@ table.data-table {
  grid-template-columns: 1fr 1fr;
  gap: 0.5rem;
 }
+
+/* --- BRS Messenger --- */
+.brs-messenger {
+  --msn-surface: #ffffff;
+  --msn-text: #0f172a;
+  --msn-muted: #64748b;
+  --msn-border: #bdd9e8;
+  --msn-item-hover: #eef6fb;
+  --msn-chat-head: #e0f2fe;
+}
+
+:root[data-theme="dark"] .brs-messenger {
+  --msn-surface: #0f172a;
+  --msn-text: #e2e8f0;
+  --msn-muted: #94a3b8;
+  --msn-border: #334155;
+  --msn-item-hover: #1e293b;
+  --msn-chat-head: #1e293b;
+  background: linear-gradient(180deg,#1e3a5f 0%,#214d6d 22%,#0f172a 22%,#0f172a 100%) !important;
+  border-color: #3b82f6 !important;
+  box-shadow: inset 0 0 0 1px #1e3a8a !important;
+}
+
+.brs-messenger {
+  color: var(--msn-text);
+}
+
+.brs-messenger .text-gray-500,
+.brs-messenger .text-gray-600,
+.brs-messenger .text-slate-700,
+.brs-messenger .text-slate-800 {
+  color: var(--msn-muted) !important;
+}
+
+.brs-messenger-surface,
+.brs-messenger-body,
+.brs-messenger-chat-scroll,
+.brs-messenger-menu {
+  background: var(--msn-surface) !important;
+}
+
+.brs-messenger-chat-head,
+.brs-messenger-editor {
+  background: var(--msn-chat-head) !important;
+}
+
+.brs-messenger .border,
+.brs-messenger .border-b,
+.brs-messenger .border-t,
+.brs-messenger .border-r {
+  border-color: var(--msn-border) !important;
+}
+
+.brs-messenger-item:hover {
+  background: var(--msn-item-hover) !important;
+}
+
+:root[data-theme="dark"] .brs-messenger .bg-white,
+:root[data-theme="dark"] .brs-messenger .bg-slate-50,
+:root[data-theme="dark"] .brs-messenger .bg-sky-50,
+:root[data-theme="dark"] .brs-messenger .bg-green-50,
+:root[data-theme="dark"] .brs-messenger .bg-slate-100 {
+  background: #0f1a2e !important;
+  color: #e2e8f0 !important;
+}
+
+:root[data-theme="dark"] .brs-messenger > .px-3.py-2.border-b.flex.items-center.justify-between {
+  background: linear-gradient(180deg, #1d4f73, #163f61) !important;
+  border-bottom-color: #2f5f83 !important;
+}
+
+:root[data-theme="dark"] .brs-messenger > .px-3.py-2.border-b.flex.items-center.justify-between .text-sm.font-semibold {
+  color: #eaf6ff !important;
+}
+
+:root[data-theme="dark"] .brs-messenger input,
+:root[data-theme="dark"] .brs-messenger textarea,
+:root[data-theme="dark"] .brs-messenger select {
+  background: #111c32 !important;
+  color: #e2e8f0 !important;
+  border-color: #3b4d69 !important;
+}
+
+:root[data-theme="dark"] .brs-messenger input::placeholder,
+:root[data-theme="dark"] .brs-messenger textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme="dark"] .brs-messenger button {
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .brs-messenger .text-gray-400,
+:root[data-theme="dark"] .brs-messenger .text-gray-500,
+:root[data-theme="dark"] .brs-messenger .text-gray-600,
+:root[data-theme="dark"] .brs-messenger .text-slate-700,
+:root[data-theme="dark"] .brs-messenger .text-slate-800 {
+  color: #cbd5e1 !important;
+}
+
+:root[data-theme="dark"] .brs-messenger .text-sm.font-semibold,
+:root[data-theme="dark"] .brs-messenger .font-semibold,
+:root[data-theme="dark"] .brs-messenger .font-medium {
+  color: #f8fafc !important;
+}
+
+:root[data-theme="dark"] .brs-messenger .brs-messenger-menu {
+  background: #0f1a2e !important;
+  border-color: #3b4d69 !important;
+}
+
+:root[data-theme="dark"] .brs-messenger .brs-messenger-chat-scroll {
+  background: #1f2937 !important;
+}
+
+:root[data-theme="dark"] .brs-messenger .brs-messenger-editor {
+  background: #0f1a2e !important;
+}
+
+:root[data-theme="dark"] .brs-messenger .bg-blue-600 {
+  background: #2563eb !important;
+}

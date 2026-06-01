@@ -106,6 +106,7 @@ export function GoogleChatComponent() {
   const [status, setStatus] = useState<ChatStatus>('online')
   const [mood, setMood] = useState<MoodKey | ''>('')
   const [statusMessage, setStatusMessage] = useState('')
+  const [isDarkTheme, setIsDarkTheme] = useState(false)
   const [style, setStyle] = useState<{ bold: boolean; italic: boolean; underline: boolean; bgColor: string }>({
     bold: false,
     italic: false,
@@ -125,6 +126,19 @@ export function GoogleChatComponent() {
       if (conversationPollRef.current) window.clearInterval(conversationPollRef.current)
       if (messagesPollRef.current) window.clearInterval(messagesPollRef.current)
     }
+  }, [])
+
+  useEffect(() => {
+    const updateTheme = () => {
+      const current = document.documentElement.getAttribute('data-theme')
+      setIsDarkTheme(current === 'dark')
+    }
+
+    updateTheme()
+    const observer = new MutationObserver(updateTheme)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+
+    return () => observer.disconnect()
   }, [])
 
   useEffect(() => {
@@ -281,6 +295,15 @@ export function GoogleChatComponent() {
     await fetchConversations()
   }
 
+  function onComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (!isSending && (text.trim() || attachedFiles.length > 0)) {
+        void sendMessage()
+      }
+    }
+  }
+
   async function onPickFile(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
     for (const file of Array.from(fileList)) {
@@ -353,7 +376,7 @@ export function GoogleChatComponent() {
 
   return (
     <div
-      className="rounded-md overflow-hidden"
+      className="brs-messenger rounded-md overflow-hidden"
       style={{
         border: '1px solid #7aa9c2',
         boxShadow: 'inset 0 0 0 1px #cde9f7',
@@ -363,13 +386,19 @@ export function GoogleChatComponent() {
     >
       <div
         className="px-3 py-2 border-b flex items-center justify-between"
-        style={{ background: 'linear-gradient(180deg,#9fdef9,#74c8ec)', borderBottomColor: '#6fb5d5' }}
+        style={
+          isDarkTheme
+            ? { background: 'linear-gradient(180deg,#1d4f73,#163f61)', borderBottomColor: '#2f5f83' }
+            : { background: 'linear-gradient(180deg,#9fdef9,#74c8ec)', borderBottomColor: '#6fb5d5' }
+        }
       >
-        <div className="text-sm font-semibold text-slate-800 tracking-tight">BRS Messenger</div>
+        <div className="text-sm font-semibold tracking-tight" style={{ color: isDarkTheme ? '#eaf6ff' : '#1e293b' }}>
+          BRS Messenger
+        </div>
         <div className="text-xs text-slate-700">{statusIcon[status]}</div>
       </div>
 
-      <div className="px-2 py-2 border-b bg-white">
+      <div className="px-2 py-2 border-b brs-messenger-surface">
         <div className="relative">
           <Search size={14} className="absolute left-2 top-2 text-gray-400" />
           <input
@@ -402,9 +431,9 @@ export function GoogleChatComponent() {
         </button>
       </div>
 
-      <div style={{ maxHeight: 460, minHeight: 460 }} className="overflow-y-auto bg-white">
+      <div style={{ height: 460 }} className="brs-messenger-body">
         {activeTab === 1 && (
-          <div className="p-2 space-y-3 text-xs">
+          <div className="p-2 space-y-3 text-xs h-full overflow-y-auto">
             <div className="border rounded p-2 bg-sky-50" style={{ borderColor: '#b7d8ea' }}>
               <div className="flex gap-2">
                 <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex items-center justify-center text-sm font-bold">
@@ -457,7 +486,7 @@ export function GoogleChatComponent() {
                       e.stopPropagation()
                       void openConversation(c)
                     }}
-                    className="w-full text-left px-2 py-1.5 hover:bg-slate-100 border-b"
+                    className="w-full text-left px-2 py-1.5 brs-messenger-item border-b"
                   >
                     <span>{statusIcon[(c.status as ChatStatus) || 'online']}</span>{' '}
                     <span className="font-medium">{c.nickname || c.short_name || formatName(c.full_name) || c.email}</span>
@@ -480,7 +509,7 @@ export function GoogleChatComponent() {
                       e.stopPropagation()
                       void openConversation(c)
                     }}
-                    className="w-full text-left px-2 py-1.5 hover:bg-slate-100 border-b"
+                    className="w-full text-left px-2 py-1.5 brs-messenger-item border-b"
                   >
                     <span>{statusIcon.offline}</span>{' '}
                     <span className="text-gray-600">{c.nickname || c.short_name || formatName(c.full_name) || c.email}</span>
@@ -493,7 +522,7 @@ export function GoogleChatComponent() {
         )}
 
         {activeTab === 2 && (
-          <div className="p-2 space-y-2">
+          <div className="p-2 space-y-2 h-full overflow-y-auto">
             {filteredConversations.map((conv) => (
               <div
                 key={conv.id}
@@ -502,7 +531,7 @@ export function GoogleChatComponent() {
                   e.stopPropagation()
                   void openConversation(conv.participant)
                 }}
-                className="border rounded p-2 hover:bg-slate-50"
+                className="border rounded p-2 brs-messenger-item"
                 style={{ borderColor: '#d6e4ec' }}
               >
                 <div className="flex items-start gap-2">
@@ -523,7 +552,7 @@ export function GoogleChatComponent() {
                           <EllipsisVertical size={14} />
                         </button>
                         {menuConversationId === conv.id && (
-                          <div className="absolute right-0 top-5 bg-white border rounded shadow z-10">
+                          <div className="absolute right-0 top-5 brs-messenger-menu border rounded shadow z-10">
                             <button
                               className="block px-3 py-1.5 text-xs hover:bg-slate-100 w-full text-left"
                               onClick={() => {
@@ -557,26 +586,31 @@ export function GoogleChatComponent() {
         )}
 
         {activeTab === 3 && (
-          <div className="h-full flex flex-col">
+          <div className="h-full flex flex-col min-h-0">
             {!selectedConversation ? (
               <div className="p-4 text-sm text-gray-500">Abra uma conversa pela aba de Contatos ou Conversas.</div>
             ) : (
               <>
-                <div className="px-3 py-2 border-b bg-sky-50 text-sm font-semibold flex items-center gap-2">
+                <div className="px-3 py-2 border-b brs-messenger-chat-head text-sm font-semibold flex items-center gap-2">
                   <MessageSquareText size={14} />
                   {selectedConversation.participant.nickname || selectedConversation.participant.short_name || formatName(selectedConversation.participant.full_name) || selectedConversation.participant.email}
                 </div>
-                <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 bg-white">
+                <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-3 brs-messenger-chat-scroll">
                   {loadingMessages ? (
                     <div className="text-xs text-gray-500">Carregando mensagens...</div>
                   ) : (
                     <div className="space-y-2">
                       {messages.map((m) => {
                         const mine = m.sender.id === myProfile.user?.id
-                        const bgColor = m.text_style?.bgColor || (mine ? '#dbeafe' : '#f3f4f6')
+                        const customBg = m.text_style?.bgColor && m.text_style.bgColor !== '#ffffff'
+                        const bgColor = customBg ? (m.text_style?.bgColor as string) : mine ? '#1e3a8a' : '#bfdbfe'
+                        const textColor = customBg ? '#0f172a' : mine ? '#ffffff' : '#0f172a'
                         return (
                           <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                            <div className="max-w-[82%] rounded px-2 py-1.5 text-xs border" style={{ background: bgColor }}>
+                            <div
+                              className="max-w-[82%] rounded px-2 py-1.5 text-xs border"
+                              style={{ background: bgColor, color: textColor, borderColor: mine ? '#1e3a8a' : '#93c5fd' }}
+                            >
                               <div
                                 style={{
                                   fontWeight: m.text_style?.bold ? 700 : 400,
@@ -617,7 +651,7 @@ export function GoogleChatComponent() {
                     </div>
                   )}
                 </div>
-                <div className="border-t p-2 bg-slate-50 space-y-2">
+                <div className="border-t p-2 brs-messenger-editor space-y-2">
                   <div className="flex items-center gap-1">
                     <button className={`px-2 py-1 text-xs border rounded ${style.bold ? 'bg-slate-200' : ''}`} onClick={() => setStyle((s) => ({ ...s, bold: !s.bold }))}>
                       B
@@ -628,15 +662,24 @@ export function GoogleChatComponent() {
                     <button className={`px-2 py-1 text-xs border rounded ${style.underline ? 'bg-slate-200' : ''}`} onClick={() => setStyle((s) => ({ ...s, underline: !s.underline }))}>
                       U
                     </button>
-                    <select className="text-xs border rounded px-1 py-1" value={style.bgColor} onChange={(e) => setStyle((s) => ({ ...s, bgColor: e.target.value }))}>
+                    <select
+                      className="text-xs border rounded px-1 py-1 w-[116px]"
+                      value={style.bgColor}
+                      onChange={(e) => setStyle((s) => ({ ...s, bgColor: e.target.value }))}
+                      title="Cor de fundo"
+                    >
                       {bgPalette.map((c) => (
-                        <option key={c} value={c}>
-                          Cor de Fundo
+                        <option
+                          key={c}
+                          value={c}
+                          style={{ backgroundColor: c, color: '#0f172a' }}
+                        >
+                          {'Cor de Fundo'}
                         </option>
                       ))}
                     </select>
-                    <label className="px-2 py-1 text-xs border rounded cursor-pointer flex items-center gap-1">
-                      <Paperclip size={12} /> Arquivo
+                    <label className="px-2 py-1 text-xs border rounded cursor-pointer flex items-center justify-center" title="Enviar arquivo">
+                      <Paperclip size={12} />
                       <input type="file" className="hidden" onChange={(e) => void onPickFile(e.target.files)} />
                     </label>
                   </div>
@@ -652,6 +695,7 @@ export function GoogleChatComponent() {
                       value={text}
                       onChange={(e) => setText(e.target.value)}
                       onPaste={onPaste}
+                      onKeyDown={onComposerKeyDown}
                       className="flex-1 border rounded px-2 py-1.5 text-xs min-h-[54px]"
                       placeholder="Digite sua mensagem, cole texto ou imagem..."
                     />

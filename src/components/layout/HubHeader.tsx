@@ -34,6 +34,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
   const [notifItems, setNotifItems] = useState<any[]>([])
   const [toast, setToast] = useState<{ id: string; text: string } | null>(null)
   const [themePref, setThemePref] = useState<ThemePreference>('light')
+  const [isDarkTheme, setIsDarkTheme] = useState(false)
 
   useEffect(() => {
     async function loadPerms() {
@@ -57,6 +58,18 @@ export default function HubHeader({ user }: HubHeaderProps) {
     const initial: ThemePreference = stored || user?.theme_preference || 'light'
     setThemePref(initial)
   }, [user?.theme_preference])
+
+  useEffect(() => {
+    const updateTheme = () => {
+      const current = document.documentElement.getAttribute('data-theme')
+      setIsDarkTheme(current === 'dark')
+    }
+
+    updateTheme()
+    const observer = new MutationObserver(updateTheme)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
 
   async function handleThemeChange(next: ThemePreference) {
     setThemePref(next)
@@ -214,7 +227,11 @@ export default function HubHeader({ user }: HubHeaderProps) {
       <div className="hub-header-left">
         <Link href="/">
           <Image 
-            src="/logotipos/BRS WORKSPACE FUNDO CLARO SEM FUNDO.png"
+            src={
+              isDarkTheme
+                ? '/logotipos/BRS WORKSPACE FUNDO ESCURO SEM FUNDO.png'
+                : '/logotipos/BRS WORKSPACE FUNDO CLARO SEM FUNDO.png'
+            }
             alt="BRS Workspace"
             width={180}
             height={60} 
