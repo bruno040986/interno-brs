@@ -5,21 +5,39 @@ import type { UserProfile } from '@/types'
 import ThemeInit from '@/components/theme/ThemeInit'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  let themePreference: React.ComponentProps<typeof ThemeInit>['preference'] = 'light'
+  let profile: UserProfile = {
+    id: '',
+    name: 'Visitante',
+    email: '',
+    role: 'consulta',
+    active: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    theme_preference: 'light',
+  }
 
-  if (!user) redirect('/login')
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+    if (!user) redirect('/login')
+
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single()
+    profile = (data as UserProfile | null) || profile
+    themePreference = profile?.theme_preference || 'light'
+  } catch (error) {
+    console.error('Erro ao montar o dashboard; usando perfil de fallback.', error)
+  }
 
   return (
     <div className="app-layout">
-      <ThemeInit preference={(profile as any)?.theme_preference} />
-      <HubHeader user={profile as UserProfile} />
+      <ThemeInit preference={themePreference} />
+      <HubHeader user={profile} />
       <main className="main-content">
         {children}
       </main>

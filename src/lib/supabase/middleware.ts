@@ -23,13 +23,63 @@ function forbiddenResponse(request: NextRequest) {
   return NextResponse.redirect(url)
 }
 
+function hasSupabaseSessionCookie(request: NextRequest) {
+  return request.cookies.getAll().some(({ name }) => name.startsWith('sb-') && name.includes('auth-token'))
+}
+
+async function getUserWithTimeout(
+  supabase: ReturnType<typeof createServerClient>,
+  timeoutMs = 4000,
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    return await Promise.race([
+      supabase.auth.getUser(),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Supabase auth timeout after ${timeoutMs}ms`))
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
-  // Não interceptar endpoints internos do Next.js (RSC/Flight/Server Actions),
-  // senão podemos quebrar navegação e ações com "unexpected response from server".
+  // Do not intercept internal Next.js endpoints (RSC/Flight/Server Actions)
+  // so navigation does not get stuck waiting on auth checks.
   if (pathname.startsWith('/_next')) {
     return NextResponse.next({ request })
+  }
+
+  // Public routes that should stay responsive even if auth is slow or unavailable.
+  const publicRoutes = [
+    '/login',
+    '/auth/callback',
+    '/acesso-negado',
+    '/cadastro-parceiro',
+    '/api/lookups',
+    '/api/cpfhub',
+  ]
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
+  const hasSessionCookie = hasSupabaseSessionCookie(request)
+
+  if (isPublicRoute && !hasSessionCookie) {
+    return NextResponse.next({ request })
+  }
+
+  if (!hasSessionCookie) {
+    if (isApiRequest(pathname)) {
+      return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 })
+    }
+
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
 
   let supabaseResponse = NextResponse.next({ request })
@@ -53,21 +103,18 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
 
-  // Rotas públicas que não precisam de autenticação
-  const publicRoutes = [
-    '/login',
-    '/auth/callback',
-    '/acesso-negado',
-    '/cadastro-parceiro',
-    // APIs públicas usadas no formulário público
-    '/api/lookups',
-    '/api/cpfhub',
-  ]
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
+  try {
+    const authResult = await getUserWithTimeout(supabase)
+    user = authResult.data.user
+  } catch (error) {
+    console.error('Erro ao validar sessao no proxy:', error)
 
-  if (!user && !isPublicRoute) {
+    if (isPublicRoute) {
+      return supabaseResponse
+    }
+
     if (isApiRequest(pathname)) {
       return NextResponse.json({ error: 'Nao autorizado.' }, { status: 401 })
     }

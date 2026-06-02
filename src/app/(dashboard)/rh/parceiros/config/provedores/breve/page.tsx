@@ -1,6 +1,6 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { Info, HelpCircle } from 'lucide-react'
 
 const apiNames: Record<string, string> = {
@@ -13,8 +13,13 @@ const apiNames: Record<string, string> = {
 }
 
 export default function BrevePage() {
-  const searchParams = useSearchParams()
-  const apiParam = searchParams.get('api') || 'Geral'
+  const [apiParam, setApiParam] = useState('Geral')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setApiParam(params.get('api') || 'Geral')
+  }, [])
+
   const apiLabel = apiNames[apiParam] || apiParam
 
   return (

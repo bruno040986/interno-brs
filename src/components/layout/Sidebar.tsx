@@ -78,10 +78,11 @@ export default function Sidebar() {
 
   let navItems: NavItem[] = []
 
-  if (pathname === '/rh/parceiros/config/comercial') {
+  if (pathname.startsWith('/rh/parceiros/config/comercial')) {
     navItems = [
       { section: 'Estrutura Comercial' },
       { label: 'Agentes Comerciais', href: '/rh/parceiros/config/comercial', icon: UserCog },
+      { label: 'Tabela de Locacao de Veiculo', href: '/rh/parceiros/config/comercial/tabela-locacao-veiculo', icon: Building2 },
       { section: 'Sistema' },
       { label: 'Voltar ao Workspace', href: '/', icon: LayoutDashboard },
     ]
@@ -138,7 +139,7 @@ export default function Sidebar() {
     if (href === '/') return pathname === '/'
     if (href === '/rh') return pathname === '/rh'
     if (href === '/rh/parceiros') return pathname === '/rh/parceiros'
-    if (href === '/rh/parceiros/config/comercial') return pathname === '/rh/parceiros/config/comercial'
+    if (href === '/rh/parceiros/config/comercial') return pathname.startsWith('/rh/parceiros/config/comercial')
     if (href.includes('?')) return pathname + '?' === href.split('?')[0] + '?' || pathname === href.split('?')[0]
     return pathname === href || pathname.startsWith(href + '/')
   }
@@ -147,6 +148,7 @@ export default function Sidebar() {
     if (item.section) return true
 
     if (item.href === '/rh/parceiros/config/comercial') return canViewAny(['comercial-agentes', 'comercial-estrutura'])
+    if (item.href === '/rh/parceiros/config/comercial/tabela-locacao-veiculo') return canView('comercial-estrutura')
     if (item.href === '/') return true
     if (item.href === '/?sector=rh') return canView('workspace-rh')
 

@@ -326,6 +326,15 @@ export async function saveCommercialEntity(entityData: {
   phone_whatsapp?: string
   email_comissao?: string
   google_drive_url?: string
+  commercial_slug?: string | null
+  card_enabled?: boolean
+  cadastral_data?: any
+  arw_data?: any
+  documents_data?: any
+  contract_data?: any
+  remuneration_variable_data?: any
+  vehicle_rental_data?: any
+  card_data?: any
 }) {
   try {
     await requirePermission('comercial-agentes', entityData.id ? 'can_edit' : 'can_include')
@@ -345,6 +354,15 @@ export async function saveCommercialEntity(entityData: {
       phone_whatsapp: entityData.phone_whatsapp || null,
       email_comissao: entityData.email_comissao || null,
       google_drive_url: entityData.google_drive_url || null,
+      commercial_slug: entityData.commercial_slug || null,
+      card_enabled: !!entityData.card_enabled,
+      cadastral_data: entityData.cadastral_data ?? {},
+      arw_data: entityData.arw_data ?? {},
+      documents_data: entityData.documents_data ?? {},
+      contract_data: entityData.contract_data ?? {},
+      remuneration_variable_data: entityData.remuneration_variable_data ?? {},
+      vehicle_rental_data: entityData.vehicle_rental_data ?? {},
+      card_data: entityData.card_data ?? {},
       updated_at: new Date().toISOString()
     }
 
@@ -365,6 +383,88 @@ export async function saveCommercialEntity(entityData: {
     return { success: true }
   } catch (error: any) {
     console.error('Erro ao salvar entidade comercial:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getCommercialVehicleRentalRates() {
+  try {
+    await requireAny([{ resource: 'comercial-agentes' }, { resource: 'comercial-estrutura' }])
+
+    const { data, error } = await supabaseAdmin
+      .from('commercial_vehicle_rental_rates')
+      .select('*')
+      .order('vehicle_type', { ascending: true })
+      .order('condition_name', { ascending: true })
+      .order('validity_start', { ascending: false })
+
+    if (error) throw error
+
+    return { success: true, rates: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar tabela de locacao de veiculos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveCommercialVehicleRentalRate(rateData: {
+  id?: string
+  vehicle_type: 'carro' | 'moto'
+  condition_name: string
+  validity_start: string
+  validity_end?: string | null
+  monthly_value: number | string
+}) {
+  try {
+    await requirePermission('comercial-estrutura', rateData.id ? 'can_edit' : 'can_include')
+
+    const payload = {
+      vehicle_type: rateData.vehicle_type,
+      condition_name: rateData.condition_name,
+      validity_start: rateData.validity_start,
+      validity_end: rateData.validity_end || null,
+      monthly_value: Number(rateData.monthly_value || 0),
+      updated_at: new Date().toISOString(),
+    }
+
+    if (rateData.id) {
+      const { error } = await supabaseAdmin
+        .from('commercial_vehicle_rental_rates')
+        .update(payload)
+        .eq('id', rateData.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('commercial_vehicle_rental_rates')
+        .insert(payload)
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/comercial/tabela-locacao-veiculo')
+    revalidatePath('/rh/parceiros/config/comercial')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar tabela de locacao de veiculos:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function deleteCommercialVehicleRentalRate(id: string) {
+  try {
+    await requirePermission('comercial-estrutura', 'can_delete')
+
+    const { error } = await supabaseAdmin
+      .from('commercial_vehicle_rental_rates')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/comercial/tabela-locacao-veiculo')
+    revalidatePath('/rh/parceiros/config/comercial')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao excluir tabela de locacao de veiculos:', error)
     return { success: false, error: error.message }
   }
 }

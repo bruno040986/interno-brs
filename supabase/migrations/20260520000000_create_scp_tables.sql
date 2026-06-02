@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS commercial_entities (
   role TEXT NOT NULL CHECK (role IN ('superintendente', 'supervisor', 'gerente')),
   parent_id UUID REFERENCES commercial_entities(id) ON DELETE SET NULL,
   status TEXT DEFAULT 'ativo' NOT NULL CHECK (status IN ('ativo', 'inativo')),
+  commercial_slug TEXT UNIQUE,
   
   -- Campos de Acesso e Perfil do ARW
   arw_code TEXT,
@@ -25,9 +26,19 @@ CREATE TABLE IF NOT EXISTS commercial_entities (
   phone_whatsapp TEXT,
   email_comissao TEXT,
   
+  -- Dados estruturados por abas
+  cadastral_data JSONB DEFAULT '{}'::jsonb,
+  arw_data JSONB DEFAULT '{}'::jsonb,
+  documents_data JSONB DEFAULT '{}'::jsonb,
+  contract_data JSONB DEFAULT '{}'::jsonb,
+  remuneration_variable_data JSONB DEFAULT '{}'::jsonb,
+  vehicle_rental_data JSONB DEFAULT '{}'::jsonb,
+  card_data JSONB DEFAULT '{}'::jsonb,
+  card_enabled BOOLEAN DEFAULT false,
+
   -- Google Drive Folder Link
   google_drive_url TEXT,
-  
+
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -199,6 +210,21 @@ CREATE TABLE IF NOT EXISTS email_templates (
 );
 
 -- =========================================================================
+-- 10. Tabela: commercial_vehicle_rental_rates
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS commercial_vehicle_rental_rates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_type TEXT NOT NULL CHECK (vehicle_type IN ('carro', 'moto')),
+  condition_name TEXT NOT NULL,
+  validity_start DATE NOT NULL,
+  validity_end DATE,
+  monthly_value NUMERIC(14, 2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- =========================================================================
 -- 9. Gatilhos Automáticos (Triggers)
 -- =========================================================================
 
@@ -233,6 +259,11 @@ EXECUTE FUNCTION trigger_set_timestamp();
 
 CREATE OR REPLACE TRIGGER set_timestamp_agentes_parceiros
 BEFORE UPDATE ON agentes_parceiros
+FOR EACH ROW
+EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE OR REPLACE TRIGGER set_timestamp_commercial_vehicle_rental_rates
+BEFORE UPDATE ON commercial_vehicle_rental_rates
 FOR EACH ROW
 EXECUTE FUNCTION trigger_set_timestamp();
 

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { 
   Users, AlertTriangle, TrendingUp, FileText, 
   Clock, CheckCircle, Calendar,
@@ -21,10 +20,10 @@ import { AgendaComponent } from './theme/AgendaComponent'
 import { GoogleChatComponent } from './theme/GoogleChatComponent'
 
 export default function HubPage() {
-  const searchParams = useSearchParams()
   const [activeSector, setActiveSector] = useState<string | null>(null)
   const [sectorLinks, setSectorLinks] = useState<any[]>([])
   const [loadingLinks, setLoadingLinks] = useState(false)
+  const [searchParams, setSearchParams] = useState<URLSearchParams | null>(null)
 
   const [userName, setUserName] = useState<string>('')
   const [greeting, setGreeting] = useState<string>('Bom dia')
@@ -35,12 +34,16 @@ export default function HubPage() {
   const [loadingPerms, setLoadingPerms] = useState(true)
   const [bannerSrc, setBannerSrc] = useState<string>('/banners/banner-inicial-9mm.png')
 
-  const praiseTabParam = searchParams.get('praiseTab')
+  const praiseTabParam = searchParams?.get('praiseTab')
   const initialPraiseTab =
     praiseTabParam === 'send' || praiseTabParam === 'received' || praiseTabParam === 'feed'
       ? (praiseTabParam as 'feed' | 'send' | 'received')
       : undefined
-  const focusPraiseId = searchParams.get('praiseId') || undefined
+  const focusPraiseId = searchParams?.get('praiseId') || undefined
+
+  useEffect(() => {
+    setSearchParams(new URLSearchParams(window.location.search))
+  }, [])
 
   useEffect(() => {
     // 1. Saudação dinâmica baseada na hora
@@ -140,7 +143,7 @@ export default function HubPage() {
   }, [])
 
   useEffect(() => {
-    const sector = searchParams.get('sector')
+    const sector = searchParams?.get('sector')
     if (!sector || loadingPerms) return
     handleSelectSector(sector)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -253,6 +256,7 @@ export default function HubPage() {
       color: 'com',
       links: [
         { label: 'Estrutura Comercial', href: '/rh/parceiros/config/comercial' },
+        { label: 'Tabela Locacao Veiculo', href: '/rh/parceiros/config/comercial/tabela-locacao-veiculo' },
         { label: 'Visão do Gerente', href: '#', disabled: true },
         { label: 'Visão do Supervisor', href: '#', disabled: true },
         { label: 'Visão do Superintendente', href: '#', disabled: true },
