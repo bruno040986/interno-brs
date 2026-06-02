@@ -250,6 +250,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
       <div className="hub-header-left">
         <Link href="/">
           <Image 
+            key={isDarkTheme ? 'workspace-dark' : 'workspace-light'}
             src={
               isDarkTheme
                 ? '/logotipos/BRS WORKSPACE FUNDO ESCURO SEM FUNDO.png'
@@ -259,6 +260,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
             width={180}
             height={60} 
             priority
+            unoptimized
             style={{ objectFit: 'contain' }}
           />
         </Link>
