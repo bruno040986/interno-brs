@@ -60,6 +60,7 @@ export async function updateSession(request: NextRequest) {
   const publicRoutes = [
     '/login',
     '/auth/callback',
+    '/api/auth/google',
     '/acesso-negado',
     '/cadastro-parceiro',
     '/api/lookups',
