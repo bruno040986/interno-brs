@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import {
   requireAnyPermission,
   requireCurrentUser,
@@ -382,8 +383,11 @@ export async function saveCommercialEntity(entityData: {
 
     const shouldRegisterDomain = !!payload.card_enabled && !!payload.commercial_slug
     if (shouldRegisterDomain) {
-      void registerAgentDomain(String(payload.commercial_slug || '')).catch((error) => {
-        console.error('Erro ao registrar dominio comercial na Vercel:', error)
+      const slug = String(payload.commercial_slug || '')
+      after(() => {
+        void registerAgentDomain(slug).catch((error) => {
+          console.error('Erro ao registrar dominio comercial na Vercel:', error)
+        })
       })
     }
 
