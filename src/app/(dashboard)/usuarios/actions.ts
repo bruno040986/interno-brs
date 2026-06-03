@@ -16,6 +16,54 @@ const supabaseAdmin = createClient(
   }
 )
 
+const AUTH_USERS_PAGE_SIZE = 100
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase()
+}
+
+async function findAuthUsersByEmail(email: string) {
+  const targetEmail = normalizeEmail(email)
+  const matches: Array<{ id: string; email?: string | null }> = []
+  let page = 1
+
+  while (true) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: AUTH_USERS_PAGE_SIZE,
+    })
+
+    if (error) throw error
+
+    const users = data?.users || []
+    for (const user of users) {
+      if (normalizeEmail(user.email || '') === targetEmail) {
+        matches.push({ id: user.id, email: user.email })
+      }
+    }
+
+    if (users.length < AUTH_USERS_PAGE_SIZE) break
+    page += 1
+  }
+
+  return matches
+}
+
+async function cleanupAuthUsersByEmail(email: string, ignoreUserId?: string) {
+  const authUsers = await findAuthUsersByEmail(email)
+  const deleted: string[] = []
+
+  for (const authUser of authUsers) {
+    if (ignoreUserId && authUser.id === ignoreUserId) continue
+
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(authUser.id)
+    if (error) throw error
+    deleted.push(authUser.id)
+  }
+
+  return deleted
+}
+
 export async function saveProfile(profileData: {
   id?: string
   name: string
@@ -107,8 +155,20 @@ export async function deleteUser(userId: string) {
       { resource: 'sistema-usuarios-cadastro', action: 'can_delete' },
     ])
 
-    // Desativa no Auth e remove do perfil (ou apenas inativa conforme regra de negócio)
-    // Aqui vamos apenas inativar para manter histórico de auditoria
+    const { data: currentUser, error: currentUserErr } = await supabaseAdmin
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single()
+
+    if (currentUserErr) throw currentUserErr
+
+    const currentEmail = (currentUser as { email?: string | null } | null)?.email || ''
+    if (currentEmail) {
+      await cleanupAuthUsersByEmail(currentEmail, userId)
+    }
+
+    // Mantém o histórico no cadastro interno, mas limpa o acesso no Auth
     const { error } = await supabaseAdmin
       .from('users')
       .update({ active: false })
@@ -208,6 +268,28 @@ export async function saveUserDirectly(userData: {
         })
       }
 
+      const { data: currentUser, error: currentUserErr } = await supabaseAdmin
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .single()
+
+      if (currentUserErr) throw currentUserErr
+
+      const currentEmail = normalizeEmail((currentUser as { email?: string | null } | null)?.email || '')
+      const nextEmail = normalizeEmail(userData.email)
+
+      if (currentEmail !== nextEmail) {
+        await cleanupAuthUsersByEmail(userData.email, userId)
+
+        const { error: authUpdateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+          email: userData.email,
+          email_confirm: true
+        })
+
+        if (authUpdateErr) throw authUpdateErr
+      }
+
       const { error } = await supabaseAdmin
         .from('users')
         .update({
@@ -229,6 +311,8 @@ export async function saveUserDirectly(userData: {
         .eq('id', userId)
       if (error) throw error
     } else {
+      await cleanupAuthUsersByEmail(userData.email)
+
       // 1.2 Criar usuário no Auth primeiro
       const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
         email: userData.email,
@@ -239,10 +323,10 @@ export async function saveUserDirectly(userData: {
       if (authErr) throw authErr
       userId = authUser.user.id
 
-      // 1.3 Criar registro na tabela users com o ID do Auth
-      const { data: newUser, error: createErr } = await supabaseAdmin
+      // 1.3 Completar o registro na tabela users já criado pelo trigger do Auth
+      const { error: upsertErr } = await supabaseAdmin
         .from('users')
-        .insert({
+        .upsert({
           id: userId,
           name: userData.name,
           email: userData.email,
@@ -259,11 +343,11 @@ export async function saveUserDirectly(userData: {
           supervisor_id: userData.supervisor_id || null,
           gerente_id: userData.gerente_id || null,
           employee_id: userData.employee_id || null
+        }, {
+          onConflict: 'id'
         })
-        .select()
-        .single()
       
-      if (createErr) throw createErr
+      if (upsertErr) throw upsertErr
     }
 
     // 2. Salvar permissões customizadas (Upsert)
