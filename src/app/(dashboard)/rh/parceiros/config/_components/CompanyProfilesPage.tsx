@@ -50,6 +50,8 @@ type CompanyData = {
   facebook?: string
   tiktok?: string
   youtube?: string
+  whatsapp_support?: string
+  whatsapp_community?: string
   linkedin?: string
   cnpjws_payload?: any
 }
@@ -115,6 +117,8 @@ const EMPTY_PROFILE: CompanyProfileRow = {
     facebook: '',
     tiktok: '',
     youtube: '',
+    whatsapp_support: '',
+    whatsapp_community: '',
     linkedin: '',
     cnpjws_payload: {},
   },
@@ -627,6 +631,8 @@ export default function CompanyProfilesPage() {
               <div className="form-group"><label className="form-label">Facebook</label><input className="form-control" value={selected?.company_data?.facebook || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), facebook: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">TikTok</label><input className="form-control" value={selected?.company_data?.tiktok || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), tiktok: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">Canal YouTube</label><input className="form-control" value={selected?.company_data?.youtube || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), youtube: e.target.value } } : prev)} /></div>
+              <div className="form-group"><label className="form-label">WhatsApp Suporte</label><input className="form-control" value={selected?.company_data?.whatsapp_support || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), whatsapp_support: e.target.value } } : prev)} /></div>
+              <div className="form-group"><label className="form-label">Comunidade WhatsApp</label><input className="form-control" value={selected?.company_data?.whatsapp_community || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), whatsapp_community: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">LinkedIn</label><input className="form-control" value={selected?.company_data?.linkedin || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), linkedin: e.target.value } } : prev)} /></div>
             </div>
           </div>

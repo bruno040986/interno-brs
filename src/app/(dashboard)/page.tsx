@@ -255,8 +255,7 @@ export default function HubPage() {
       icon: Briefcase, 
       color: 'com',
       links: [
-        { label: 'Estrutura Comercial', href: '/rh/parceiros/config/comercial' },
-        { label: 'Tabela Locacao Veiculo', href: '/rh/parceiros/config/comercial/tabela-locacao-veiculo' },
+        { label: 'Cadastros Comerciais', href: '/rh/parceiros/config/comercial' },
         { label: 'Visão do Gerente', href: '#', disabled: true },
         { label: 'Visão do Supervisor', href: '#', disabled: true },
         { label: 'Visão do Superintendente', href: '#', disabled: true },

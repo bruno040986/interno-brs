@@ -7,6 +7,7 @@ import {
   requireCurrentUser,
   requirePermission as requireServerPermission,
 } from '@/lib/auth/server'
+import { registerAgentDomain } from '@/lib/vercel/register-domain'
 import { type PermissionAction, type PermissionRequirement } from '@/lib/auth/permissions'
 
 // Inicialização do cliente Supabase Admin para operações privilegiadas
@@ -297,7 +298,7 @@ export async function getCommercialEntities() {
     // Buscar usuários do sistema para vinculação de acesso
     const { data: users, error: uErr } = await supabaseAdmin
       .from('users')
-      .select('id, name, email, cpf')
+      .select('id, name, email, cpf, avatar_url')
       .eq('active', true)
       .order('name')
 
@@ -377,6 +378,13 @@ export async function saveCommercialEntity(entityData: {
         .from('commercial_entities')
         .insert(payload)
       if (error) throw error
+    }
+
+    const shouldRegisterDomain = !!payload.card_enabled && !!payload.commercial_slug
+    if (shouldRegisterDomain) {
+      void registerAgentDomain(String(payload.commercial_slug || '')).catch((error) => {
+        console.error('Erro ao registrar dominio comercial na Vercel:', error)
+      })
     }
 
     revalidatePath('/rh/parceiros/config/comercial')

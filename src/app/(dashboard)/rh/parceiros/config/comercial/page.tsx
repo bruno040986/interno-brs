@@ -9,7 +9,6 @@ import {
   Edit2,
   Eye,
   EyeOff,
-  FolderOpen,
   Loader2,
   Plus,
   Save,
@@ -19,9 +18,11 @@ import {
 } from 'lucide-react'
 import {
   deleteCommercialEntity,
+  getCompanyProfiles,
   getCommercialEntities,
   saveCommercialEntity,
 } from '../../actions'
+import { buildCommercialCardLinks } from '@/lib/commercial-card'
 
 type Role = 'superintendente' | 'supervisor' | 'gerente'
 type TabKey =
@@ -43,6 +44,30 @@ type BankLookup = {
 type UfLookup = {
   sigla: string
   nome: string
+}
+
+type CompanyProfileOption = {
+  id: string
+  nickname: string
+  is_active: boolean
+  company_data?: {
+    site?: string
+    instagram?: string
+    facebook?: string
+    tiktok?: string
+    youtube?: string
+    whatsapp_support?: string
+    whatsapp_community?: string
+    linkedin?: string
+  }
+}
+
+type SystemUserOption = {
+  id: string
+  name: string
+  email: string
+  cpf: string
+  avatar_url?: string | null
 }
 
 type CertificationRow = {
@@ -98,6 +123,22 @@ type CommercialDraft = {
   card_data: Record<string, any>
   parent?: { id: string; name: string; role: string }
 }
+
+type CardSocialKey = 'instagram' | 'facebook' | 'linkedin' | 'tiktok' | 'youtube' | 'community'
+type CardSocialFlagKey = `show_${CardSocialKey}`
+
+const CARD_SOCIAL_FIELDS: Array<{
+  key: CardSocialKey
+  flag: CardSocialFlagKey
+  label: string
+}> = [
+  { key: 'instagram', flag: 'show_instagram', label: 'Instagram' },
+  { key: 'facebook', flag: 'show_facebook', label: 'Facebook' },
+  { key: 'linkedin', flag: 'show_linkedin', label: 'LinkedIn' },
+  { key: 'tiktok', flag: 'show_tiktok', label: 'TikTok' },
+  { key: 'youtube', flag: 'show_youtube', label: 'Canal do YouTube' },
+  { key: 'community', flag: 'show_community', label: 'Comunidade WhatsApp' },
+]
 
 type EntityRow = {
   id: string
@@ -305,6 +346,35 @@ function normalizeAccountValue(value: string) {
   return `${digits.slice(0, 10)}-${digits.slice(10)}`
 }
 
+function normalizeDateToInputValue(value: unknown) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
+  }
+
+  const slashMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (slashMatch) {
+    return `${slashMatch[3]}-${slashMatch[2]}-${slashMatch[1]}`
+  }
+
+  const digits = onlyDigits(raw)
+  if (digits.length === 8) {
+    const first = Number(digits.slice(0, 4))
+    const last = Number(digits.slice(4, 8))
+    if (first > 1900 && first < 2100) {
+      return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+    }
+    if (last > 1900 && last < 2100) {
+      return `${digits.slice(4, 8)}-${digits.slice(2, 4)}-${digits.slice(0, 2)}`
+    }
+  }
+
+  return ''
+}
+
 function normalizeAddressNumberValue(value: string) {
   const trimmed = String(value || '').trim().toUpperCase()
   if (!trimmed) return ''
@@ -498,32 +568,46 @@ function buildCardRole(draft: CommercialDraft) {
   return base
 }
 
+function isCardSocialEnabled(cardData: Record<string, any> | null | undefined, flag: CardSocialFlagKey) {
+  return !!cardData?.[flag]
+}
+
 function CardPreview({
   draft,
   mode,
+  companyProfile,
+  linkedUser,
 }: {
   draft: CommercialDraft
   mode: 'mobile' | 'desktop'
+  companyProfile?: CompanyProfileOption | null
+  linkedUser?: SystemUserOption | null
 }) {
   const name = buildCardName(draft) || 'Nome da Gerente'
   const role = buildCardRole(draft)
   const wh = draft.cadastral_data?.phone_whatsapp || draft.phone_whatsapp || ''
   const email = draft.cadastral_data?.email_professional || draft.email_comissao || ''
   const slug = draft.commercial_slug || normalizeSlug(String(name).split(' ')[0] || 'maria')
-  const frameWidth = mode === 'mobile' ? 'min(100%, 420px)' : '100%'
-  const frameHeight = mode === 'mobile' ? '880px' : '760px'
+  const socials = draft.card_data || {}
+  const companyLinks = buildCommercialCardLinks(companyProfile, slug)
+  const avatarUrl = linkedUser?.avatar_url || ''
+  const avatarLabel = (linkedUser?.name || name).slice(0, 2).toUpperCase()
+  const frameWidth = mode === 'mobile' ? 'min(100%, 360px)' : 'min(100%, 460px)'
+  const frameAspectRatio = mode === 'mobile' ? '393 / 848' : '460 / 780'
+  const avatarSize = mode === 'mobile' ? 156 : 176
 
   return (
     <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
       <div
         style={{
           width: frameWidth,
-          minHeight: frameHeight,
+          aspectRatio: frameAspectRatio,
           borderRadius: mode === 'mobile' ? '36px' : '24px',
           padding: mode === 'mobile' ? '14px' : '18px',
           background: 'linear-gradient(180deg, #050507 0%, #0c0f16 60%, #050507 100%)',
           boxShadow: '0 30px 70px rgba(0,0,0,0.35)',
           border: '1px solid rgba(255,255,255,0.08)',
+          overflow: 'hidden',
         }}
       >
         <div
@@ -560,8 +644,8 @@ function CardPreview({
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.85rem' }}>
               <div
                 style={{
-                  width: mode === 'mobile' ? 170 : 200,
-                  height: mode === 'mobile' ? 170 : 200,
+                  width: avatarSize,
+                  height: avatarSize,
                   borderRadius: '999px',
                   background:
                     'linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)), linear-gradient(135deg, #12dfff, #1a84ff)',
@@ -569,25 +653,34 @@ function CardPreview({
                 }}
               >
                 <div
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    borderRadius: '999px',
-                    background:
-                      'radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 40%), linear-gradient(180deg, #181c2a, #0d1017)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.85rem',
-                    color: 'rgba(255,255,255,0.7)',
-                    textAlign: 'center',
-                    padding: '1rem',
-                  }}
-                >
-                  Foto do usuario vinculado
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: '999px',
+                      background:
+                        'radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 40%), linear-gradient(180deg, #181c2a, #0d1017)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.85rem',
+                      color: 'rgba(255,255,255,0.7)',
+                      textAlign: 'center',
+                      padding: '1rem',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={linkedUser?.name || name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <span>{avatarLabel}</span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
             <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
               <div style={{ fontSize: mode === 'mobile' ? '1.3rem' : '1.65rem', fontWeight: 800, lineHeight: 1.1 }}>{name}</div>
@@ -602,10 +695,12 @@ function CardPreview({
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               <CardLink label="WhatsApp" value={wh || 'WhatsApp comercial'} accent />
               <CardLink label="E-mail Profissional" value={email || 'email@brspromotora.com.br'} />
-              <CardLink label="LinkedIn" value={draft.card_data?.linkedin || 'LinkedIn' } />
-              <CardLink label="Instagram" value={draft.card_data?.instagram || 'Instagram' } />
-              <CardLink label="Facebook" value={draft.card_data?.facebook || 'Facebook' } />
-              <CardLink label="TikTok" value={draft.card_data?.tiktok || 'TikTok' } />
+              {isCardSocialEnabled(socials, 'show_linkedin') && <CardLink label="LinkedIn" value={socials.linkedin || 'LinkedIn'} />}
+              {isCardSocialEnabled(socials, 'show_instagram') && <CardLink label="Instagram" value={socials.instagram || 'Instagram'} />}
+              {isCardSocialEnabled(socials, 'show_facebook') && <CardLink label="Facebook" value={socials.facebook || 'Facebook'} />}
+              {isCardSocialEnabled(socials, 'show_tiktok') && <CardLink label="TikTok" value={socials.tiktok || 'TikTok'} />}
+              {isCardSocialEnabled(socials, 'show_youtube') && <CardLink label="Canal do YouTube" value={socials.youtube || 'Canal do YouTube'} />}
+              {isCardSocialEnabled(socials, 'show_community') && <CardLink label="Comunidade WhatsApp" value={socials.community || 'Comunidade WhatsApp'} />}
             </div>
 
             <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -621,37 +716,44 @@ function CardPreview({
                   </div>
                   <div style={{ fontWeight: 700 }}>Links uteis da empresa</div>
                 </div>
-                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)' }}>{slug}.brspromotora.com.br</div>
+                <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)' }}>
+                  {companyProfile?.nickname ? `${companyProfile.nickname}.brspromotora.com.br` : `${slug}.brspromotora.com.br`}
+                </div>
               </div>
               <div style={{ display: 'grid', gap: '0.5rem' }}>
-                {[
-                  'Comunidade WhatsApp',
-                  'Instagram',
-                  'LinkedIn',
-                  'YouTube',
-                  'Facebook',
-                  'TikTok',
-                  'Site',
-                  'WhatsApp Suporte 61 99955-1641',
-                  'Links Uteis',
-                ].map((label) => (
-                  <div
-                    key={label}
-                    style={{
-                      padding: '0.75rem 0.85rem',
-                      borderRadius: 14,
-                      background: 'rgba(18, 223, 255, 0.08)',
-                      border: '1px solid rgba(18, 223, 255, 0.16)',
-                      fontSize: '0.9rem',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <span>{label}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>+</span>
-                  </div>
-                ))}
+                {companyLinks.map(({ label, value, href }) => {
+                  const displayValue = value || 'Sem vínculo'
+                  return (
+                    <div
+                      key={label}
+                      style={{
+                        padding: '0.75rem 0.85rem',
+                        borderRadius: 14,
+                        background: 'rgba(18, 223, 255, 0.08)',
+                        border: '1px solid rgba(18, 223, 255, 0.16)',
+                        fontSize: '0.9rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '1rem',
+                      }}
+                    >
+                      <span>{label}</span>
+                      {href ? (
+                        <a
+                          href={href}
+                          target={href.startsWith('/') ? undefined : '_blank'}
+                          rel={href.startsWith('/') ? undefined : 'noopener noreferrer'}
+                          style={{ color: '#12dfff', textDecoration: 'none', textAlign: 'right' }}
+                        >
+                          {displayValue}
+                        </a>
+                      ) : (
+                        <span style={{ color: 'rgba(255,255,255,0.45)' }}>Sem vínculo</span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
@@ -735,7 +837,7 @@ function RowField({
 
 export default function ComercialConfigPage() {
   const [entities, setEntities] = useState<EntityRow[]>([])
-  const [systemUsers, setSystemUsers] = useState<{ id: string; name: string; email: string; cpf: string }[]>([])
+  const [systemUsers, setSystemUsers] = useState<SystemUserOption[]>([])
   const [banks, setBanks] = useState<BankLookup[]>([])
   const [ufs, setUfs] = useState<UfLookup[]>([])
   const [loading, setLoading] = useState(true)
@@ -749,10 +851,27 @@ export default function ComercialConfigPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
   const [bankSearch, setBankSearch] = useState('')
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false)
+  const [companyOptions, setCompanyOptions] = useState<CompanyProfileOption[]>([])
   const [editingEntity, setEditingEntity] = useState<CommercialDraft | null>(null)
+  const selectedLinkedUser = useMemo(() => {
+    if (!editingEntity?.user_id) return null
+    return systemUsers.find((user) => user.id === editingEntity.user_id) || null
+  }, [editingEntity?.user_id, systemUsers])
+  const selectedCompanyProfile = useMemo(() => {
+    const unit = String(editingEntity?.arw_data?.unidade || '').trim().toLowerCase()
+    if (!unit) return null
+    return (
+      companyOptions.find((company) => company.is_active !== false && String(company.nickname || '').trim().toLowerCase() === unit) || null
+    )
+  }, [companyOptions, editingEntity?.arw_data?.unidade])
+  const companyPreviewLinks = useMemo(
+    () => buildCommercialCardLinks(selectedCompanyProfile, editingEntity?.commercial_slug),
+    [selectedCompanyProfile, editingEntity?.commercial_slug],
+  )
   const filteredBanks = useMemo(() => {
     const query = bankSearch.trim().toLowerCase()
-    if (query.length < 3) return []
+    if (!bankDropdownOpen || query.length < 3) return []
     return banks
       .filter((bank) => {
         const label = formatBankLabel(bank).toLowerCase()
@@ -764,12 +883,26 @@ export default function ComercialConfigPage() {
 
   async function loadData() {
     setLoading(true)
-    const res = await getCommercialEntities()
+    const [res, companiesRes] = await Promise.all([getCommercialEntities(), getCompanyProfiles()])
     if (res.success && res.entities && res.systemUsers) {
       setEntities(res.entities as EntityRow[])
       setSystemUsers(res.systemUsers)
     } else {
       setMessage({ type: 'error', text: 'Erro ao carregar dados comerciais.' })
+    }
+    if (companiesRes.success && Array.isArray(companiesRes.companies)) {
+      setCompanyOptions(
+        companiesRes.companies
+          .filter((company: any) => company?.is_active !== false && String(company?.nickname || '').trim())
+          .map((company: any) => ({
+            id: String(company.id || ''),
+            nickname: String(company.nickname || '').trim(),
+            is_active: company?.is_active !== false,
+            company_data: company?.company_data || {},
+          })),
+      )
+    } else {
+      setCompanyOptions([])
     }
     setLoading(false)
   }
@@ -811,6 +944,7 @@ export default function ComercialConfigPage() {
   useEffect(() => {
     if (!editingEntity) {
       setBankSearch('')
+      setBankDropdownOpen(false)
       return
     }
 
@@ -821,6 +955,7 @@ export default function ComercialConfigPage() {
     } else {
       setBankSearch('')
     }
+    setBankDropdownOpen(false)
   }, [editingEntity?.id, editingEntity?.cadastral_data.bank_code, editingEntity?.cadastral_data.bank_name])
 
   const superintendentes = useMemo(() => entities.filter((e) => e.role === 'superintendente' && e.status === 'ativo'), [entities])
@@ -1063,6 +1198,29 @@ export default function ComercialConfigPage() {
       if (!res.ok) throw new Error('CPF nao encontrado.')
       const data = await res.json()
       const payload = data?.result || data?.data || data || {}
+      const fullName =
+        payload?.nome ||
+        payload?.name ||
+        payload?.nome_completo ||
+        payload?.full_name ||
+        payload?.pessoa?.nome ||
+        payload?.dados_cadastrais?.nome ||
+        ''
+      const birthDateRaw =
+        payload?.data_nascimento ||
+        payload?.birth_date ||
+        payload?.birthDate ||
+        payload?.nascimento ||
+        payload?.dataNascimento ||
+        payload?.data_nasc ||
+        payload?.pessoa?.data_nascimento ||
+        payload?.dados_cadastrais?.data_nascimento ||
+        payload?.dados_cadastrais?.nascimento ||
+        payload?.dados?.data_nascimento ||
+        payload?.dados?.nascimento ||
+        (payload?.year && payload?.month && payload?.day ? `${payload.year}-${String(payload.month).padStart(2, '0')}-${String(payload.day).padStart(2, '0')}` : '') ||
+        ''
+      const sexValue = String(payload?.gender || payload?.sexo || payload?.sex || '').trim().toUpperCase()
       setEditingEntity((prev) =>
         prev
           ? {
@@ -1070,8 +1228,9 @@ export default function ComercialConfigPage() {
               cadastral_data: {
                 ...(prev.cadastral_data || {}),
                 cpf,
-                full_name: payload?.nome || payload?.name || prev.cadastral_data?.full_name || '',
-                birth_date: payload?.data_nascimento || payload?.birth_date || prev.cadastral_data?.birth_date || '',
+                full_name: fullName || prev.cadastral_data?.full_name || '',
+                birth_date: normalizeDateToInputValue(birthDateRaw) || prev.cadastral_data?.birth_date || '',
+                sex: sexValue === 'F' || sexValue === 'FEMININO' ? 'F' : sexValue === 'M' || sexValue === 'MASCULINO' ? 'M' : prev.cadastral_data?.sex || 'M',
                 cpfhub_payload: data,
               },
             }
@@ -1173,25 +1332,23 @@ export default function ComercialConfigPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Nome / Razão</th>
-                    <th>CPF/CNPJ</th>
+                    <th>Nome Comercial</th>
                     <th>Cargo</th>
                     <th>Subordinação</th>
-                    <th>Slug</th>
-                    <th>Links</th>
+                    <th>Link Cartão Virtual</th>
                     <th style={{ textAlign: 'right' }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '3rem' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '3rem' }}>
                         <span className="spinner" style={{ borderTopColor: 'var(--brs-navy)' }} />
                       </td>
                     </tr>
                   ) : filteredEntities.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '3rem' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', padding: '3rem' }}>
                         <div className="empty-state">
                           <Users size={48} style={{ color: 'var(--brs-gray-300)', marginBottom: '1rem' }} />
                           <h3>Nenhuma entidade comercial cadastrada</h3>
@@ -1203,10 +1360,10 @@ export default function ComercialConfigPage() {
                     filteredEntities.map((ent) => (
                       <tr key={ent.id}>
                         <td>
-                          <div style={{ fontWeight: 600, color: 'var(--brs-gray-800)' }}>{ent.name}</div>
-                          {ent.email_comissao && <div style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>{ent.email_comissao}</div>}
+                          <div style={{ fontWeight: 600, color: 'var(--brs-gray-800)' }}>
+                            {ent.cadastral_data?.commercial_name || ent.name}
+                          </div>
                         </td>
-                        <td style={{ fontSize: '0.875rem' }}>{ent.cpf_cnpj}</td>
                         <td>
                           <span
                             className={`badge ${
@@ -1225,20 +1382,37 @@ export default function ComercialConfigPage() {
                             <span style={{ color: 'var(--brs-gray-300)' }}>- Direto</span>
                           )}
                         </td>
-                        <td style={{ fontSize: '0.875rem' }}>{ent.commercial_slug || '-'}</td>
                         <td>
-                          {ent.google_drive_url ? (
-                            <a
-                              href={ent.google_drive_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#3B82F6', fontSize: '0.875rem', textDecoration: 'none' }}
-                            >
-                              <FolderOpen size={16} />
-                              Drive
-                            </a>
+                          {ent.commercial_slug ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                              <a
+                                href={`https://${ent.commercial_slug}.brspromotora.com.br`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: '#2563EB',
+                                  fontSize: '0.875rem',
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  minWidth: 0,
+                                }}
+                                title={`${ent.commercial_slug}.brspromotora.com.br`}
+                              >
+                                {ent.commercial_slug}.brspromotora.com.br
+                              </a>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm btn-icon"
+                                onClick={() => copyText(`${ent.commercial_slug}.brspromotora.com.br`)}
+                                title="Copiar link do cartão virtual"
+                              >
+                                <Copy size={16} />
+                              </button>
+                            </div>
                           ) : (
-                            <span style={{ color: 'var(--brs-gray-300)', fontSize: '0.875rem' }}>Sem Link</span>
+                            <span style={{ color: 'var(--brs-gray-300)', fontSize: '0.875rem' }}>-</span>
                           )}
                         </td>
                         <td style={{ textAlign: 'right' }}>
@@ -1507,7 +1681,12 @@ export default function ComercialConfigPage() {
                           onChange={(e) => {
                             const next = e.target.value
                             setBankSearch(next)
+                            setBankDropdownOpen(true)
                             updateNested('cadastral_data', { bank_code: '', bank_name: '' })
+                          }}
+                          onFocus={() => setBankDropdownOpen(true)}
+                          onBlur={() => {
+                            window.setTimeout(() => setBankDropdownOpen(false), 150)
                           }}
                           placeholder={banksLoading ? 'Carregando bancos...' : 'Digite ao menos 3 caracteres'}
                         />
@@ -1539,8 +1718,10 @@ export default function ComercialConfigPage() {
                                   type="button"
                                   className="btn btn-ghost"
                                   style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, padding: '0.65rem 0.85rem' }}
+                                  onMouseDown={(event) => event.preventDefault()}
                                   onClick={() => {
                                     setBankSearch(label)
+                                    setBankDropdownOpen(false)
                                     updateNested('cadastral_data', {
                                       bank_code: String(bank.code || ''),
                                       bank_name: label,
@@ -1813,9 +1994,20 @@ export default function ComercialConfigPage() {
                   <RowField label="Codigo Agente ARW PF">
                     <input className="form-control" value={editingEntity.arw_data.codigo_agente_arw_pf || ''} onChange={(e) => updateNested('arw_data', { codigo_agente_arw_pf: e.target.value })} />
                   </RowField>
-                  <RowField label="Unidade">
-                    <input className="form-control" value={editingEntity.arw_data.unidade || ''} onChange={(e) => updateNested('arw_data', { unidade: e.target.value })} />
-                  </RowField>
+                    <RowField label="Unidade">
+                      <select
+                        className="form-control"
+                        value={editingEntity.arw_data.unidade || ''}
+                        onChange={(e) => updateNested('arw_data', { unidade: e.target.value })}
+                      >
+                        <option value="">Selecione...</option>
+                        {companyOptions.map((company) => (
+                          <option key={company.id || company.nickname} value={company.nickname}>
+                            {company.nickname}
+                          </option>
+                        ))}
+                      </select>
+                    </RowField>
                   <RowField label="Nivel de Acesso ARW">
                     <select className="form-control" value={editingEntity.arw_data.nivel_acesso_arw || editingEntity.nivel_acesso || ''} onChange={(e) => updateNested('arw_data', { nivel_acesso_arw: e.target.value })}>
                       <option value="">Selecione...</option>
@@ -2083,32 +2275,29 @@ export default function ComercialConfigPage() {
                   <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
                     <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>Redes sociais do cartao</div>
                     <div className="form-grid form-grid-2">
-                      {[
-                        ['instagram', 'Instagram'],
-                        ['facebook', 'Facebook'],
-                        ['linkedin', 'LinkedIn'],
-                        ['tiktok', 'TikTok'],
-                        ['youtube', 'Canal do YouTube'],
-                        ['community', 'Comunidade WhatsApp'],
-                      ].map(([key, label]) => (
-                        <RowField key={key} label={label}>
-                          <input className="form-control" value={(editingEntity.card_data as any)[key] || ''} onChange={(e) => updateNested('card_data', { [key]: e.target.value })} />
-                        </RowField>
-                      ))}
-                    </div>
-                    <div className="form-grid form-grid-2" style={{ marginTop: '0.75rem' }}>
-                      {[
-                        ['show_instagram', 'Instagram'],
-                        ['show_facebook', 'Facebook'],
-                        ['show_linkedin', 'LinkedIn'],
-                        ['show_tiktok', 'TikTok'],
-                        ['show_youtube', 'YouTube'],
-                        ['show_community', 'Comunidade'],
-                      ].map(([flag, label]) => (
-                        <label key={flag} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
-                          <input type="checkbox" checked={!!(editingEntity.card_data as any)[flag]} onChange={(e) => updateNested('card_data', { [flag]: e.target.checked })} />
-                          {label}
-                        </label>
+                      {CARD_SOCIAL_FIELDS.map(({ key, label, flag }) => (
+                        <div key={key} className="form-group">
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.35rem' }}>
+                            <label className="form-label" style={{ marginBottom: 0 }}>
+                              {label}
+                            </label>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--brs-gray-500)' }}>
+                              <input
+                                type="checkbox"
+                                checked={!!(editingEntity.card_data as any)?.[flag]}
+                                onChange={(e) => updateNested('card_data', { [flag]: e.target.checked })}
+                              />
+                              Habilitar
+                            </label>
+                          </div>
+                          <input
+                            className="form-control"
+                            value={(editingEntity.card_data as any)?.[key] || ''}
+                            onChange={(e) => updateNested('card_data', { [key]: e.target.value })}
+                            disabled={!isCardSocialEnabled(editingEntity.card_data, flag)}
+                            style={!isCardSocialEnabled(editingEntity.card_data, flag) ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+                          />
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -2116,22 +2305,38 @@ export default function ComercialConfigPage() {
                   <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
                     <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>Links da BRS Promotora no preview</div>
                     <div style={{ display: 'grid', gap: '0.5rem' }}>
-                      {[
-                        'Comunidade WhatsApp',
-                        'Instagram',
-                        'LinkedIn',
-                        'YouTube',
-                        'Facebook',
-                        'TikTok',
-                        'Site',
-                        'WhatsApp Suporte',
-                        'Links Uteis',
-                      ].map((label) => (
-                        <div key={label} style={{ padding: '0.75rem 0.85rem', borderRadius: 12, border: '1px solid var(--brs-gray-100)', background: '#fff', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>{label}</span>
-                          <span style={{ color: 'var(--brs-gray-300)' }}>link</span>
-                        </div>
-                      ))}
+                      {companyPreviewLinks.map(({ label, value, href }) => {
+                        const displayValue = value || 'Sem vínculo'
+                        return (
+                          <div
+                            key={label}
+                            style={{
+                              padding: '0.75rem 0.85rem',
+                              borderRadius: 12,
+                              border: '1px solid var(--brs-gray-100)',
+                              background: '#fff',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                            }}
+                          >
+                            <span>{label}</span>
+                            {href ? (
+                              <a
+                                href={href}
+                                target={href.startsWith('/') ? undefined : '_blank'}
+                                rel={href.startsWith('/') ? undefined : 'noopener noreferrer'}
+                                style={{ color: 'var(--brs-navy)', textDecoration: 'none', textAlign: 'right' }}
+                              >
+                                {displayValue}
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--brs-gray-300)' }}>{displayValue}</span>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
@@ -2147,7 +2352,12 @@ export default function ComercialConfigPage() {
                       Computador
                     </button>
                   </div>
-                  <CardPreview draft={editingEntity} mode={previewMode} />
+                  <CardPreview
+                    draft={editingEntity}
+                    mode={previewMode}
+                    companyProfile={selectedCompanyProfile}
+                    linkedUser={selectedLinkedUser}
+                  />
                 </div>
               </div>
             )}

@@ -27,6 +27,20 @@ function hasSupabaseSessionCookie(request: NextRequest) {
   return request.cookies.getAll().some(({ name }) => name.startsWith('sb-') && name.includes('auth-token'))
 }
 
+function getPublicCardSlugFromHost(request: NextRequest) {
+  const hostname = request.nextUrl.hostname.toLowerCase()
+  if (!hostname.endsWith('.brspromotora.com.br')) return null
+
+  const slug = hostname.replace('.brspromotora.com.br', '')
+  if (
+    !slug ||
+    ['workspace', 'gestao', 'www', 'app', 'api', 'auth', 'login', 'cartao', 'links', 'cadastro-parceiro', 'acesso-negado'].includes(slug)
+  ) {
+    return null
+  }
+  return slug
+}
+
 async function getUserWithTimeout(
   supabase: ReturnType<typeof createServerClient>,
   timeoutMs = 4000,
@@ -48,6 +62,15 @@ async function getUserWithTimeout(
 }
 
 export async function updateSession(request: NextRequest) {
+  const publicCardSlug = getPublicCardSlugFromHost(request)
+  if (publicCardSlug) {
+    if (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '') {
+      request.nextUrl.pathname = `/cartao/${publicCardSlug}`
+    } else if (request.nextUrl.pathname === '/links') {
+      request.nextUrl.pathname = `/cartao/${publicCardSlug}/links`
+    }
+  }
+
   const pathname = request.nextUrl.pathname
 
   // Do not intercept internal Next.js endpoints (RSC/Flight/Server Actions)
@@ -63,6 +86,7 @@ export async function updateSession(request: NextRequest) {
     '/api/auth/google',
     '/acesso-negado',
     '/cadastro-parceiro',
+    '/cartao',
     '/api/lookups',
     '/api/cpfhub',
   ]
