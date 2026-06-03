@@ -351,6 +351,19 @@ export default function HubPage() {
           />
         </div>
 
+        {/* Widget de Google Agenda */}
+        <div className="widget-card">
+          <div className="widget-header">
+            <h3 className="widget-title">
+              <Calendar size={18} style={{ color: 'var(--brs-navy)' }} />
+              Google Agenda
+            </h3>
+          </div>
+          <div className="widget-content" style={{ padding: '1rem' }}>
+            <AgendaComponent />
+          </div>
+        </div>
+
         {/* Grid de Setores ou Detalhe do Setor */}
         {!activeSector ? (
           <div className="hub-sections-grid">
@@ -459,6 +472,36 @@ export default function HubPage() {
       {/* Coluna Lateral (Widgets) */}
       <div className="hub-sidebar">
         
+        {/* Widget de BRS Messenger */}
+        <div className="widget-card">
+          <div className="widget-header">
+            <h3 className="widget-title">
+              <Users size={18} style={{ color: '#16a34a' }} />
+              BRS Messenger
+            </h3>
+          </div>
+          <div className="widget-content" style={{ padding: '1rem' }}>
+            <GoogleChatComponent />
+          </div>
+        </div>
+
+        {/* Widget de Comunicados */}
+        <div className="widget-card">
+          <div className="widget-header">
+            <h3 className="widget-title">
+              <Megaphone size={18} style={{ color: 'var(--brs-danger)' }} />
+              Comunicados
+            </h3>
+          </div>
+          <div className="widget-content" style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--brs-gray-400)', margin: 0 }}>
+              Nenhum comunicado no momento.
+            </p>
+          </div>
+        </div>
+
+        <PraiseBoard initialTab={initialPraiseTab} focusPraiseId={focusPraiseId} />
+
         {/* Widget de Próximos Aniversariantes */}
         <div className="widget-card">
           <div className="widget-header">
@@ -512,51 +555,8 @@ export default function HubPage() {
           </div>
         </div>
 
-        {/* Widget de Google Agenda */}
-        <div className="widget-card">
-          <div className="widget-header">
-            <h3 className="widget-title">
-              <Calendar size={18} style={{ color: 'var(--brs-navy)' }} />
-              Google Agenda
-            </h3>
-          </div>
-          <div className="widget-content" style={{ padding: '1rem' }}>
-            <AgendaComponent />
-          </div>
-        </div>
-
-        {/* Widget de BRS Messenger */}
-        <div className="widget-card">
-          <div className="widget-header">
-            <h3 className="widget-title">
-              <Users size={18} style={{ color: '#16a34a' }} />
-              BRS Messenger
-            </h3>
-          </div>
-          <div className="widget-content" style={{ padding: '1rem' }}>
-            <GoogleChatComponent />
-          </div>
-        </div>
-
-        {/* Widget de Comunicados */}
-        <div className="widget-card">
-          <div className="widget-header">
-            <h3 className="widget-title">
-              <Megaphone size={18} style={{ color: 'var(--brs-danger)' }} />
-              Comunicados
-            </h3>
-          </div>
-          <div className="widget-content" style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--brs-gray-400)', margin: 0 }}>
-              Nenhum comunicado no momento.
-            </p>
-          </div>
-        </div>
-
-        <PraiseBoard initialTab={initialPraiseTab} focusPraiseId={focusPraiseId} />
-
       </div>
-      </div>
+    </div>
     </div>
   )
 }
