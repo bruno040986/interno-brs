@@ -4,8 +4,33 @@ import PublicCommercialCard from './_components/PublicCommercialCard'
 
 export const dynamic = 'force-dynamic'
 
-function resolveSlug(searchParams?: { slug?: string | string[] }) {
-  const raw = searchParams?.slug
+type CartaoSearchParams = Promise<{
+  slug?: string | string[]
+  view?: string | string[]
+  mode?: string | string[]
+}>
+
+type CartaoSearchParamsResolved = {
+  slug?: string | string[]
+  view?: string | string[]
+  mode?: string | string[]
+}
+
+function isPromise<T>(value: unknown): value is Promise<T> {
+  return !!value && typeof (value as Promise<unknown>).then === 'function'
+}
+
+async function resolveSearchParams(
+  searchParams?: CartaoSearchParams | CartaoSearchParamsResolved,
+): Promise<CartaoSearchParamsResolved | undefined> {
+  if (!searchParams) return undefined
+  if (isPromise<CartaoSearchParamsResolved>(searchParams)) return await searchParams
+  return searchParams
+}
+
+async function resolveSlug(searchParams?: CartaoSearchParams | CartaoSearchParamsResolved) {
+  const resolved = await resolveSearchParams(searchParams)
+  const raw = resolved?.slug
   if (Array.isArray(raw)) return String(raw[0] || '').trim().toLowerCase()
   return String(raw || '').trim().toLowerCase()
 }
@@ -13,10 +38,11 @@ function resolveSlug(searchParams?: { slug?: string | string[] }) {
 export default async function CartaoPublicPage({
   searchParams,
 }: {
-  searchParams?: { slug?: string | string[]; view?: string | string[]; mode?: string | string[] }
+  searchParams?: CartaoSearchParams | CartaoSearchParamsResolved
 }) {
-  const slug = resolveSlug(searchParams)
-  const viewRaw = searchParams?.view ?? searchParams?.mode
+  const resolvedSearchParams = await resolveSearchParams(searchParams)
+  const slug = await resolveSlug(resolvedSearchParams)
+  const viewRaw = resolvedSearchParams?.view ?? resolvedSearchParams?.mode
   const view = Array.isArray(viewRaw) ? String(viewRaw[0] || '').trim().toLowerCase() : String(viewRaw || '').trim().toLowerCase()
   const cardMode = view === 'links' ? 'links' : 'card'
   if (!slug) {
@@ -101,9 +127,9 @@ export default async function CartaoPublicPage({
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams?: { slug?: string | string[]; view?: string | string[]; mode?: string | string[] }
+  searchParams?: CartaoSearchParams | CartaoSearchParamsResolved
 }): Promise<Metadata> {
-  const slug = resolveSlug(searchParams)
+  const slug = await resolveSlug(searchParams)
 
   if (!slug) {
     return {
