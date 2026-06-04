@@ -32,6 +32,7 @@ import {
 import { siFacebook, siGmail, siInstagram, siThreads, siTiktok, siWhatsapp, siX, siYoutube, type SimpleIcon } from 'simple-icons'
 import { normalizeExternalLink, type CommercialCompanyLinksProfile } from '@/lib/commercial-card'
 import type { PublicCommercialCardData, PublicCommercialCardLink } from '@/lib/commercial-card-public'
+import { CardActionButtons } from './CardActionButtons'
 
 type PublicCommercialCardProps = {
   slug: string
@@ -266,7 +267,7 @@ function getSupportEntries(companyProfile: CommercialCompanyLinksProfile | null)
   if (supportWhatsApp) {
     items.push({
       label: 'WhatsApp Suporte',
-      value: supportWhatsApp,
+      value: formatBrazilPhoneDisplay(supportWhatsApp) || supportWhatsApp,
       href: getWhatsAppLink(supportWhatsApp) || normalizeExternalLink(supportWhatsApp),
       iconKey: 'whatsapp',
     })
@@ -950,10 +951,7 @@ export default function PublicCommercialCard({
                 </div>
               </AccordionSection>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-                <QuickActionCard icon={ContactRound} title="Salvar Contato" subtitle="VCF" />
-                <QuickActionCard icon={QrCode} title="QR Code" subtitle="Escanear cartão" />
-              </div>
+              <CardActionButtons fullName={name} phone={whatsapp} email={email} cardUrl={getPublicCardUrl(slug)} />
             </section>
           ) : null}
 
