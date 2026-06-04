@@ -29,6 +29,7 @@ import {
   X as XIcon,
   type LucideIcon,
 } from 'lucide-react'
+import { siFacebook, siGmail, siInstagram, siThreads, siTiktok, siWhatsapp, siX, siYoutube, type SimpleIcon } from 'simple-icons'
 import { normalizeExternalLink, type CommercialCompanyLinksProfile } from '@/lib/commercial-card'
 import type { PublicCommercialCardData, PublicCommercialCardLink } from '@/lib/commercial-card-public'
 
@@ -47,14 +48,14 @@ type SocialLinkEntry = {
   label: string
   value: string
   href: string
-  icon: LucideIcon
+  iconKey: string
 }
 
 type AppLinkEntry = {
   label: string
   value: string
   href: string
-  icon: LucideIcon
+  iconKey: string
 }
 
 function getRoleLabel(role: PublicCommercialCardData['entity']['role'], sex: string) {
@@ -151,16 +152,63 @@ function normalizeSocialUrl(value: string) {
   return normalizeExternalLink(trimmed)
 }
 
+function getBrandIcon(iconKey: string): SimpleIcon | null {
+  const key = String(iconKey || '').trim().toLowerCase()
+  const registry: Record<string, SimpleIcon> = {
+    whatsapp: siWhatsapp,
+    gmail: siGmail,
+    instagram: siInstagram,
+    facebook: siFacebook,
+    tiktok: siTiktok,
+    youtube: siYoutube,
+    x: siX,
+    threads: siThreads,
+  }
+  return registry[key] || null
+}
+
+function BrandIcon({
+  iconKey,
+  size = 18,
+  color,
+  fallback,
+}: {
+  iconKey: string
+  size?: number
+  color?: string
+  fallback?: React.ReactNode
+}) {
+  const icon = getBrandIcon(iconKey)
+  if (!icon) return <>{fallback}</>
+
+  const fill = color || `#${icon.hex}`
+
+  return (
+    <svg
+      role="img"
+      aria-label={icon.title}
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill={fill}
+      style={{ display: 'block', flexShrink: 0 }}
+    >
+      <title>{icon.title}</title>
+      <path d={icon.path} />
+    </svg>
+  )
+}
+
 function getSocialEntries(cardData: Record<string, any>): SocialLinkEntry[] {
   const entries = [
-    { key: 'show_instagram', label: 'Instagram', value: cardData.instagram || '', icon: Camera },
-    { key: 'show_facebook', label: 'Facebook', value: cardData.facebook || '', icon: Globe2 },
-    { key: 'show_linkedin', label: 'LinkedIn', value: cardData.linkedin || '', icon: Briefcase },
-    { key: 'show_tiktok', label: 'TikTok', value: cardData.tiktok || '', icon: MessageCircle },
-    { key: 'show_threads', label: 'Threads', value: cardData.threads || '', icon: AtSign },
-    { key: 'show_x', label: 'X', value: cardData.x || '', icon: XIcon },
-    { key: 'show_youtube', label: 'YouTube', value: cardData.youtube || '', icon: MonitorSmartphone },
-    { key: 'show_community', label: 'Comunidade WhatsApp', value: cardData.community || '', icon: MessageCircle },
+    { key: 'show_instagram', label: 'Instagram', value: cardData.instagram || '', iconKey: 'instagram' },
+    { key: 'show_facebook', label: 'Facebook', value: cardData.facebook || '', iconKey: 'facebook' },
+    { key: 'show_linkedin', label: 'LinkedIn', value: cardData.linkedin || '', iconKey: 'linkedin' },
+    { key: 'show_tiktok', label: 'TikTok', value: cardData.tiktok || '', iconKey: 'tiktok' },
+    { key: 'show_threads', label: 'Threads', value: cardData.threads || '', iconKey: 'threads' },
+    { key: 'show_x', label: 'X', value: cardData.x || '', iconKey: 'x' },
+    { key: 'show_youtube', label: 'YouTube', value: cardData.youtube || '', iconKey: 'youtube' },
+    { key: 'show_community', label: 'Comunidade WhatsApp', value: cardData.community || '', iconKey: 'whatsapp' },
   ]
 
   return entries
@@ -169,19 +217,19 @@ function getSocialEntries(cardData: Record<string, any>): SocialLinkEntry[] {
       label: entry.label,
       value: String(entry.value || '').trim(),
       href: normalizeSocialUrl(String(entry.value || '')),
-      icon: entry.icon,
+      iconKey: entry.iconKey,
     }))
 }
 
 function getCompanySocialEntries(companyProfile: CommercialCompanyLinksProfile | null): AppLinkEntry[] {
   const data = companyProfile?.company_data || {}
   return [
-    { label: 'Instagram', value: String(data.instagram || '').trim(), href: normalizeExternalLink(String(data.instagram || '')), icon: Camera },
-    { label: 'Facebook', value: String(data.facebook || '').trim(), href: normalizeExternalLink(String(data.facebook || '')), icon: Globe2 },
-    { label: 'LinkedIn', value: String(data.linkedin || '').trim(), href: normalizeExternalLink(String(data.linkedin || '')), icon: Briefcase },
-    { label: 'TikTok', value: String(data.tiktok || '').trim(), href: normalizeExternalLink(String(data.tiktok || '')), icon: MessageCircle },
-    { label: 'YouTube', value: String(data.youtube || '').trim(), href: normalizeExternalLink(String(data.youtube || '')), icon: MonitorSmartphone },
-    { label: 'Comunidade WhatsApp', value: String(data.whatsapp_community || '').trim(), href: normalizeExternalLink(String(data.whatsapp_community || '')), icon: MessageCircle },
+    { label: 'Instagram', value: String(data.instagram || '').trim(), href: normalizeExternalLink(String(data.instagram || '')), iconKey: 'instagram' },
+    { label: 'Facebook', value: String(data.facebook || '').trim(), href: normalizeExternalLink(String(data.facebook || '')), iconKey: 'facebook' },
+    { label: 'LinkedIn', value: String(data.linkedin || '').trim(), href: normalizeExternalLink(String(data.linkedin || '')), iconKey: 'linkedin' },
+    { label: 'TikTok', value: String(data.tiktok || '').trim(), href: normalizeExternalLink(String(data.tiktok || '')), iconKey: 'tiktok' },
+    { label: 'YouTube', value: String(data.youtube || '').trim(), href: normalizeExternalLink(String(data.youtube || '')), iconKey: 'youtube' },
+    { label: 'Comunidade WhatsApp', value: String(data.whatsapp_community || '').trim(), href: normalizeExternalLink(String(data.whatsapp_community || '')), iconKey: 'whatsapp' },
   ].filter((item) => !!item.value)
 }
 
@@ -196,7 +244,7 @@ function getSupportEntries(companyProfile: CommercialCompanyLinksProfile | null)
       label: 'WhatsApp Suporte',
       value: supportWhatsApp,
       href: getWhatsAppLink(supportWhatsApp) || normalizeExternalLink(supportWhatsApp),
-      icon: MessageCircle,
+      iconKey: 'whatsapp',
     })
   }
 
@@ -205,7 +253,7 @@ function getSupportEntries(companyProfile: CommercialCompanyLinksProfile | null)
       label: 'E-mail Suporte',
       value: supportEmail,
       href: normalizeExternalLink(`mailto:${supportEmail}`),
-      icon: Mail,
+      iconKey: 'gmail',
     })
   }
 
@@ -219,7 +267,7 @@ function getSiteEntry(companyProfile: CommercialCompanyLinksProfile | null): App
     label: 'Site Institucional',
     value: site,
     href: normalizeExternalLink(site),
-    icon: Globe2,
+    iconKey: 'link',
   }
 }
 
@@ -275,10 +323,8 @@ function getPlatformBadge(label: string) {
     borderRadius: 14,
     display: 'grid',
     placeItems: 'center',
-    color: '#fff',
-    fontWeight: 900,
-    fontSize: '1.03rem',
     boxShadow: '0 10px 18px rgba(15, 23, 42, 0.12)',
+    background: '#fff',
   } as const
 
   if (key === 'instagram') {
@@ -288,7 +334,19 @@ function getPlatformBadge(label: string) {
     return <div style={{ ...common, background: '#1877f2' }}>f</div>
   }
   if (key === 'linkedin') {
-    return <div style={{ ...common, background: '#0a66c2' }}>in</div>
+    return (
+      <div
+        style={{
+          ...common,
+          background: '#0a66c2',
+          color: '#fff',
+          fontWeight: 900,
+          fontSize: '0.95rem',
+        }}
+      >
+        in
+      </div>
+    )
   }
   if (key === 'tiktok') {
     return <div style={{ ...common, background: '#000' }}>♪</div>
@@ -378,12 +436,12 @@ function LinkRow({
   label,
   value,
   href,
-  icon: Icon,
+  iconKey,
 }: {
   label: string
   value: string
   href?: string
-  icon: LucideIcon
+  iconKey: string
 }) {
   const inner = (
     <div
@@ -413,7 +471,10 @@ function LinkRow({
             flexShrink: 0,
           }}
         >
-          <Icon size={18} />
+          {(() => {
+            const Icon = getCardLinkIcon(iconKey)
+            return <BrandIcon iconKey={iconKey} size={18} fallback={<Icon size={18} />} />
+          })()}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 900, fontSize: '0.96rem', lineHeight: 1.1 }}>{label}</div>
@@ -496,7 +557,18 @@ function SocialTile({
         boxShadow: '0 8px 16px rgba(15, 23, 42, 0.04)',
       }}
     >
-      {getPlatformBadge(entry.label)}
+      <BrandIcon
+        iconKey={entry.iconKey}
+        size={28}
+        color={
+          entry.iconKey === 'whatsapp'
+            ? '#25D366'
+            : entry.iconKey === 'x'
+              ? '#000'
+              : undefined
+        }
+        fallback={getPlatformBadge(entry.label)}
+      />
     </div>
   )
 
@@ -788,7 +860,7 @@ export default function PublicCommercialCard({
                       flexShrink: 0,
                     }}
                   >
-                    <MessageCircle size={18} />
+                    <BrandIcon iconKey="whatsapp" size={18} color="#fff" fallback={<MessageCircle size={18} />} />
                   </div>
                   <div style={{ minWidth: 0, fontWeight: 900, fontSize: '1.02rem' }}>WhatsApp</div>
                 </div>
@@ -828,7 +900,7 @@ export default function PublicCommercialCard({
                       flexShrink: 0,
                     }}
                   >
-                    <Mail size={17} />
+                    <BrandIcon iconKey="gmail" size={17} color="#ff4f4f" fallback={<Mail size={17} />} />
                   </div>
                   <div style={{ minWidth: 0, fontWeight: 900, fontSize: '1.02rem' }}>E-mail</div>
                 </div>
@@ -873,7 +945,7 @@ export default function PublicCommercialCard({
             <AccordionSection icon={MessageCircle} title="Suporte Operacional" defaultOpen>
               <div style={{ display: 'grid', gap: 10 }}>
                 {supportEntries.length ? (
-                  supportEntries.map((entry) => <LinkRow key={entry.label} label={entry.label} value={entry.value} href={entry.href} icon={entry.icon} />)
+                  supportEntries.map((entry) => <LinkRow key={entry.label} label={entry.label} value={entry.value} href={entry.href} iconKey={entry.iconKey} />)
                 ) : (
                   <div style={{ padding: '0.9rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444' }}>
                     Nenhum contato de suporte vinculado.
@@ -884,7 +956,7 @@ export default function PublicCommercialCard({
 
             <AccordionSection icon={Globe2} title="Site">
               {siteEntry ? (
-                <LinkRow label={siteEntry.label} value={siteEntry.value} href={siteEntry.href} icon={siteEntry.icon} />
+                <LinkRow label={siteEntry.label} value={siteEntry.value} href={siteEntry.href} iconKey={siteEntry.iconKey} />
               ) : (
                 <div style={{ padding: '0.9rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444' }}>
                   Site não vinculado.
@@ -901,7 +973,7 @@ export default function PublicCommercialCard({
                 }}
               >
                 {companySocialEntries.length ? (
-                  companySocialEntries.map((entry) => <SocialTile key={entry.label} entry={{ label: entry.label, value: entry.value, href: entry.href, icon: entry.icon }} />)
+                  companySocialEntries.map((entry) => <SocialTile key={entry.label} entry={{ label: entry.label, value: entry.value, href: entry.href, iconKey: entry.iconKey }} />)
                 ) : (
                   <div style={{ padding: '0.9rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444', gridColumn: '1 / -1' }}>
                     Nenhuma rede social da empresa vinculada.
