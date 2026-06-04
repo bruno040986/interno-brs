@@ -1,42 +1,33 @@
 import {
   ArrowRight,
-  Banknote,
+  AtSign,
+  BadgeCheck,
   BadgeInfo,
+  Briefcase,
   Building2,
   CalendarDays,
+  Camera,
   ChevronDown,
-  ChevronUp,
   ContactRound,
   ExternalLink,
+  FileSearch,
   FileText,
   Globe2,
   Link2,
   Mail,
   MapPin,
   MessageCircle,
+  MonitorSmartphone,
   Phone,
   QrCode,
-  ShieldCheck,
-  Sparkles,
-  Users,
-  type LucideIcon,
-  Contact,
-  MonitorSmartphone,
-  Camera,
-  Ticket,
-  Search,
-  FileSearch,
-  Briefcase,
-  Megaphone,
-  FolderOpen,
-  Star,
-  BadgeDollarSign,
-  MessageSquareMore,
-  Target,
   ScanLine,
-  BadgeCheck,
+  ShieldCheck,
+  Star,
+  Target,
+  Ticket,
+  Users,
   X as XIcon,
-  AtSign,
+  type LucideIcon,
 } from 'lucide-react'
 import { normalizeExternalLink, type CommercialCompanyLinksProfile } from '@/lib/commercial-card'
 import type { PublicCommercialCardData, PublicCommercialCardLink } from '@/lib/commercial-card-public'
@@ -75,9 +66,9 @@ function getRoleLabel(role: PublicCommercialCardData['entity']['role'], sex: str
 
 function getSupportRoleLabel(role: PublicCommercialCardData['entity']['role'], sex: string) {
   const female = String(sex || '').trim().toLowerCase() === 'f'
-  if (role === 'superintendente') return 'Fale com o meu superintendente comercial'
-  if (role === 'supervisor') return female ? 'Fale com a minha supervisora comercial' : 'Fale com o meu supervisor comercial'
-  return female ? 'Fale com a minha supervisora comercial' : 'Fale com o meu supervisor comercial'
+  if (role === 'superintendente') return 'Fale com o Superintendente'
+  if (role === 'supervisor') return female ? 'Fale com a Supervisora' : 'Fale com o Supervisor'
+  return female ? 'Fale com a Supervisora' : 'Fale com o Supervisor'
 }
 
 function getPublicCardUrl(slug?: string | null) {
@@ -100,50 +91,41 @@ function getCardLinkIcon(iconKey: string): LucideIcon {
     mail: Mail,
     phone: Phone,
     message: MessageCircle,
-    'message-square': MessageSquareMore,
+    'message-square': MessageCircle,
     file: FileText,
     book: BadgeInfo,
-    megaphone: Megaphone,
+    megaphone: MessageCircle,
     users: Users,
     qr: QrCode,
     external: ExternalLink,
     more: ChevronDown,
-    home: Sparkles,
-    search: Search,
+    search: BadgeInfo,
     calendar: CalendarDays,
     shield: ShieldCheck,
-    bank: Banknote,
+    bank: Building2,
     briefcase: Briefcase,
     building: Building2,
-    camera: ContactRound,
+    camera: Camera,
     car: MonitorSmartphone,
     check: BadgeCheck,
-    clock: BadgeInfo,
-    cloud: BadgeInfo,
-    code: BadgeInfo,
-    card: BadgeDollarSign,
+    card: Target,
     download: ArrowRight,
-    folder: FolderOpen,
+    folder: FileText,
     gift: Star,
     heart: Star,
-    image: Contact,
+    image: Camera,
     info: BadgeInfo,
     key: BadgeCheck,
     lock: ShieldCheck,
     pin: MapPin,
-    menu: ChevronDown,
     notebook: FileText,
-    package: FolderOpen,
-    palette: Sparkles,
-    paperclip: Link2,
     play: ExternalLink,
     printer: FileText,
-    rocket: Sparkles,
+    rocket: Target,
     scan: ScanLine,
     share: ExternalLink,
     settings: BadgeInfo,
     shop: Building2,
-    sparkles: Sparkles,
     star: Star,
     tag: Ticket,
     target: Target,
@@ -155,9 +137,6 @@ function getCardLinkIcon(iconKey: string): LucideIcon {
     wrench: BadgeInfo,
     x: XIcon,
     threads: AtSign,
-    bell: BadgeInfo,
-    bookmark: BadgeCheck,
-    flag: BadgeInfo,
     instagram: Camera,
     facebook: Globe2,
     linkedin: Briefcase,
@@ -217,7 +196,7 @@ function getSupportEntries(companyProfile: CommercialCompanyLinksProfile | null)
       label: 'WhatsApp Suporte',
       value: supportWhatsApp,
       href: getWhatsAppLink(supportWhatsApp) || normalizeExternalLink(supportWhatsApp),
-      icon: Phone,
+      icon: MessageCircle,
     })
   }
 
@@ -237,7 +216,7 @@ function getSiteEntry(companyProfile: CommercialCompanyLinksProfile | null): App
   const site = String(companyProfile?.company_data?.site || '').trim()
   if (!site) return null
   return {
-    label: 'Site',
+    label: 'Site Institucional',
     value: site,
     href: normalizeExternalLink(site),
     icon: Globe2,
@@ -248,39 +227,95 @@ function getRelationLinks(
   parent: PublicCommercialCardData['parent'],
   superior: PublicCommercialCardData['superior'],
 ) {
-  const items: Array<{ label: string; href: string; subtitle: string; icon: LucideIcon }> = []
+  const items: Array<{ label: string; href: string; subtitle: string; icon: LucideIcon; initials: string }> = []
 
   const parentSlug = String(parent?.commercial_slug || '').trim()
   const parentSex = String(parent?.cadastral_data?.sex || '').trim()
+  const parentPhone = String(parent?.cadastral_data?.phone_whatsapp || '').trim()
   if (parentSlug) {
     items.push({
       label: getSupportRoleLabel(parent?.role || 'supervisor', parentSex),
-      subtitle: parent?.name || 'Contato vinculado',
+      subtitle: parentPhone || parent?.name || 'Contato vinculado',
       href: getPublicCardUrl(parentSlug),
       icon: Users,
+      initials: String(parent?.name || 'C').split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join(''),
     })
   }
 
   const superiorSlug = String(superior?.commercial_slug || '').trim()
   const superiorSex = String(superior?.cadastral_data?.sex || '').trim()
+  const superiorPhone = String(superior?.cadastral_data?.phone_whatsapp || '').trim()
   if (superiorSlug) {
     items.push({
       label: getSupportRoleLabel(superior?.role || 'superintendente', superiorSex),
-      subtitle: superior?.name || 'Contato vinculado',
+      subtitle: superiorPhone || superior?.name || 'Contato vinculado',
       href: getPublicCardUrl(superiorSlug),
       icon: Building2,
+      initials: String(superior?.name || 'C').split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join(''),
     })
   }
 
   return items
 }
 
+function getInitials(name: string) {
+  return String(name || '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('')
+}
+
+function getPlatformBadge(label: string) {
+  const key = String(label || '').trim().toLowerCase()
+  const common = {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    display: 'grid',
+    placeItems: 'center',
+    color: '#fff',
+    fontWeight: 900,
+    fontSize: '1.03rem',
+    boxShadow: '0 10px 18px rgba(15, 23, 42, 0.12)',
+  } as const
+
+  if (key === 'instagram') {
+    return <div style={{ ...common, background: 'linear-gradient(135deg, #f58529, #dd2a7b 48%, #8134af 78%, #515bd4)' }}>IG</div>
+  }
+  if (key === 'facebook') {
+    return <div style={{ ...common, background: '#1877f2' }}>f</div>
+  }
+  if (key === 'linkedin') {
+    return <div style={{ ...common, background: '#0a66c2' }}>in</div>
+  }
+  if (key === 'tiktok') {
+    return <div style={{ ...common, background: '#000' }}>♪</div>
+  }
+  if (key === 'threads') {
+    return <div style={{ ...common, background: '#000' }}>@</div>
+  }
+  if (key === 'x') {
+    return <div style={{ ...common, background: '#000' }}>X</div>
+  }
+  if (key === 'youtube') {
+    return <div style={{ ...common, background: '#ff0000' }}>▶</div>
+  }
+  if (key === 'comunidade whatsapp') {
+    return <div style={{ ...common, background: '#25d366' }}>WA</div>
+  }
+  return <div style={{ ...common, background: 'linear-gradient(135deg, #2d5cff, #ff5da7)' }}>•</div>
+}
+
 function AccordionSection({
+  icon: Icon,
   title,
   subtitle,
   children,
   defaultOpen = false,
 }: {
+  icon: LucideIcon
   title: string
   subtitle?: string
   children: React.ReactNode
@@ -289,11 +324,12 @@ function AccordionSection({
   return (
     <details
       open={defaultOpen}
+      className="cartao-accordion"
       style={{
-        borderRadius: 24,
-        background: 'rgba(255,255,255,0.88)',
-        border: '1px solid rgba(45, 92, 255, 0.10)',
-        boxShadow: '0 18px 45px rgba(15, 23, 42, 0.06)',
+        borderRadius: 18,
+        background: 'rgba(245, 245, 245, 0.9)',
+        border: '1px solid rgba(30, 30, 30, 0.25)',
+        boxShadow: '0 12px 24px rgba(15, 23, 42, 0.05)',
         overflow: 'hidden',
       }}
     >
@@ -301,21 +337,39 @@ function AccordionSection({
         style={{
           listStyle: 'none',
           cursor: 'pointer',
-          padding: '1rem 1.05rem',
+          padding: '0.95rem 1rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '1rem',
-          color: '#123a77',
+          gap: '0.9rem',
+          color: '#111111',
+          fontWeight: 900,
         }}
       >
-        <div>
-          <div style={{ fontSize: '0.94rem', fontWeight: 800 }}>{title}</div>
-          {subtitle ? <div style={{ marginTop: 4, fontSize: '0.78rem', color: '#6b7280' }}>{subtitle}</div> : null}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 999,
+              display: 'grid',
+              placeItems: 'center',
+              background: 'rgba(255,255,255,0.6)',
+              border: '1px solid rgba(0,0,0,0.12)',
+              color: '#111111',
+              flexShrink: 0,
+            }}
+          >
+            <Icon size={18} />
+          </div>
+          <div style={{ minWidth: 0, textAlign: 'left' }}>
+            <div style={{ fontSize: '1.02rem', lineHeight: 1.2 }}>{title}</div>
+            {subtitle ? <div style={{ marginTop: 4, fontSize: '0.76rem', fontWeight: 600, color: '#666' }}>{subtitle}</div> : null}
+          </div>
         </div>
-        <ChevronDown size={18} style={{ flexShrink: 0, color: '#7c8db5' }} />
+        <ChevronDown size={24} className="accordion-chevron" style={{ color: '#666', flexShrink: 0, transition: 'transform 160ms ease' }} />
       </summary>
-      <div style={{ padding: '0 1rem 1rem' }}>{children}</div>
+      <div style={{ padding: '0 0.8rem 0.8rem' }}>{children}</div>
     </details>
   )
 }
@@ -325,69 +379,55 @@ function LinkRow({
   value,
   href,
   icon: Icon,
-  muted,
 }: {
   label: string
   value: string
   href?: string
   icon: LucideIcon
-  muted?: boolean
 }) {
-  const content = (
+  const inner = (
     <div
       style={{
         width: '100%',
-        padding: '0.95rem 1rem',
-        borderRadius: 18,
-        background: muted ? 'rgba(239, 246, 255, 0.9)' : '#f8fbff',
-        border: '1px solid rgba(46, 92, 255, 0.10)',
+        borderRadius: 14,
+        background: '#d9d9d9',
+        border: '1px solid rgba(0,0,0,0.2)',
+        padding: '0.85rem 0.9rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '0.85rem',
-        boxShadow: '0 10px 25px rgba(15, 23, 42, 0.04)',
+        gap: 12,
+        color: '#111',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         <div
           style={{
-            width: 38,
-            height: 38,
-            borderRadius: 12,
+            width: 28,
+            height: 28,
+            borderRadius: 999,
             display: 'grid',
             placeItems: 'center',
-            background: 'linear-gradient(135deg, rgba(45, 92, 255, 0.12), rgba(255, 93, 167, 0.12))',
-            color: '#123a77',
+            color: '#111',
             flexShrink: 0,
           }}
         >
           <Icon size={18} />
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, color: '#123a77' }}>{label}</div>
-          <div
-            style={{
-              marginTop: 4,
-              fontSize: '0.84rem',
-              color: value ? '#55627a' : '#9aa7c2',
-              wordBreak: 'break-word',
-            }}
-          >
-            {value || 'Sem vínculo'}
-          </div>
+          <div style={{ fontWeight: 900, fontSize: '0.96rem', lineHeight: 1.1 }}>{label}</div>
+          <div style={{ marginTop: 3, color: '#222', fontSize: '0.84rem', wordBreak: 'break-word' }}>{value}</div>
         </div>
       </div>
-      <ArrowRight size={16} color="#98a8c7" style={{ flexShrink: 0 }} />
+      <ExternalLink size={16} color="#222" style={{ flexShrink: 0 }} />
     </div>
   )
 
-  if (!href || !value) {
-    return content
-  }
-
+  if (!href || !value) return inner
   return (
     <a href={href} target={href.startsWith('/') ? undefined : '_blank'} rel={href.startsWith('/') ? undefined : 'noopener noreferrer'} style={{ textDecoration: 'none' }}>
-      {content}
+      {inner}
     </a>
   )
 }
@@ -404,34 +444,118 @@ function QuickActionCard({
   return (
     <div
       style={{
-        borderRadius: 22,
-        border: '1px solid rgba(46, 92, 255, 0.10)',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(245,248,255,0.96))',
-        padding: '1rem',
-        minHeight: 120,
+        borderRadius: 14,
+        border: '1px solid rgba(45, 92, 255, 0.12)',
+        background: 'rgba(255,255,255,0.88)',
+        padding: '0.85rem 0.9rem',
         display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        gap: '0.55rem',
-        boxShadow: '0 14px 35px rgba(15, 23, 42, 0.05)',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        boxShadow: '0 10px 22px rgba(15, 23, 42, 0.05)',
       }}
     >
-      <div
-        style={{
-          width: 46,
-          height: 46,
-          borderRadius: 16,
-          display: 'grid',
-          placeItems: 'center',
-          background: 'linear-gradient(135deg, rgba(45, 92, 255, 0.12), rgba(255, 93, 167, 0.12))',
-          color: '#123a77',
-        }}
-      >
-        <Icon size={20} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 10,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'linear-gradient(135deg, rgba(170, 94, 199, 0.14), rgba(255, 93, 167, 0.14))',
+            color: '#9d59c8',
+            flexShrink: 0,
+          }}
+        >
+          <Icon size={18} />
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 800, color: '#111', fontSize: '0.9rem', lineHeight: 1.1 }}>{title}</div>
+          <div style={{ marginTop: 2, fontSize: '0.72rem', color: '#666' }}>{subtitle}</div>
+        </div>
       </div>
-      <div style={{ fontWeight: 800, color: '#123a77', fontSize: '1rem' }}>{title}</div>
-      <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>{subtitle}</div>
     </div>
+  )
+}
+
+function SocialTile({
+  entry,
+}: {
+  entry: SocialLinkEntry
+}) {
+  const content = (
+    <div
+      style={{
+        borderRadius: 16,
+        background: '#fff',
+        border: '1px solid rgba(0,0,0,0.18)',
+        minHeight: 64,
+        display: 'grid',
+        placeItems: 'center',
+        boxShadow: '0 8px 16px rgba(15, 23, 42, 0.04)',
+      }}
+    >
+      {getPlatformBadge(entry.label)}
+    </div>
+  )
+
+  if (!entry.href || !entry.value) return content
+  return (
+    <a href={entry.href} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }} title={entry.label}>
+      {content}
+    </a>
+  )
+}
+
+function RelationCard({
+  entry,
+}: {
+  entry: { label: string; href: string; subtitle: string; icon: LucideIcon; initials: string }
+}) {
+  return (
+    <a
+      href={entry.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        textDecoration: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        borderRadius: 14,
+        background: '#d9d9d9',
+        border: '1px solid rgba(0,0,0,0.2)',
+        padding: '0.75rem 0.85rem',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 999,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'linear-gradient(135deg, #ff5da7, #2d5cff)',
+            border: '3px solid #fff',
+            color: '#fff',
+            flexShrink: 0,
+            fontWeight: 900,
+            fontSize: '0.76rem',
+            overflow: 'hidden',
+          }}
+        >
+          {entry.initials || <entry.icon size={18} />}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 900, color: '#111', fontSize: '0.92rem' }}>{entry.label}</div>
+          <div style={{ marginTop: 3, fontSize: '0.84rem', color: '#222', wordBreak: 'break-word' }}>{entry.subtitle}</div>
+        </div>
+      </div>
+      <ExternalLink size={16} color="#222" style={{ flexShrink: 0 }} />
+    </a>
   )
 }
 
@@ -455,10 +579,9 @@ export default function PublicCommercialCard({
   const companySocialEntries = getCompanySocialEntries(companyProfile)
   const siteEntry = getSiteEntry(companyProfile)
   const relationEntries = getRelationLinks(parent, superior)
-  const companyDomain = `${slug}.brspromotora.com.br`
   const isLinksMode = mode === 'links'
-  const companyNickname = String(companyProfile?.nickname || 'BRS Promotora').trim()
-  const companyLegal = '@ BRS Promotora de Vendas Ltda - CNPJ 54.303.453/0001-16. Todos os direitos reservados.'
+  const companyLegal = `2026 BRS Promotora de Vendas Ltda. CNPJ: 54.303.453/0001-16 Todos os direitos reservados.`
+  const currentYear = new Date().getFullYear()
 
   const heroAvatar = linkedUser?.avatar_url ? (
     <img
@@ -474,17 +597,12 @@ export default function PublicCommercialCard({
         display: 'grid',
         placeItems: 'center',
         color: '#123a77',
-        fontSize: '1.1rem',
+        fontSize: '1.2rem',
         fontWeight: 900,
         background: 'linear-gradient(180deg, rgba(245,248,255,0.98), rgba(233,240,255,0.98))',
       }}
     >
-      {(linkedUser?.name || name)
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase())
-        .join('')}
+      {getInitials(linkedUser?.name || name)}
     </div>
   )
 
@@ -492,613 +610,426 @@ export default function PublicCommercialCard({
     <main
       style={{
         minHeight: '100vh',
-        color: '#102040',
-        background:
-          'radial-gradient(circle at top left, rgba(45,92,255,0.12), transparent 24%), radial-gradient(circle at top right, rgba(255,93,167,0.14), transparent 20%), radial-gradient(circle at bottom left, rgba(18,223,255,0.10), transparent 26%), linear-gradient(180deg, #f7f9ff 0%, #eef3ff 50%, #f9fbff 100%)',
-        padding: '24px 16px 40px',
+        color: '#111',
+        background: '#f0ecff',
+        position: 'relative',
+        overflow: 'hidden',
+        padding: '20px 14px 36px',
       }}
     >
-      <div style={{ width: '100%', maxWidth: 1320, margin: '0 auto' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '1rem',
-            marginBottom: 20,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-            <img
-              src="/logotipos/BRS%20PROMOTORA%20LOGO%20DEGRADE%20COM%20LETRA%20PRETA%20SEM%20FUNDO.png"
-              alt="BRS Workspace"
-              style={{ width: 220, height: 'auto', display: 'block' }}
-            />
-            <div
-              style={{
-                minHeight: 72,
-                padding: '0.8rem 1rem',
-                borderRadius: 22,
-                background: 'rgba(255,255,255,0.78)',
-                border: '1px solid rgba(45, 92, 255, 0.12)',
-                boxShadow: '0 16px 32px rgba(15, 23, 42, 0.05)',
-                display: 'grid',
-                alignContent: 'center',
-              }}
-            >
-              <div style={{ color: '#7c8db5', textTransform: 'uppercase', letterSpacing: '0.12em', fontSize: '0.7rem', fontWeight: 700 }}>
-                BRS Promotora
-              </div>
-              <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#123a77' }}>Cartao Virtual</div>
-            </div>
-          </div>
+      <style>{`
+        .cartao-accordion[open] .accordion-chevron { transform: rotate(180deg); }
+        .cartao-accordion summary::-webkit-details-marker { display: none; }
+        .cartao-accordion summary { user-select: none; }
+      `}</style>
 
-          <div
-            style={{
-              padding: '0.85rem 1rem',
-              borderRadius: 18,
-              background: 'rgba(255,255,255,0.82)',
-              border: '1px solid rgba(45, 92, 255, 0.12)',
-              boxShadow: '0 16px 32px rgba(15, 23, 42, 0.05)',
-              minWidth: 240,
-            }}
-          >
-            <div style={{ fontSize: '0.72rem', color: '#7c8db5', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>
-              Link publico
-            </div>
-            <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#123a77', wordBreak: 'break-word' }}>{companyDomain}</div>
-          </div>
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'linear-gradient(180deg, rgba(248,246,255,0.92), rgba(243,238,255,0.82))',
+        }}
+      />
+
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: 14,
+          right: 16,
+          width: 112,
+          height: 112,
+          borderRadius: 14,
+          background: 'linear-gradient(135deg, #e51f48, #a435c9 55%, #5d79ff)',
+          opacity: 0.92,
+          transform: 'skewY(-10deg)',
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: 152,
+          right: 16,
+          width: 104,
+          height: 104,
+          borderRadius: 14,
+          background: 'linear-gradient(135deg, #9a4ccf, #5d79ff)',
+          opacity: 0.88,
+          transform: 'skewY(-10deg)',
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: 296,
+          left: -6,
+          width: 132,
+          height: 90,
+          borderRadius: 14,
+          background: 'linear-gradient(135deg, #e22149, #d6477c)',
+          opacity: 0.95,
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: 520,
+          left: 0,
+          width: 118,
+          height: 118,
+          borderRadius: 14,
+          background: 'linear-gradient(135deg, #6f55ff, #39b7ff)',
+          opacity: 0.82,
+          transform: 'skewY(-10deg)',
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          bottom: 114,
+          right: 0,
+          width: 118,
+          height: 82,
+          borderRadius: 14,
+          background: 'linear-gradient(135deg, #c22c8f, #6f55ff)',
+          opacity: 0.9,
+          transform: 'skewY(-10deg)',
+        }}
+      />
+
+      <div style={{ position: 'relative', width: '100%', maxWidth: 430, margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+          <img
+            src="/logotipos/BRS%20PROMOTORA%20LOGO%20DEGRADE%20COM%20LETRA%20PRETA%20SEM%20FUNDO.png"
+            alt="BRS Promotora"
+            style={{ width: 190, height: 'auto', display: 'block' }}
+          />
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: isLinksMode ? '1fr' : 'minmax(0, 520px) minmax(0, 1fr)',
-            gap: 18,
-            alignItems: 'start',
-          }}
-        >
+        <div style={{ display: 'grid', gap: 14, position: 'relative', zIndex: 1 }}>
           {!isLinksMode ? (
-            <section
-              style={{
-                borderRadius: 30,
-                background: 'rgba(255,255,255,0.88)',
-                border: '1px solid rgba(45, 92, 255, 0.12)',
-                boxShadow: '0 22px 60px rgba(15, 23, 42, 0.08)',
-                overflow: 'hidden',
-                position: 'relative',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 'auto -50px -90px auto',
-                  width: 200,
-                  height: 200,
-                  borderRadius: 999,
-                  background: 'radial-gradient(circle, rgba(255,93,167,0.14), transparent 65%)',
-                  pointerEvents: 'none',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: '-70px auto auto -60px',
-                  width: 220,
-                  height: 220,
-                  borderRadius: 999,
-                  background: 'radial-gradient(circle, rgba(45,92,255,0.14), transparent 65%)',
-                  pointerEvents: 'none',
-                }}
-              />
-
-              <div style={{ padding: '1.15rem 1.15rem 1rem', borderBottom: '1px solid rgba(45, 92, 255, 0.08)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: '0.72rem', color: '#7c8db5', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700 }}>
-                      {companyNickname}
-                    </div>
-                    <div style={{ fontSize: '1.02rem', fontWeight: 900, color: '#123a77' }}>Cartao virtual responsivo</div>
-                  </div>
+            <section style={{ display: 'grid', gap: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
+                <div
+                  style={{
+                    width: 'min(100%, 250px)',
+                    aspectRatio: '1 / 1',
+                    borderRadius: 999,
+                    padding: 5,
+                    background: 'linear-gradient(135deg, #ff5d78 0%, #c459cf 50%, #6f55ff 100%)',
+                    boxShadow: '0 18px 40px rgba(45, 92, 255, 0.10)',
+                  }}
+                >
                   <div
                     style={{
-                      width: 52,
-                      height: 52,
+                      width: '100%',
+                      height: '100%',
                       borderRadius: 999,
-                      background: 'linear-gradient(135deg, #2d5cff, #ff5da7 55%, #12dfff)',
-                      boxShadow: '0 8px 20px rgba(45,92,255,0.22)',
+                      overflow: 'hidden',
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.97), rgba(240,244,255,0.92))',
                     }}
-                  />
+                  >
+                    {heroAvatar}
+                  </div>
                 </div>
               </div>
 
-              <div style={{ padding: '1.15rem', display: 'grid', gap: '1.05rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ textAlign: 'center', paddingInline: 8 }}>
+                <div style={{ fontSize: 'clamp(1.9rem, 4.7vw, 2.9rem)', lineHeight: 1.02, fontWeight: 900, color: '#111' }}>
+                  {name}
+                </div>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: '1.05rem',
+                    fontWeight: 800,
+                    color: 'transparent',
+                    background: 'linear-gradient(90deg, #e5638d, #b65ccf, #7f62ff)',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                  }}
+                >
+                  {role}
+                </div>
+              </div>
+
+              <a
+                href={whatsapp ? getWhatsAppLink(whatsapp) : '#'}
+                target={whatsapp ? '_blank' : undefined}
+                rel={whatsapp ? 'noopener noreferrer' : undefined}
+                style={{
+                  borderRadius: 12,
+                  padding: '0.8rem 0.95rem',
+                  background: '#15bf4a',
+                  color: '#fff',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '0.9rem',
+                  boxShadow: '0 10px 20px rgba(21, 191, 74, 0.18)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
                   <div
                     style={{
-                      width: 'min(100%, 300px)',
-                      aspectRatio: '1 / 1',
+                      width: 30,
+                      height: 30,
                       borderRadius: 999,
-                      padding: 6,
-                      background: 'linear-gradient(135deg, #12dfff 0%, #2d5cff 45%, #ff5da7 100%)',
-                      boxShadow: '0 18px 40px rgba(45, 92, 255, 0.12)',
+                      display: 'grid',
+                      placeItems: 'center',
+                      background: 'rgba(255,255,255,0.18)',
+                      flexShrink: 0,
                     }}
                   >
-                    <div
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        borderRadius: 999,
-                        overflow: 'hidden',
-                        background: 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(240,244,255,0.92))',
-                      }}
-                    >
-                      {heroAvatar}
-                    </div>
+                    <MessageCircle size={18} />
                   </div>
+                  <div style={{ minWidth: 0, fontWeight: 900, fontSize: '1.02rem' }}>WhatsApp</div>
                 </div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, opacity: 0.96, wordBreak: 'break-word' }}>
+                  {whatsapp || '(61) 99955-1641'}
+                </div>
+                <ExternalLink size={18} style={{ flexShrink: 0 }} />
+              </a>
 
-                <div style={{ textAlign: 'center', paddingInline: 4 }}>
-                  <div style={{ fontSize: 'clamp(1.75rem, 4vw, 2.6rem)', lineHeight: 1.05, fontWeight: 900, color: '#102040' }}>
-                    {name}
-                  </div>
+              <a
+                href={email ? `mailto:${email}` : '#'}
+                style={{
+                  borderRadius: 12,
+                  padding: '0.78rem 0.95rem',
+                  background: '#fff',
+                  border: '1px solid rgba(0,0,0,0.18)',
+                  color: '#111',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '0.9rem',
+                  boxShadow: '0 8px 18px rgba(15, 23, 42, 0.06)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
                   <div
                     style={{
-                      marginTop: 8,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '0.45rem 0.85rem',
-                      borderRadius: 999,
-                      background: 'linear-gradient(135deg, rgba(45,92,255,0.12), rgba(255,93,167,0.12))',
-                      color: '#2d5cff',
-                      fontWeight: 900,
-                      letterSpacing: '0.08em',
-                      fontSize: '0.8rem',
+                      width: 30,
+                      height: 30,
+                      borderRadius: 6,
+                      display: 'grid',
+                      placeItems: 'center',
+                      background: '#fff',
+                      border: '3px solid #ff4f4f',
+                      color: '#ff4f4f',
+                      flexShrink: 0,
                     }}
                   >
-                    {role}
+                    <Mail size={17} />
                   </div>
-                  <div style={{ marginTop: 12, fontSize: '0.98rem', color: '#5b6984', lineHeight: 1.6 }}>
-                    Cartao responsivo para bio, WhatsApp Business e envio rapido
-                  </div>
+                  <div style={{ minWidth: 0, fontWeight: 900, fontSize: '1.02rem' }}>E-mail</div>
                 </div>
-
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <a
-                    href={whatsapp ? getWhatsAppLink(whatsapp) : '#'}
-                    target={whatsapp ? '_blank' : undefined}
-                    rel={whatsapp ? 'noopener noreferrer' : undefined}
-                    style={{
-                      borderRadius: 22,
-                      padding: '1rem 1rem',
-                      background: 'linear-gradient(135deg, #12dfff 0%, #2d5cff 100%)',
-                      color: '#08111f',
-                      textDecoration: 'none',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '0.85rem',
-                      boxShadow: '0 16px 35px rgba(18, 223, 255, 0.18)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', minWidth: 0 }}>
-                      <div
-                        style={{
-                          width: 46,
-                          height: 46,
-                          borderRadius: 16,
-                          display: 'grid',
-                          placeItems: 'center',
-                          background: 'rgba(255,255,255,0.22)',
-                          color: '#08111f',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <MessageCircle size={22} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 900, fontSize: '1.02rem' }}>WhatsApp</div>
-                        <div style={{ fontSize: '0.8rem', opacity: 0.86, wordBreak: 'break-word' }}>
-                          {whatsapp || 'WhatsApp comercial'}
-                        </div>
-                      </div>
-                    </div>
-                    <ArrowRight size={18} style={{ flexShrink: 0 }} />
-                  </a>
-
-                  <a
-                    href={email ? `mailto:${email}` : '#'}
-                    style={{
-                      borderRadius: 22,
-                      padding: '1rem 1rem',
-                      background: 'rgba(255,255,255,0.95)',
-                      border: '1px solid rgba(45, 92, 255, 0.14)',
-                      color: '#102040',
-                      textDecoration: 'none',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '0.85rem',
-                      boxShadow: '0 12px 28px rgba(15, 23, 42, 0.05)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', minWidth: 0 }}>
-                      <div
-                        style={{
-                          width: 46,
-                          height: 46,
-                          borderRadius: 16,
-                          display: 'grid',
-                          placeItems: 'center',
-                          background: 'linear-gradient(135deg, rgba(45,92,255,0.12), rgba(255,93,167,0.12))',
-                          color: '#123a77',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Mail size={20} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 900, fontSize: '1.02rem' }}>E-mail Profissional</div>
-                        <div style={{ fontSize: '0.8rem', color: '#5b6984', wordBreak: 'break-word' }}>
-                          {email || 'email@brspromotora.com.br'}
-                        </div>
-                      </div>
-                    </div>
-                    <ArrowRight size={18} color="#9aa7c2" style={{ flexShrink: 0 }} />
-                  </a>
+                <div style={{ fontSize: '0.78rem', color: '#333', wordBreak: 'break-word', textAlign: 'right' }}>
+                  {email || 'ketellen.freires@brspromotora.com.br'}
                 </div>
+                <ExternalLink size={18} style={{ flexShrink: 0 }} />
+              </a>
 
+              <AccordionSection icon={MessageCircle} title="Redes Sociais" defaultOpen={socials.length > 0}>
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                    gap: 12,
+                    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                    gap: 10,
                   }}
                 >
-                  {socials.map((social) => {
-                    const Icon = social.icon
-                    return (
-                      <a
-                        key={social.label}
-                        href={social.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          borderRadius: 20,
-                          padding: '0.95rem 0.95rem',
-                          background: 'rgba(255,255,255,0.96)',
-                          border: '1px solid rgba(45, 92, 255, 0.10)',
-                          color: '#102040',
-                          textDecoration: 'none',
-                          display: 'grid',
-                          gap: 8,
-                          boxShadow: '0 12px 28px rgba(15, 23, 42, 0.05)',
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: 14,
-                            display: 'grid',
-                            placeItems: 'center',
-                            background: 'linear-gradient(135deg, rgba(45,92,255,0.12), rgba(255,93,167,0.12))',
-                            color: '#123a77',
-                          }}
-                        >
-                          <Icon size={18} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 900, fontSize: '0.92rem' }}>{social.label}</div>
-                          <div style={{ marginTop: 4, fontSize: '0.76rem', color: '#5b6984', wordBreak: 'break-word' }}>
-                            {social.value || social.label}
-                          </div>
-                        </div>
-                      </a>
-                    )
-                  })}
+                  {socials.map((entry) => (
+                    <SocialTile key={entry.label} entry={entry} />
+                  ))}
                 </div>
+              </AccordionSection>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-                  <QuickActionCard icon={ContactRound} title="Salvar Contato" subtitle="VCF" />
-                  <QuickActionCard icon={QrCode} title="QR Code" subtitle="Escanear perfil" />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                <QuickActionCard icon={ContactRound} title="Salvar Contato" subtitle="VCF" />
+                <QuickActionCard icon={QrCode} title="QR Code" subtitle="Escanear cartão" />
               </div>
             </section>
           ) : null}
 
-          <section
+          <div
+            aria-hidden="true"
             style={{
-              borderRadius: 30,
-              background: 'rgba(255,255,255,0.72)',
-              border: '1px solid rgba(45, 92, 255, 0.10)',
-              boxShadow: '0 22px 60px rgba(15, 23, 42, 0.06)',
-              padding: '1rem',
-              display: 'grid',
-              gap: '0.85rem',
-              backdropFilter: 'blur(10px)',
+              height: 4,
+              borderRadius: 999,
+              background: 'linear-gradient(90deg, #ff5d78, #c459cf, #6f55ff)',
+              margin: '0.2rem 2.2rem 0.15rem',
             }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: '0.72rem', color: '#7c8db5', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>
-                  {isLinksMode ? 'Links da empresa' : 'Acordions do cartão'}
-                </div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#123a77' }}>
-                  {isLinksMode ? 'Organização dos links do preview' : 'Seções e atalhos do cartão digital'}
-                </div>
-              </div>
-              <div
-                style={{
-                  padding: '0.55rem 0.85rem',
-                  borderRadius: 999,
-                  background: 'linear-gradient(135deg, rgba(45,92,255,0.12), rgba(255,93,167,0.12))',
-                  color: '#2d5cff',
-                  fontWeight: 900,
-                  fontSize: '0.76rem',
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                Preview
-              </div>
-            </div>
+          />
 
-            <AccordionSection title="Suporte Operacional" subtitle="Canal direto de atendimento" defaultOpen>
+          <section style={{ display: 'grid', gap: 10 }}>
+            <AccordionSection icon={MessageCircle} title="Suporte Operacional" defaultOpen>
               <div style={{ display: 'grid', gap: 10 }}>
                 {supportEntries.length ? (
-                  supportEntries.map((entry) => (
-                    <LinkRow key={entry.label} label={entry.label} value={entry.value} href={entry.href} icon={entry.icon} />
-                  ))
+                  supportEntries.map((entry) => <LinkRow key={entry.label} label={entry.label} value={entry.value} href={entry.href} icon={entry.icon} />)
                 ) : (
-                  <div style={{ padding: '0.95rem 1rem', borderRadius: 18, background: '#f8fbff', border: '1px solid rgba(46, 92, 255, 0.10)', color: '#7c8db5' }}>
+                  <div style={{ padding: '0.9rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444' }}>
                     Nenhum contato de suporte vinculado.
                   </div>
                 )}
               </div>
             </AccordionSection>
 
-            <AccordionSection title="Site" subtitle="Portal oficial da BRS Promotora">
+            <AccordionSection icon={Globe2} title="Site">
               {siteEntry ? (
                 <LinkRow label={siteEntry.label} value={siteEntry.value} href={siteEntry.href} icon={siteEntry.icon} />
               ) : (
-                <div style={{ padding: '0.95rem 1rem', borderRadius: 18, background: '#f8fbff', border: '1px solid rgba(46, 92, 255, 0.10)', color: '#7c8db5' }}>
-                  Site nao vinculado.
+                <div style={{ padding: '0.9rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444' }}>
+                  Site não vinculado.
                 </div>
               )}
             </AccordionSection>
 
-            <AccordionSection title="Redes Sociais da BRS" subtitle="Perfis oficiais da empresa">
-              <div style={{ display: 'grid', gap: 10 }}>
+            <AccordionSection icon={MessageCircle} title="Redes Sociais">
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: 10,
+                }}
+              >
                 {companySocialEntries.length ? (
-                  companySocialEntries.map((entry) => (
-                    <LinkRow key={entry.label} label={entry.label} value={entry.value} href={entry.href} icon={entry.icon} />
-                  ))
+                  companySocialEntries.map((entry) => <SocialTile key={entry.label} entry={{ label: entry.label, value: entry.value, href: entry.href, icon: entry.icon }} />)
                 ) : (
-                  <div style={{ padding: '0.95rem 1rem', borderRadius: 18, background: '#f8fbff', border: '1px solid rgba(46, 92, 255, 0.10)', color: '#7c8db5' }}>
+                  <div style={{ padding: '0.9rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444', gridColumn: '1 / -1' }}>
                     Nenhuma rede social da empresa vinculada.
                   </div>
                 )}
               </div>
             </AccordionSection>
 
-            <AccordionSection
-              title="Instituições Financeiras"
-              subtitle="Em breve vamos conectar os sistemas dos bancos e fintechs"
-            >
-              <div style={{ padding: '1rem', borderRadius: 18, background: 'linear-gradient(135deg, rgba(255,255,255,0.98), rgba(245,248,255,0.96))', border: '1px dashed rgba(46, 92, 255, 0.18)' }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 14,
-                      display: 'grid',
-                      placeItems: 'center',
-                      background: 'linear-gradient(135deg, rgba(45,92,255,0.12), rgba(255,93,167,0.12))',
-                      color: '#123a77',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <BadgeInfo size={18} />
-                  </div>
-                  <div style={{ color: '#52617a', lineHeight: 1.7 }}>
-                    Em breve o link dos sistemas de bancos, financeiras e fintechs estara aqui para facilitar o seu dia a dia.
-                  </div>
-                </div>
-              </div>
-            </AccordionSection>
-
-            <AccordionSection title="Averbadores" subtitle="Em breve os sistemas dos averbadores">
-              <div style={{ padding: '1rem', borderRadius: 18, background: 'linear-gradient(135deg, rgba(255,255,255,0.98), rgba(245,248,255,0.96))', border: '1px dashed rgba(46, 92, 255, 0.18)' }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 14,
-                      display: 'grid',
-                      placeItems: 'center',
-                      background: 'linear-gradient(135deg, rgba(45,92,255,0.12), rgba(255,93,167,0.12))',
-                      color: '#123a77',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <FileSearch size={18} />
-                  </div>
-                  <div style={{ color: '#52617a', lineHeight: 1.7 }}>
-                    Em breve o link dos sistemas de averbadores estara aqui para facilitar o seu dia a dia.
-                  </div>
-                </div>
-              </div>
-            </AccordionSection>
-
-            <AccordionSection title="Links da BRS Promotora" subtitle="Atalhos configurados no menu do subsistema">
+            <AccordionSection icon={Link2} title="Links da BRS Promotora" subtitle="Atalhos configurados no subsistema">
               <div style={{ display: 'grid', gap: 10 }}>
                 {cardLinks.length ? (
                   cardLinks.map((link) => {
                     const Icon = getCardLinkIcon(link.icon_key)
+                    const href = normalizeExternalLink(link.destination_url)
                     return (
                       <a
                         key={link.id}
-                        href={normalizeExternalLink(link.destination_url)}
-                        target={normalizeExternalLink(link.destination_url).startsWith('/') ? undefined : '_blank'}
-                        rel={normalizeExternalLink(link.destination_url).startsWith('/') ? undefined : 'noopener noreferrer'}
+                        href={href}
+                        target={href.startsWith('/') ? undefined : '_blank'}
+                        rel={href.startsWith('/') ? undefined : 'noopener noreferrer'}
                         style={{
                           textDecoration: 'none',
-                          borderRadius: 18,
-                          background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,248,255,0.96))',
-                          border: '1px solid rgba(46, 92, 255, 0.10)',
-                          padding: '0.95rem 1rem',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           gap: 12,
-                          boxShadow: '0 10px 24px rgba(15, 23, 42, 0.04)',
+                          borderRadius: 14,
+                          background: '#d9d9d9',
+                          border: '1px solid rgba(0,0,0,0.2)',
+                          padding: '0.85rem 0.9rem',
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                          <div
-                            style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 14,
-                              display: 'grid',
-                              placeItems: 'center',
-                              background: 'linear-gradient(135deg, rgba(45,92,255,0.12), rgba(255,93,167,0.12))',
-                              color: '#123a77',
-                              flexShrink: 0,
-                            }}
-                          >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                          <div style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                             <Icon size={18} />
                           </div>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 900, color: '#123a77' }}>{link.name}</div>
-                            <div style={{ marginTop: 4, fontSize: '0.82rem', color: '#56637c', wordBreak: 'break-word' }}>
-                              {link.destination_url}
-                            </div>
+                            <div style={{ fontWeight: 900, color: '#111', fontSize: '0.92rem' }}>{link.name}</div>
+                            <div style={{ marginTop: 3, fontSize: '0.8rem', color: '#222', wordBreak: 'break-word' }}>{link.destination_url}</div>
                           </div>
                         </div>
-                        <ExternalLink size={16} color="#98a8c7" style={{ flexShrink: 0 }} />
+                        <ExternalLink size={16} color="#222" style={{ flexShrink: 0 }} />
                       </a>
                     )
                   })
                 ) : (
-                  <div style={{ padding: '0.95rem 1rem', borderRadius: 18, background: '#f8fbff', border: '1px solid rgba(46, 92, 255, 0.10)', color: '#7c8db5' }}>
+                  <div style={{ padding: '0.9rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444' }}>
                     Nenhum link cadastrado ainda.
                   </div>
                 )}
               </div>
             </AccordionSection>
 
+            <AccordionSection icon={BadgeInfo} title="Instituições Financeiras">
+              <div style={{ padding: '0.95rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444', lineHeight: 1.6 }}>
+                Em breve todos os links dos sistemas das instituições financeiras em um mesmo local.
+              </div>
+            </AccordionSection>
+
+            <AccordionSection icon={FileSearch} title="Averbadores">
+              <div style={{ padding: '0.95rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444', lineHeight: 1.6 }}>
+                Em breve todos os links dos sistemas dos averbadores em um mesmo local.
+              </div>
+            </AccordionSection>
+
             {relationEntries.length ? (
-              <AccordionSection title="Relacionamentos Comerciais" subtitle="Acesso para supervisor e superintendente">
+              <AccordionSection icon={Users} title="Fale com o meu Superintendente" subtitle="Acesso ao cartão da liderança">
                 <div style={{ display: 'grid', gap: 10 }}>
-                  {relationEntries.map((entry) => {
-                    const Icon = entry.icon
-                    return (
-                      <a
-                        key={entry.href}
-                        href={entry.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          textDecoration: 'none',
-                          borderRadius: 18,
-                          background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,248,255,0.96))',
-                          border: '1px solid rgba(46, 92, 255, 0.10)',
-                          padding: '0.95rem 1rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 12,
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                          <div
-                            style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 14,
-                              display: 'grid',
-                              placeItems: 'center',
-                              background: 'linear-gradient(135deg, rgba(45,92,255,0.12), rgba(255,93,167,0.12))',
-                              color: '#123a77',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Icon size={18} />
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 900, color: '#123a77' }}>{entry.label}</div>
-                            <div style={{ marginTop: 4, fontSize: '0.82rem', color: '#56637c', wordBreak: 'break-word' }}>
-                              {entry.subtitle}
-                            </div>
-                          </div>
-                        </div>
-                        <ExternalLink size={16} color="#98a8c7" style={{ flexShrink: 0 }} />
-                      </a>
-                    )
-                  })}
+                  {relationEntries.map((entry) => (
+                    <RelationCard key={entry.href} entry={entry} />
+                  ))}
                 </div>
               </AccordionSection>
             ) : null}
-
-            <div
-              style={{
-                marginTop: 4,
-                padding: '1rem',
-                borderRadius: 24,
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,248,255,0.92))',
-                border: '1px solid rgba(45, 92, 255, 0.10)',
-                boxShadow: '0 12px 28px rgba(15, 23, 42, 0.04)',
-                display: 'grid',
-                gap: 10,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <img
-                  src="/logotipos/BRS%20PROMOTORA%20LOGO%20DEGRADE%20COM%20LETRA%20PRETA%20SEM%20FUNDO.png"
-                  alt="BRS Promotora"
-                  style={{ width: 150, height: 'auto', display: 'block' }}
-                />
-                <div style={{ color: '#52617a', lineHeight: 1.7, fontSize: '0.92rem' }}>
-                  {companyLegal}
-                  <br />
-                  Politica de Privacidade | Termos de Uso | LGPD
-                </div>
-              </div>
-              <div
-                style={{
-                  fontSize: '0.8rem',
-                  color: '#7c8db5',
-                  paddingTop: 4,
-                  borderTop: '1px solid rgba(45, 92, 255, 0.08)',
-                }}
-              >
-                O layout ainda esta em refinamento visual, mas ja usa os dados reais do cadastro para validar a experiencia.
-              </div>
-            </div>
           </section>
-        </div>
 
-        {isLinksMode ? (
-          <div
+          <footer
             style={{
-              marginTop: 18,
-              padding: '0.95rem 1rem',
-              borderRadius: 18,
-              background: 'rgba(255,255,255,0.75)',
-              border: '1px solid rgba(45, 92, 255, 0.10)',
-              color: '#52617a',
-              boxShadow: '0 12px 28px rgba(15, 23, 42, 0.04)',
+              marginTop: 12,
+              display: 'grid',
+              justifyItems: 'center',
+              gap: 8,
+              textAlign: 'center',
+              padding: '0.4rem 0 0.2rem',
+              color: '#333',
             }}
           >
-            A visao de links esta pronta para testes e o mesmo conjunto de dados vai alimentar o cartão definitivo quando o layout final for fechado.
-          </div>
-        ) : null}
+            <img
+              src="/logotipos/BRS%20PROMOTORA%20LOGO%20DEGRADE%20COM%20LETRA%20PRETA%20SEM%20FUNDO.png"
+              alt="BRS Promotora"
+              style={{ width: 170, height: 'auto', display: 'block' }}
+            />
+            <div style={{ lineHeight: 1.45, fontSize: '0.92rem' }}>
+              {currentYear} BRS Promotora de Vendas Ltda.
+              <br />
+              CNPJ: 54.303.453/0001-16
+              <br />
+              Todos os direitos reservados.
+            </div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center', fontSize: '0.9rem' }}>
+              <a href="/politicas" style={{ color: '#9d59c8' }}>
+                Políticas de Privacidade
+              </a>
+              <a href="/lgpd" style={{ color: '#9d59c8' }}>
+                LGPD
+              </a>
+              <a href="/termos" style={{ color: '#9d59c8' }}>
+                Termos de Uso
+              </a>
+            </div>
+          </footer>
+
+          {!isLinksMode ? null : (
+            <div
+              style={{
+                marginTop: 10,
+                padding: '0.95rem 1rem',
+                borderRadius: 14,
+                background: 'rgba(255,255,255,0.88)',
+                border: '1px solid rgba(0,0,0,0.15)',
+                color: '#444',
+                lineHeight: 1.6,
+              }}
+            >
+              O cartão público usa os mesmos dados reais do cadastro para validar o layout final antes do subdomínio definitivo.
+            </div>
+          )}
+        </div>
       </div>
     </main>
   )
