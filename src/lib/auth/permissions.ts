@@ -85,6 +85,10 @@ const exactRouteRules: Record<string, RouteAccessRule> = {
   '/rh/parceiros/config/provedores/whatsapp': any([view('sistema-config-whatsapp')]),
   '/rh/parceiros/config/provedores/assinatura': any([view('sistema-config-assinatura')]),
   '/rh/parceiros/config/provedores/google': any([view('sistema-config-google')]),
+  '/rh/parceiros/config/comercial/links-cartao-digital': any([view('comercial-agentes'), view('comercial-estrutura')]),
+  '/rh/parceiros/config/comercial/seletor': any([view('comercial-agentes'), view('comercial-estrutura')]),
+  '/rh/parceiros/config/comercial/preview-real': any([view('comercial-agentes'), view('comercial-estrutura')]),
+  '/seletor': any([view('comercial-agentes'), view('comercial-estrutura')]),
 }
 
 const authenticatedOpenRoutes = new Set([

@@ -312,6 +312,153 @@ export async function getCommercialEntities() {
   }
 }
 
+export type CommercialCardLinkRow = {
+  id: string
+  name: string
+  destination_url: string
+  icon_key: string
+  position: number
+  is_active: boolean
+}
+
+export async function getCommercialCardLinks() {
+  try {
+    await requireAny([{ resource: 'comercial-agentes' }, { resource: 'comercial-estrutura' }])
+
+    const { data, error } = await supabaseAdmin
+      .from('commercial_card_links')
+      .select('*')
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (error) throw error
+
+    return { success: true, links: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar links do cartao digital:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveCommercialCardLink(linkData: {
+  id?: string
+  name: string
+  destination_url: string
+  icon_key: string
+  position?: number
+  is_active?: boolean
+}) {
+  try {
+    await requirePermission('comercial-estrutura', linkData.id ? 'can_edit' : 'can_include')
+
+    const sanitizedName = String(linkData.name || '').trim()
+    const sanitizedUrl = String(linkData.destination_url || '').trim()
+    const sanitizedIcon = String(linkData.icon_key || 'link').trim() || 'link'
+
+    if (!sanitizedName) throw new Error('Informe o nome do link.')
+    if (!sanitizedUrl) throw new Error('Informe o link de destino.')
+
+    let position = Number.isFinite(linkData.position as number) ? Number(linkData.position) : 0
+    if (!linkData.id && !Number.isFinite(position)) {
+      const { data: maxRow } = await supabaseAdmin
+        .from('commercial_card_links')
+        .select('position')
+        .order('position', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      position = Number(maxRow?.position || 0) + 1
+    }
+
+    const payload = {
+      name: sanitizedName,
+      destination_url: sanitizedUrl,
+      icon_key: sanitizedIcon,
+      position,
+      is_active: linkData.is_active !== false,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (linkData.id) {
+      const { error } = await supabaseAdmin
+        .from('commercial_card_links')
+        .update(payload)
+        .eq('id', linkData.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('commercial_card_links')
+        .insert(payload)
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/comercial/links-cartao-digital')
+    revalidatePath('/rh/parceiros/config/comercial/preview-real')
+    revalidatePath('/cartao')
+    revalidatePath('/seletor')
+    revalidatePath('/rh/parceiros/config/comercial/seletor')
+    revalidatePath('/links')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar link do cartao digital:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function deleteCommercialCardLink(id: string) {
+  try {
+    await requirePermission('comercial-estrutura', 'can_delete')
+
+    const { error } = await supabaseAdmin
+      .from('commercial_card_links')
+      .delete()
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/comercial/links-cartao-digital')
+    revalidatePath('/rh/parceiros/config/comercial/preview-real')
+    revalidatePath('/cartao')
+    revalidatePath('/seletor')
+    revalidatePath('/rh/parceiros/config/comercial/seletor')
+    revalidatePath('/links')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao excluir link do cartao digital:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function reorderCommercialCardLinks(ids: string[]) {
+  try {
+    await requirePermission('comercial-estrutura', 'can_edit')
+
+    if (!Array.isArray(ids) || !ids.length) {
+      throw new Error('Ordem invalida.')
+    }
+
+    const updates = ids.map((id, index) =>
+      supabaseAdmin
+        .from('commercial_card_links')
+        .update({ position: index, updated_at: new Date().toISOString() })
+        .eq('id', id),
+    )
+
+    const results = await Promise.all(updates)
+    const firstError = results.find((result) => result.error)?.error
+    if (firstError) throw firstError
+
+    revalidatePath('/rh/parceiros/config/comercial/links-cartao-digital')
+    revalidatePath('/rh/parceiros/config/comercial/preview-real')
+    revalidatePath('/cartao')
+    revalidatePath('/seletor')
+    revalidatePath('/rh/parceiros/config/comercial/seletor')
+    revalidatePath('/links')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao reordenar links do cartao digital:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export async function saveCommercialEntity(entityData: {
   id?: string
   name: string

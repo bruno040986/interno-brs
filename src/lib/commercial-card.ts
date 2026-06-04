@@ -2,6 +2,7 @@ export type CommercialCompanyLinksProfile = {
   nickname?: string | null
   company_data?: {
     site?: string | null
+    email_support?: string | null
     instagram?: string | null
     facebook?: string | null
     tiktok?: string | null
@@ -42,6 +43,7 @@ export function buildCommercialCardLinks(companyProfile?: CommercialCompanyLinks
       value: String(data.whatsapp_support || ''),
       href: String(data.whatsapp_support || '').replace(/\D/g, '').length >= 10 ? `https://wa.me/55${String(data.whatsapp_support || '').replace(/\D/g, '')}` : normalizeExternalLink(String(data.whatsapp_support || '')),
     },
+    { label: 'E-mail Suporte', value: String(data.email_support || ''), href: normalizeExternalLink(`mailto:${String(data.email_support || '')}`) },
     {
       label: 'Links Uteis',
       value: safeSlug ? `${safeSlug}.brspromotora.com.br/links` : '/links',

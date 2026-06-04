@@ -124,7 +124,7 @@ type CommercialDraft = {
   parent?: { id: string; name: string; role: string }
 }
 
-type CardSocialKey = 'instagram' | 'facebook' | 'linkedin' | 'tiktok' | 'youtube' | 'community'
+type CardSocialKey = 'instagram' | 'facebook' | 'linkedin' | 'tiktok' | 'threads' | 'x' | 'youtube' | 'community'
 type CardSocialFlagKey = `show_${CardSocialKey}`
 
 const CARD_SOCIAL_FIELDS: Array<{
@@ -136,6 +136,8 @@ const CARD_SOCIAL_FIELDS: Array<{
   { key: 'facebook', flag: 'show_facebook', label: 'Facebook' },
   { key: 'linkedin', flag: 'show_linkedin', label: 'LinkedIn' },
   { key: 'tiktok', flag: 'show_tiktok', label: 'TikTok' },
+  { key: 'threads', flag: 'show_threads', label: 'Threads' },
+  { key: 'x', flag: 'show_x', label: 'X' },
   { key: 'youtube', flag: 'show_youtube', label: 'Canal do YouTube' },
   { key: 'community', flag: 'show_community', label: 'Comunidade WhatsApp' },
 ]
@@ -281,12 +283,16 @@ const EMPTY_DRAFT: CommercialDraft = {
     show_facebook: true,
     show_linkedin: true,
     show_tiktok: true,
+    show_threads: true,
+    show_x: true,
     show_youtube: true,
     show_community: true,
     instagram: '',
     facebook: '',
     linkedin: '',
     tiktok: '',
+    threads: '',
+    x: '',
     youtube: '',
     community: '',
   },
@@ -699,6 +705,8 @@ function CardPreview({
               {isCardSocialEnabled(socials, 'show_instagram') && <CardLink label="Instagram" value={socials.instagram || 'Instagram'} />}
               {isCardSocialEnabled(socials, 'show_facebook') && <CardLink label="Facebook" value={socials.facebook || 'Facebook'} />}
               {isCardSocialEnabled(socials, 'show_tiktok') && <CardLink label="TikTok" value={socials.tiktok || 'TikTok'} />}
+              {isCardSocialEnabled(socials, 'show_threads') && <CardLink label="Threads" value={socials.threads || 'Threads'} />}
+              {isCardSocialEnabled(socials, 'show_x') && <CardLink label="X" value={socials.x || 'X'} />}
               {isCardSocialEnabled(socials, 'show_youtube') && <CardLink label="Canal do YouTube" value={socials.youtube || 'Canal do YouTube'} />}
               {isCardSocialEnabled(socials, 'show_community') && <CardLink label="Comunidade WhatsApp" value={socials.community || 'Comunidade WhatsApp'} />}
             </div>

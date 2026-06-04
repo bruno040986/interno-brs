@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   LayoutGrid,
+  Eye,
   Users,
   Bus,
   AlertTriangle,
@@ -21,6 +22,7 @@ import {
   MessageSquare,
   Globe,
   Key,
+  Link2,
 } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
 import { getMyEffectivePermissions } from '@/lib/auth/actions'
@@ -80,8 +82,10 @@ export default function Sidebar() {
 
   if (pathname.startsWith('/rh/parceiros/config/comercial')) {
     navItems = [
-      { section: 'Estrutura Comercial' },
+      { section: 'Cadastros Comerciais' },
       { label: 'Agentes Comerciais', href: '/rh/parceiros/config/comercial', icon: UserCog },
+      { label: 'Preview Real', href: '/rh/parceiros/config/comercial/seletor', icon: Eye },
+      { label: 'Links do Cartão Digital', href: '/rh/parceiros/config/comercial/links-cartao-digital', icon: Link2 },
       { label: 'Tabela de Locacao de Veiculo', href: '/rh/parceiros/config/comercial/tabela-locacao-veiculo', icon: Building2 },
       { section: 'Sistema' },
       { label: 'Voltar ao Workspace', href: '/', icon: LayoutDashboard },
@@ -140,6 +144,9 @@ export default function Sidebar() {
     if (href === '/rh') return pathname === '/rh'
     if (href === '/rh/parceiros') return pathname === '/rh/parceiros'
     if (href === '/rh/parceiros/config/comercial') return pathname.startsWith('/rh/parceiros/config/comercial')
+    if (href === '/seletor') return pathname === '/seletor'
+    if (href === '/rh/parceiros/config/comercial/seletor') return pathname.startsWith('/rh/parceiros/config/comercial/seletor')
+    if (href === '/cartao') return pathname.startsWith('/cartao')
     if (href.includes('?')) return pathname + '?' === href.split('?')[0] + '?' || pathname === href.split('?')[0]
     return pathname === href || pathname.startsWith(href + '/')
   }
@@ -148,6 +155,10 @@ export default function Sidebar() {
     if (item.section) return true
 
     if (item.href === '/rh/parceiros/config/comercial') return canViewAny(['comercial-agentes', 'comercial-estrutura'])
+    if (item.href === '/seletor') return canViewAny(['comercial-agentes', 'comercial-estrutura'])
+    if (item.href === '/rh/parceiros/config/comercial/seletor') return canViewAny(['comercial-agentes', 'comercial-estrutura'])
+    if (item.href === '/cartao') return true
+    if (item.href === '/rh/parceiros/config/comercial/links-cartao-digital') return canViewAny(['comercial-agentes', 'comercial-estrutura'])
     if (item.href === '/rh/parceiros/config/comercial/tabela-locacao-veiculo') return canView('comercial-estrutura')
     if (item.href === '/') return true
     if (item.href === '/?sector=rh') return canView('workspace-rh')

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+
+<html class="light" lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BRS Promotora - Digital Business Card</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Montserrat -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "on-tertiary": "#002d6d",
+                "surface-container-low": "#1c1b1b",
+                "tertiary-fixed": "#d9e2ff",
+                "primary": "#ffb2bd",
+                "on-tertiary-container": "#002760",
+                "outline-variant": "#5c3f43",
+                "surface-dim": "#131313",
+                "surface-bright": "#3a3939",
+                "tertiary-fixed-dim": "#afc6ff",
+                "surface-tint": "#ffb2bd",
+                "on-tertiary-fixed": "#001944",
+                "surface-variant": "#353534",
+                "inverse-on-surface": "#313030",
+                "outline": "#ab888c",
+                "on-surface": "#e5e2e1",
+                "on-error": "#690005",
+                "on-background": "#e5e2e1",
+                "surface-container": "#201f1f",
+                "secondary-container": "#7701d0",
+                "error-container": "#93000a",
+                "surface-container-high": "#2a2a2a",
+                "secondary-fixed": "#efdbff",
+                "tertiary-container": "#538dff",
+                "secondary": "#dcb8ff",
+                "on-secondary-fixed-variant": "#6700b5",
+                "on-secondary-fixed": "#2c0051",
+                "surface": "#131313",
+                "surface-container-highest": "#353534",
+                "inverse-surface": "#e5e2e1",
+                "error": "#ffb4ab",
+                "primary-fixed-dim": "#ffb2bd",
+                "inverse-primary": "#bd0049",
+                "on-secondary-container": "#dcb7ff",
+                "on-surface-variant": "#e5bdc1",
+                "secondary-fixed-dim": "#dcb8ff",
+                "primary-fixed": "#ffd9dd",
+                "on-primary": "#670024",
+                "on-primary-container": "#5a001f",
+                "on-tertiary-fixed-variant": "#004299",
+                "tertiary": "#afc6ff",
+                "on-primary-fixed-variant": "#900036",
+                "background": "#131313",
+                "primary-container": "#ff4e7a",
+                "on-secondary": "#480081",
+                "on-error-container": "#ffdad6",
+                "surface-container-lowest": "#0e0e0e",
+                "on-primary-fixed": "#400013"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "stack-lg": "2rem",
+                "stack-md": "1.5rem",
+                "container-max": "480px",
+                "stack-sm": "1rem",
+                "inset-md": "1.25rem",
+                "gutter": "1rem"
+        },
+        "fontFamily": {
+                "headline-md": [
+                        "Montserrat"
+                ],
+                "body-lg": [
+                        "Montserrat"
+                ],
+                "headline-lg-mobile": [
+                        "Montserrat"
+                ],
+                "headline-lg": [
+                        "Montserrat"
+                ],
+                "label-md": [
+                        "Montserrat"
+                ],
+                "headline-xl": [
+                        "Montserrat"
+                ],
+                "body-md": [
+                        "Montserrat"
+                ]
+        },
+        "fontSize": {
+                "headline-md": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body-lg": [
+                        "18px",
+                        {
+                                "lineHeight": "28px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "headline-lg-mobile": [
+                        "28px",
+                        {
+                                "lineHeight": "36px",
+                                "fontWeight": "700"
+                        }
+                ],
+                "headline-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "40px",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "label-md": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "letterSpacing": "0.05em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "headline-xl": [
+                        "40px",
+                        {
+                                "lineHeight": "48px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "400"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+        /* Custom Styles for Glossmorphism and Specific Effects */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+        
+        .brand-gradient {
+            background: linear-gradient(135deg, #b9006b 0%, #2934d0 100%);
+        }
+        
+        .brand-glow {
+            box-shadow: 0 0 20px rgba(41, 52, 208, 0.2);
+        }
+        
+        .profile-ring {
+            background: linear-gradient(135deg, #b9006b 0%, #2934d0 100%);
+            padding: 3px;
+        }
+
+        .text-brand {
+            background: linear-gradient(135deg, #b9006b 0%, #2934d0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Material Symbols Outline Class setup */
+        .material-symbols-outlined {
+          font-variation-settings:
+          'FILL' 0,
+          'wght' 400,
+          'GRAD' 0,
+          'opsz' 24
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style></head>
+<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col font-body-md text-body-md antialiased selection:bg-pink-100 selection:text-pink-900 bg-[url('https://lh3.googleusercontent.com/aida-public/AB6AXuBjRlu3R6M3QD1KDc4DarUvuckuOOQ5Zek34dHkbUWxftp4fWNXj6lfB6N2gxocNarjAQwFtmsXO73jUtLRAU0USJG2CpzDbYgfds2WnTh1gE4ngUhqUuUfza8IL4jGII2ghFSiSuC22W-DdhyXq15QRkfUEaVUuy9bfsRUVuUBF-Cv202eoDvbAfa-utUTFQTq5EwiCDHOazPw2Pi7_ir_KGC88zNxs792juoM7djmvQJmJJCkKwoudp8e6xruxNdFKpY-3mgw4w')] bg-fixed bg-center bg-cover" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCDX3QTh83pL-WNiGhdtNOBoMfL4ZlmTssF9BGjvxceKWpEqjSzfOb3nNprAdMPoiPM4l8B_ImevmPOGZUw39iZ6kq5ZxyQ2bJVLwDCUOLQVRunV5x7V0BpYsF7ZBozhyPwHHxA2G3lwhyyOKtbepEoV5-lu44g51dW3QmFFZT6-1yJBJpCDHlDNvBdPTzwUx-n6EzIcELba7v1nDnxLxHsye-Wavk-pDqaeNp1SmzO14qcVZV06BRDMsZUFfBKqy0udMb7e3ie5A'); background-attachment: fixed; background-position: center; background-size: cover;">
+<!-- Top Navigation (from JSON) -->
+<nav class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-gutter h-16 max-w-container-max mx-auto bg-white/80 backdrop-blur-md text-gray-900 transition-opacity duration-200 flat no shadows font-headline-md text-headline-md font-bold border-b border-gray-200/50">
+<button class="hover:opacity-80 flex items-center justify-center p-2 text-gray-600">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<span class="text-brand tracking-tight">BRS Promotora</span>
+<button class="hover:opacity-80 flex items-center justify-center p-2 text-gray-600">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</nav>
+<!-- Main Container -->
+<main class="flex-grow flex flex-col items-center w-full max-w-container-max mx-auto px-gutter pt-24 pb-32 space-y-stack-lg">
+<!-- Header Section: Logo & Profile -->
+<section class="w-full flex flex-col items-center space-y-stack-md text-center">
+<!-- Logo -->
+<div class="h-16 mb-4 flex items-center justify-center">
+<img alt="BRS Promotora Logo" class="h-full object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkCZ88KdQ5s4XTJ9lpWNtG3dIYoUQAYXVNU2V4Ulso1mdRfTg2vBO4M8POne5ORn4lkwxwJ490UarcnO7eI4mHYBzV-BZECsDUxtwDUKo3fUc_0n8czg3M0ZmdiBu_K6x9HGDaTcUw239qGuN2OH6b0UtLCmLLd32K3RH2UZGPZOiOpaagtZRW9QcVrgtPWOuJ9w2E9Q_L536PPMlrlD0XWr3oKdE0T3Vm27T3tk2da0ZH13K1ctaoxl0-CihsELR7EiG35aXVwg"/>
+</div>
+<!-- Profile Picture with Gradient Ring -->
+<div class="relative w-32 h-32 rounded-full profile-ring brand-glow mx-auto group">
+<div class="w-full h-full bg-white rounded-full overflow-hidden border-4 border-white transition-transform duration-300 group-hover:scale-[0.98]">
+<img alt="Ricardo Silva, Consultor Comercial Sênior" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBD1s4l0WxH_5UFwovmxXRQnmtAy_mLICzChUsdvYzIf945foYtu3-MqcBBoyTzy2tQZJMKj59lB7hqyyIBX86RM6XOOzKcLt3jbmFOCZHEbc9JWLeLw3sNKswhitOngF5vIMBvJfdVvxPRGqojthk4e49c3RUeQXDcPPVwvApiP-mVMMe6BTimHHCcOYVlu7G517TmWfp6IAV8HjrudYN3Ru_fgHEjcqtFlITJ-ig-aOF79l1hAsHYIgogiUqiSWbSbUVS8qT1Iw"/>
+</div>
+<!-- Status indicator -->
+<div class="absolute bottom-1 right-1 w-5 h-5 bg-green-500 rounded-full border-4 border-white shadow-md"></div>
+</div>
+<!-- Name and Role -->
+<div class="space-y-1">
+<h1 class="font-headline-lg text-headline-lg text-gray-900 tracking-tight">Ricardo Silva</h1>
+<p class="font-body-lg text-body-lg text-brand tracking-wide font-medium">Consultor Comercial Sênior</p>
+<div class="flex justify-center mt-2 gap-2">
+<span class="inline-flex items-center px-3 py-1 rounded-full bg-white/80 text-gray-700 font-label-md text-label-md border border-gray-200 shadow-sm backdrop-blur-sm">
+<span class="material-symbols-outlined text-[16px] mr-1 text-blue-600" data-icon="verified">verified</span>
+                        Especialista
+                    </span>
+<span class="inline-flex items-center px-3 py-1 rounded-full bg-white/80 text-gray-700 font-label-md text-label-md border border-gray-200 shadow-sm backdrop-blur-sm">
+<span class="material-symbols-outlined text-[16px] mr-1 text-gray-500" data-icon="location_on">location_on</span>
+                        São Paulo, SP
+                    </span>
+</div>
+</div>
+</section>
+<!-- Primary Actions (WhatsApp & Email side-by-side) -->
+<section class="w-full grid grid-cols-2 gap-4">
+<!-- WhatsApp Primary Button -->
+<button class="brand-gradient text-white rounded-xl py-3 px-4 flex items-center justify-center space-x-2 brand-glow hover:brightness-110 transition-all duration-200 shadow-lg active:scale-95 group">
+<span class="material-symbols-outlined icon-filled" data-icon="chat">chat</span>
+<span class="font-label-md text-label-md font-bold tracking-wider">WhatsApp</span>
+</button>
+<!-- Email Secondary Button (Ghost Style) -->
+<button class="bg-white/70 backdrop-blur-md border border-gray-300 text-gray-800 rounded-xl py-3 px-4 flex items-center justify-center space-x-2 hover:bg-white transition-all duration-200 active:scale-95 group shadow-sm">
+<span class="material-symbols-outlined text-gray-600 group-hover:text-pink-600 transition-colors" data-icon="mail">mail</span>
+<span class="font-label-md text-label-md font-bold tracking-wider group-hover:text-pink-600 transition-colors">Email</span>
+</button>
+</section>
+<!-- Bento Grid: Actions & Socials -->
+<section class="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Save Contact Card -->
+<div class="glass-card rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-white/90 transition-colors group">
+<div class="w-12 h-12 rounded-full brand-gradient text-white flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-md">
+<span class="material-symbols-outlined icon-filled text-2xl" data-icon="person_add">person_add</span>
+</div>
+<h3 class="font-label-md text-label-md text-gray-900 font-bold">Salvar Contato</h3>
+<p class="font-body-md text-body-md text-gray-500 text-sm mt-1">vCard Pessoal</p>
+</div>
+<!-- QR Code Card -->
+<div class="glass-card rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-white/90 transition-colors group">
+<div class="w-12 h-12 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform border border-gray-200 shadow-sm">
+<span class="material-symbols-outlined text-2xl" data-icon="qr_code_scanner">qr_code_scanner</span>
+</div>
+<h3 class="font-label-md text-label-md text-gray-900 font-bold">Compartilhar</h3>
+<p class="font-body-md text-body-md text-gray-500 text-sm mt-1">Gerar QR Code</p>
+</div>
+<!-- Social Links Panel (Spans full width on mobile, 1 col on desktop) -->
+<div class="glass-card rounded-xl p-4 md:col-span-2">
+<h4 class="font-label-md text-label-md text-brand font-bold mb-3 px-2">Redes Profissionais</h4>
+<div class="flex justify-around items-center pt-2">
+<a class="flex flex-col items-center group" href="#">
+<div class="w-10 h-10 rounded-full bg-white flex items-center justify-center border border-gray-200 shadow-sm group-hover:border-blue-500 transition-colors">
+<span class="material-symbols-outlined text-gray-500 group-hover:text-blue-600" data-icon="work">work</span>
+</div>
+<span class="text-xs font-label-md text-gray-500 mt-2 group-hover:text-blue-600 font-medium">LinkedIn</span>
+</a>
+<a class="flex flex-col items-center group" href="#">
+<div class="w-10 h-10 rounded-full bg-white flex items-center justify-center border border-gray-200 shadow-sm group-hover:border-pink-500 transition-colors">
+<span class="material-symbols-outlined text-gray-500 group-hover:text-pink-600" data-icon="camera_alt">camera_alt</span>
+</div>
+<span class="text-xs font-label-md text-gray-500 mt-2 group-hover:text-pink-600 font-medium">Instagram</span>
+</a>
+<a class="flex flex-col items-center group" href="#">
+<div class="w-10 h-10 rounded-full bg-white flex items-center justify-center border border-gray-200 shadow-sm group-hover:border-purple-500 transition-colors">
+<span class="material-symbols-outlined text-gray-500 group-hover:text-purple-600" data-icon="language">language</span>
+</div>
+<span class="text-xs font-label-md text-gray-500 mt-2 group-hover:text-purple-600 font-medium">Site</span>
+</a>
+</div>
+</div>
+</section>
+<!-- Institutional Links List -->
+<section class="w-full glass-card rounded-xl overflow-hidden">
+<h4 class="font-label-md text-label-md text-brand font-bold p-4 border-b border-gray-200 bg-white/40">Recursos BRS</h4>
+<ul class="flex flex-col">
+<li class="border-b border-gray-200/60 last:border-0 hover:bg-white/80 transition-colors cursor-pointer group flex items-center justify-between p-4">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-100 transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="account_balance">account_balance</span>
+</div>
+<div>
+<span class="font-label-md text-label-md block text-gray-900 font-bold">Tabela de Taxas</span>
+<span class="font-body-md text-body-md text-xs text-gray-500">Atualizado hoje</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-gray-400 group-hover:text-blue-600 transition-colors" data-icon="chevron_right">chevron_right</span>
+</li>
+<li class="border-b border-gray-200/60 last:border-0 hover:bg-white/80 transition-colors cursor-pointer group flex items-center justify-between p-4">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded bg-purple-50 flex items-center justify-center text-purple-600 group-hover:bg-purple-100 transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="description">description</span>
+</div>
+<div>
+<span class="font-label-md text-label-md block text-gray-900 font-bold">Simulador BRS</span>
+<span class="font-body-md text-body-md text-xs text-gray-500">Crédito Consignado</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-gray-400 group-hover:text-purple-600 transition-colors" data-icon="chevron_right">chevron_right</span>
+</li>
+<li class="border-b border-gray-200/60 last:border-0 hover:bg-white/80 transition-colors cursor-pointer group flex items-center justify-between p-4">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded bg-pink-50 flex items-center justify-center text-pink-600 group-hover:bg-pink-100 transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="support_agent">support_agent</span>
+</div>
+<div>
+<span class="font-label-md text-label-md block text-gray-900 font-bold">Suporte ao Corretor</span>
+<span class="font-body-md text-body-md text-xs text-gray-500">Atendimento Rápido</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-gray-400 group-hover:text-pink-600 transition-colors" data-icon="chevron_right">chevron_right</span>
+</li>
+</ul>
+</section>
+</main>
+<!-- Bottom Navigation Bar (from JSON, mapped to Me/Profile intent) -->
+<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-container-max z-50 flex justify-around items-center px-4 py-3 bg-white/90 backdrop-blur-md shadow-[0_-4px_15px_rgba(0,0,0,0.05)] rounded-t-xl border-t border-gray-200 md:hidden">
+<button class="flex flex-col items-center justify-center text-gray-500 hover:bg-gray-100 rounded-full scale-95 active:scale-90 transition-transform font-label-md text-label-md w-16 h-14">
+<span class="material-symbols-outlined mb-1" data-icon="share">share</span>
+<span class="text-[10px]">Connect</span>
+</button>
+<button class="flex flex-col items-center justify-center text-gray-500 hover:bg-gray-100 rounded-full scale-95 active:scale-90 transition-transform font-label-md text-label-md w-16 h-14">
+<span class="material-symbols-outlined mb-1" data-icon="qr_code_2">qr_code_2</span>
+<span class="text-[10px]">Network</span>
+</button>
+<button class="flex flex-col items-center justify-center text-gray-500 hover:bg-gray-100 rounded-full scale-95 active:scale-90 transition-transform font-label-md text-label-md w-16 h-14">
+<span class="material-symbols-outlined mb-1" data-icon="business_center">business_center</span>
+<span class="text-[10px]">Resources</span>
+</button>
+<!-- Active Tab: "Me" matches the intent of a Digital Business Card profile -->
+<button class="flex flex-col items-center justify-center bg-pink-50 text-pink-700 rounded-full px-4 py-1 hover:bg-pink-100 scale-95 active:scale-90 transition-transform font-label-md text-label-md h-14 shadow-sm">
+<span class="material-symbols-outlined mb-1 icon-filled text-pink-600" data-icon="person">person</span>
+<span class="text-[10px] font-bold">Me</span>
+</button>
+</nav>
+<!-- Footer (from JSON) -->
+<footer class="w-full max-w-container-max mx-auto flex flex-col items-center justify-center gap-2 px-gutter py-stack-lg text-center bg-transparent full-width pb-24 flat no shadows text-gray-500 font-label-md text-label-md mt-auto">
+<p class="font-headline-md text-headline-md text-brand mb-2 font-bold">BRS Promotora</p>
+<p class="text-sm opacity-90">© 2024 BRS Promotora. All rights reserved.</p>
+<div class="flex gap-4 mt-2">
+<a class="text-gray-500 hover:text-pink-600 underline-offset-4 hover:underline transition-colors text-sm" href="#">Privacy Policy</a>
+<span class="opacity-40">•</span>
+<a class="text-gray-500 hover:text-pink-600 underline-offset-4 hover:underline transition-colors text-sm" href="#">Terms of Service</a>
+</div>
+</footer>
+</body></html>

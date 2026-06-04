@@ -37,6 +37,7 @@ type CompanyData = {
   address_number?: string
   address_complement?: string
   email_principal?: string
+  email_support?: string
   phone_principal?: string
   bank_name?: string
   bank_agency?: string
@@ -104,6 +105,7 @@ const EMPTY_PROFILE: CompanyProfileRow = {
     address_number: '',
     address_complement: '',
     email_principal: '',
+    email_support: '',
     phone_principal: '',
     bank_name: '',
     bank_agency: '',
@@ -627,13 +629,14 @@ export default function CompanyProfilesPage() {
               <div className="form-group"><label className="form-label">Latitude</label><input className="form-control" value={selected?.company_data?.latitude || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), latitude: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">Longitude</label><input className="form-control" value={selected?.company_data?.longitude || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), longitude: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">Site</label><input className="form-control" value={selected?.company_data?.site || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), site: e.target.value } } : prev)} /></div>
-              <div className="form-group"><label className="form-label">Instagram</label><input className="form-control" value={selected?.company_data?.instagram || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), instagram: e.target.value } } : prev)} /></div>
-              <div className="form-group"><label className="form-label">Facebook</label><input className="form-control" value={selected?.company_data?.facebook || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), facebook: e.target.value } } : prev)} /></div>
-              <div className="form-group"><label className="form-label">TikTok</label><input className="form-control" value={selected?.company_data?.tiktok || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), tiktok: e.target.value } } : prev)} /></div>
-              <div className="form-group"><label className="form-label">Canal YouTube</label><input className="form-control" value={selected?.company_data?.youtube || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), youtube: e.target.value } } : prev)} /></div>
+              <div className="form-group"><label className="form-label">E-mail Suporte</label><input type="email" className="form-control" value={selected?.company_data?.email_support || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), email_support: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">WhatsApp Suporte</label><input className="form-control" value={selected?.company_data?.whatsapp_support || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), whatsapp_support: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">Comunidade WhatsApp</label><input className="form-control" value={selected?.company_data?.whatsapp_community || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), whatsapp_community: e.target.value } } : prev)} /></div>
+              <div className="form-group"><label className="form-label">Instagram</label><input className="form-control" value={selected?.company_data?.instagram || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), instagram: e.target.value } } : prev)} /></div>
+              <div className="form-group"><label className="form-label">Facebook</label><input className="form-control" value={selected?.company_data?.facebook || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), facebook: e.target.value } } : prev)} /></div>
+              <div className="form-group"><label className="form-label">Tik Tok</label><input className="form-control" value={selected?.company_data?.tiktok || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), tiktok: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">LinkedIn</label><input className="form-control" value={selected?.company_data?.linkedin || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), linkedin: e.target.value } } : prev)} /></div>
+              <div className="form-group"><label className="form-label">Canal YouTube</label><input className="form-control" value={selected?.company_data?.youtube || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), youtube: e.target.value } } : prev)} /></div>
             </div>
           </div>
 

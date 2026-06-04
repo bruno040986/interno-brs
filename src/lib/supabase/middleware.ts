@@ -65,9 +65,12 @@ export async function updateSession(request: NextRequest) {
   const publicCardSlug = getPublicCardSlugFromHost(request)
   if (publicCardSlug) {
     if (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '') {
-      request.nextUrl.pathname = `/cartao/${publicCardSlug}`
+      request.nextUrl.pathname = '/cartao'
+      request.nextUrl.searchParams.set('slug', publicCardSlug)
     } else if (request.nextUrl.pathname === '/links') {
-      request.nextUrl.pathname = `/cartao/${publicCardSlug}/links`
+      request.nextUrl.pathname = '/cartao'
+      request.nextUrl.searchParams.set('slug', publicCardSlug)
+      request.nextUrl.searchParams.set('view', 'links')
     }
   }
 

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Digital Business Card - BRS Promotora</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary": "#afc6ff",
+                        "on-tertiary-fixed": "#001944",
+                        "surface-container": "#201f1f",
+                        "primary-fixed-dim": "#ffb2bd",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary-container": "#002760",
+                        "surface-container-high": "#2a2a2a",
+                        "surface-container-lowest": "#0e0e0e",
+                        "surface-tint": "#ffb2bd",
+                        "outline": "#ab888c",
+                        "error": "#ffb4ab",
+                        "surface-container-highest": "#353534",
+                        "on-secondary": "#480081",
+                        "on-primary-fixed-variant": "#900036",
+                        "primary": "#ffb2bd",
+                        "secondary": "#dcb8ff",
+                        "on-background": "#e5e2e1",
+                        "tertiary-fixed": "#d9e2ff",
+                        "on-error": "#690005",
+                        "surface-variant": "#353534",
+                        "background": "#131313",
+                        "inverse-on-surface": "#313030",
+                        "secondary-container": "#7701d0",
+                        "on-tertiary": "#002d6d",
+                        "primary-container": "#ff4e7a",
+                        "secondary-fixed": "#efdbff",
+                        "on-secondary-fixed": "#2c0051",
+                        "on-surface-variant": "#e5bdc1",
+                        "on-primary-fixed": "#400013",
+                        "tertiary-fixed-dim": "#afc6ff",
+                        "on-tertiary-fixed-variant": "#004299",
+                        "secondary-fixed-dim": "#dcb8ff",
+                        "primary-fixed": "#ffd9dd",
+                        "outline-variant": "#5c3f43",
+                        "on-secondary-container": "#dcb7ff",
+                        "surface-container-low": "#1c1b1b",
+                        "on-primary-container": "#5a001f",
+                        "inverse-surface": "#e5e2e1",
+                        "on-secondary-fixed-variant": "#6700b5",
+                        "surface": "#131313",
+                        "error-container": "#93000a",
+                        "surface-bright": "#3a3939",
+                        "surface-dim": "#131313",
+                        "tertiary-container": "#538dff",
+                        "inverse-primary": "#bd0049",
+                        "on-surface": "#e5e2e1",
+                        "on-primary": "#670024"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "container-max": "480px",
+                        "gutter": "1rem",
+                        "stack-sm": "1rem",
+                        "stack-lg": "2rem",
+                        "stack-md": "1.5rem",
+                        "inset-md": "1.25rem"
+                    },
+                    fontFamily: {
+                        "headline-xl": ["Montserrat"],
+                        "label-md": ["Montserrat"],
+                        "headline-lg-mobile": ["Montserrat"],
+                        "headline-md": ["Montserrat"],
+                        "body-lg": ["Montserrat"],
+                        "body-md": ["Montserrat"],
+                        "headline-lg": ["Montserrat"]
+                    },
+                    fontSize: {
+                        "headline-xl": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "36px", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        };
+    </script>
+<style>body {
+            background-color: #FFFFFF;
+            background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCDX3QTh83pL-WNiGhdtNOBoMfL4ZlmTssF9BGjvxceKWpEqjSzfOb3nNprAdMPoiPM4l8B_ImevmPOGZUw39iZ6kq5ZxyQ2bJVLwDCUOLQVRunV5x7V0BpYsF7ZBozhyPwHHxA2G3lwhyyOKtbepEoV5-lu44g51dW3QmFFZT6-1yJBJpCDHlDNvBdPTzwUx-n6EzIcELba7v1nDnxLxHsye-Wavk-pDqaeNp1SmzO14qcVZV06BRDMsZUFfBKqy0udMb7e3ie5A');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-blend-mode: normal;
+        }
+        
+        .bg-pattern-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCDX3QTh83pL-WNiGhdtNOBoMfL4ZlmTssF9BGjvxceKWpEqjSzfOb3nNprAdMPoiPM4l8B_ImevmPOGZUw39iZ6kq5ZxyQ2bJVLwDCUOLQVRunV5x7V0BpYsF7ZBozhyPwHHxA2G3lwhyyOKtbepEoV5-lu44g51dW3QmFFZT6-1yJBJpCDHlDNvBdPTzwUx-n6EzIcELba7v1nDnxLxHsye-Wavk-pDqaeNp1SmzO14qcVZV06BRDMsZUFfBKqy0udMb7e3ie5A');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            opacity: 0.1;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .gradient-border-ring {
+            background: linear-gradient(#FFFFFF, #FFFFFF) padding-box,
+                        linear-gradient(135deg, #FF2D6D, #2D7CFF) border-box;
+            border: 3px solid transparent;
+        }
+        
+        .brand-gradient-bg {
+            background: linear-gradient(135deg, #FF2D6D 0%, #2D7CFF 100%);
+        }
+        
+        .brand-gradient-text {
+            background: linear-gradient(135deg, #FF2D6D 0%, #2D7CFF 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+        
+        .glow-hover:hover {
+            box-shadow: 0 0 15px rgba(45, 124, 255, 0.3);
+        }
+        
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1;
+        }</style>
+</head>
+<body class="text-slate-900 min-h-screen flex flex-col relative font-body-md overflow-x-hidden">
+<!-- Background Pattern -->
+<div class="bg-pattern-overlay"></div>
+<!-- Main Container - Fixed Width Mobile First -->
+<main class="w-full max-w-container-max mx-auto px-gutter pb-stack-lg flex flex-col items-center z-10 relative">
+<!-- Header Section -->
+<header class="w-full flex flex-col items-center pt-8 pb-6 text-center space-y-6">
+<!-- Logo -->
+<img alt="BRS Promotora Logo" class="h-12 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkCZ88KdQ5s4XTJ9lpWNtG3dIYoUQAYXVNU2V4Ulso1mdRfTg2vBO4M8POne5ORn4lkwxwJ490UarcnO7eI4mHYBzV-BZECsDUxtwDUKo3fUc_0n8czg3M0ZmdiBu_K6x9HGDaTcUw239qGuN2OH6b0UtLCmLLd32K3RH2UZGPZOiOpaagtZRW9QcVrgtPWOuJ9w2E9Q_L536PPMlrlD0XWr3oKdE0T3Vm27T3tk2da0ZH13K1ctaoxl0-CihsELR7EiG35aXVwg"/>
+<!-- Profile Info -->
+<div class="flex flex-col items-center space-y-4">
+<!-- Profile Picture with Gradient Ring -->
+<div class="rounded-full p-1 gradient-border-ring inline-block">
+<img alt="Profile photo" class="w-32 h-32 rounded-full object-cover border-4 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBD1s4l0WxH_5UFwovmxXRQnmtAy_mLICzChUsdvYzIf945foYtu3-MqcBBoyTzy2tQZJMKj59lB7hqyyIBX86RM6XOOzKcLt3jbmFOCZHEbc9JWLeLw3sNKswhitOngF5vIMBvJfdVvxPRGqojthk4e49c3RUeQXDcPPVwvApiP-mVMMe6BTimHHCcOYVlu7G517TmWfp6IAV8HjrudYN3Ru_fgHEjcqtFlITJ-ig-aOF79l1hAsHYIgogiUqiSWbSbUVS8qT1Iw"/>
+</div>
+<div>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-slate-900 mb-1">Ricardo Silva</h1>
+<h2 class="font-body-lg text-body-lg brand-gradient-text">Consultor Comercial Sênior</h2>
+</div>
+<p class="font-body-md text-body-md text-slate-600 max-w-[280px]">Clique nos botões conforme sua escolha</p>
+</div>
+</header>
+<!-- Main Actions Area -->
+<section class="w-full space-y-4 mb-8">
+<!-- WhatsApp Button -->
+<a class="brand-gradient-bg w-full rounded-xl py-4 px-6 flex items-center justify-center space-x-3 text-white font-label-md text-label-md transition-all glow-hover hover:-translate-y-1 shadow-lg shadow-[#FF2D6D]/20" href="#">
+<span class="material-symbols-outlined" data-weight="fill">chat</span>
+<span class="">WhatsApp</span>
+</a>
+<!-- Email Button -->
+<a class="glass-panel w-full rounded-xl py-4 px-6 flex items-center justify-center space-x-3 text-slate-800 font-label-md text-label-md transition-all hover:bg-white hover:-translate-y-1" href="#">
+<span class="material-symbols-outlined">mail</span>
+<span class="">E-mail Profissional</span>
+</a>
+</section>
+<!-- Social Media Grid -->
+<section class="w-full grid grid-cols-2 gap-4 mb-8">
+<a class="glass-panel rounded-xl py-4 flex flex-col items-center justify-center space-y-2 text-slate-600 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined text-3xl brand-gradient-text">photo_camera</span>
+<span class="font-label-md text-label-md text-xs">Instagram</span>
+</a>
+<a class="glass-panel rounded-xl py-4 flex flex-col items-center justify-center space-y-2 text-slate-600 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined text-3xl brand-gradient-text">thumb_up</span>
+<span class="font-label-md text-label-md text-xs">Facebook</span>
+</a>
+<a class="glass-panel rounded-xl py-4 flex flex-col items-center justify-center space-y-2 text-slate-600 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined text-3xl brand-gradient-text">work</span>
+<span class="font-label-md text-label-md text-xs">LinkedIn</span>
+</a>
+<a class="glass-panel rounded-xl py-4 flex flex-col items-center justify-center space-y-2 text-slate-600 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined text-3xl brand-gradient-text">music_note</span>
+<span class="font-label-md text-label-md text-xs">TikTok</span>
+</a>
+<a class="glass-panel rounded-xl py-4 flex flex-col items-center justify-center space-y-2 text-slate-600 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined text-3xl brand-gradient-text">play_circle</span>
+<span class="font-label-md text-label-md text-xs">YouTube</span>
+</a>
+<a class="glass-panel rounded-xl py-4 flex flex-col items-center justify-center space-y-2 text-slate-600 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined text-3xl brand-gradient-text">groups</span>
+<span class="font-label-md text-label-md text-xs text-center leading-tight">WhatsApp<br/>Community</span>
+</a>
+</section>
+<!-- Company Section (Grouped List) -->
+<section class="w-full mb-8">
+<div class="glass-panel rounded-xl overflow-hidden">
+<a class="flex items-center justify-between p-4 border-b border-black/5 hover:bg-black/5 transition-colors" href="#">
+<div class="flex items-center space-x-3 text-slate-800">
+<span class="material-symbols-outlined brand-gradient-text">support_agent</span>
+<span class="font-label-md text-label-md">Support</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-4 border-b border-black/5 hover:bg-black/5 transition-colors" href="#">
+<div class="flex items-center space-x-3 text-slate-800">
+<span class="material-symbols-outlined brand-gradient-text">language</span>
+<span class="font-label-md text-label-md">Website</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-4 border-b border-black/5 hover:bg-black/5 transition-colors" href="#">
+<div class="flex items-center space-x-3 text-slate-800">
+<span class="material-symbols-outlined brand-gradient-text">share</span>
+<span class="font-label-md text-label-md">Institutional Socials</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-4 border-b border-black/5 hover:bg-black/5 transition-colors" href="#">
+<div class="flex items-center space-x-3 text-slate-800">
+<span class="material-symbols-outlined brand-gradient-text">account_balance</span>
+<span class="font-label-md text-label-md">Financial Partners</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-4 border-b border-black/5 hover:bg-black/5 transition-colors" href="#">
+<div class="flex items-center space-x-3 text-slate-800">
+<span class="material-symbols-outlined brand-gradient-text">verified_user</span>
+<span class="font-label-md text-label-md">Averbadores</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</a>
+<a class="flex items-center justify-between p-4 hover:bg-black/5 transition-colors" href="#">
+<div class="flex items-center space-x-3 text-slate-800">
+<span class="material-symbols-outlined brand-gradient-text">link</span>
+<span class="font-label-md text-label-md">Useful Links</span>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</a>
+</div>
+</section>
+<!-- Quick Actions -->
+<section class="w-full flex space-x-4 mb-12">
+<button class="flex-1 glass-panel rounded-xl py-3 px-4 flex flex-col items-center justify-center space-y-1 text-slate-800 hover:bg-black/5 transition-colors">
+<span class="material-symbols-outlined brand-gradient-text">person_add</span>
+<span class="font-label-md text-label-md text-xs">Salvar Contato (VCF)</span>
+</button>
+<button class="flex-1 glass-panel rounded-xl py-3 px-4 flex flex-col items-center justify-center space-y-1 text-slate-800 hover:bg-black/5 transition-colors">
+<span class="material-symbols-outlined brand-gradient-text">qr_code_2</span>
+<span class="font-label-md text-label-md text-xs">QR Code</span>
+</button>
+</section>
+</main>
+<!-- Footer - using JSON structure as guide -->
+<footer class="w-full max-w-container-max mx-auto flex flex-col items-center justify-center gap-2 px-gutter py-stack-lg text-center bg-transparent mt-auto relative z-10 pb-24">
+<img alt="BRS Promotora Small Logo" class="h-6 w-auto opacity-60 mb-2" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkCZ88KdQ5s4XTJ9lpWNtG3dIYoUQAYXVNU2V4Ulso1mdRfTg2vBO4M8POne5ORn4lkwxwJ490UarcnO7eI4mHYBzV-BZECsDUxtwDUKo3fUc_0n8czg3M0ZmdiBu_K6x9HGDaTcUw239qGuN2OH6b0UtLCmLLd32K3RH2UZGPZOiOpaagtZRW9QcVrgtPWOuJ9w2E9Q_L536PPMlrlD0XWr3oKdE0T3Vm27T3tk2da0ZH13K1ctaoxl0-CihsELR7EiG35aXVwg"/>
+<p class="font-label-md text-label-md text-slate-500">© 2024 BRS Promotora. All rights reserved.</p>
+<div class="flex space-x-4">
+<a class="font-label-md text-label-md text-slate-500 hover:text-slate-800 underline-offset-4 hover:underline" href="#">Privacy Policy</a>
+<a class="font-label-md text-label-md text-slate-500 hover:text-slate-800 underline-offset-4 hover:underline" href="#">Terms of Service</a>
+</div>
+</footer>
+</body></html>
