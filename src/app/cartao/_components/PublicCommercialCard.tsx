@@ -84,6 +84,30 @@ function getWhatsAppLink(value: string) {
   return `https://wa.me/55${digits}`
 }
 
+function formatBrazilPhoneDisplay(value: string) {
+  const digits = String(value || '').replace(/\D/g, '')
+  if (!digits) return ''
+
+  const normalized = digits.startsWith('55') && digits.length > 11 ? digits.slice(2) : digits
+  const ddd = normalized.slice(0, 2)
+  const rest = normalized.slice(2)
+  if (!ddd || !rest) return value
+
+  if (rest.length > 8) {
+    const first = rest.slice(0, 5)
+    const second = rest.slice(5, 9)
+    return `(${ddd}) ${first} ${second}`.trim()
+  }
+
+  if (rest.length > 4) {
+    const first = rest.slice(0, rest.length - 4)
+    const second = rest.slice(rest.length - 4)
+    return `(${ddd}) ${first} ${second}`.trim()
+  }
+
+  return `(${ddd}) ${rest}`.trim()
+}
+
 function getCardLinkIcon(iconKey: string): LucideIcon {
   const key = String(iconKey || 'link').trim().toLowerCase()
   const registry: Record<string, LucideIcon> = {
@@ -847,8 +871,8 @@ export default function PublicCommercialCard({
                   gap: '0.9rem',
                   boxShadow: '0 10px 20px rgba(21, 191, 74, 0.18)',
                 }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
                   <div
                     style={{
                       width: 30,
@@ -864,8 +888,8 @@ export default function PublicCommercialCard({
                   </div>
                   <div style={{ minWidth: 0, fontWeight: 900, fontSize: '1.02rem' }}>WhatsApp</div>
                 </div>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, opacity: 0.96, wordBreak: 'break-word' }}>
-                  {whatsapp || '(61) 99955-1641'}
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, opacity: 0.96, whiteSpace: 'nowrap' }}>
+                  {formatBrazilPhoneDisplay(whatsapp) || '(61) 99955 1641'}
                 </div>
                 <ExternalLink size={18} style={{ flexShrink: 0 }} />
               </a>
@@ -902,10 +926,12 @@ export default function PublicCommercialCard({
                   >
                     <BrandIcon iconKey="gmail" size={17} color="#ff4f4f" fallback={<Mail size={17} />} />
                   </div>
-                  <div style={{ minWidth: 0, fontWeight: 900, fontSize: '1.02rem' }}>E-mail</div>
-                </div>
-                <div style={{ fontSize: '0.78rem', color: '#333', wordBreak: 'break-word', textAlign: 'right' }}>
-                  {email || 'ketellen.freires@brspromotora.com.br'}
+                  <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.08 }}>
+                    <div style={{ fontWeight: 900, fontSize: '1.02rem' }}>E-mail</div>
+                    <div style={{ fontSize: '0.78rem', color: '#333', wordBreak: 'break-word' }}>
+                      {email || 'ketellen.freires@brspromotora.com.br'}
+                    </div>
+                  </div>
                 </div>
                 <ExternalLink size={18} style={{ flexShrink: 0 }} />
               </a>
