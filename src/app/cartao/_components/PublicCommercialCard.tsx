@@ -1006,7 +1006,7 @@ export default function PublicCommercialCard({
               </div>
             </AccordionSection>
 
-            <AccordionSection icon={Link2} title="Links da BRS Promotora" subtitle="Atalhos configurados no subsistema">
+            <AccordionSection icon={Link2} title="Links da BRS Promotora">
               <div style={{ display: 'grid', gap: 10 }}>
                 {cardLinks.length ? (
                   cardLinks.map((link) => {
@@ -1064,7 +1064,7 @@ export default function PublicCommercialCard({
             </AccordionSection>
 
             {relationEntries.length ? (
-              <AccordionSection icon={Users} title="Fale com o meu Superintendente" subtitle="Acesso ao cartão da liderança">
+              <AccordionSection icon={Users} title="Fale com o meu Superintendente">
                 <div style={{ display: 'grid', gap: 10 }}>
                   {relationEntries.map((entry) => (
                     <RelationCard key={entry.href} entry={entry} />
