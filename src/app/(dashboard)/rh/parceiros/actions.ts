@@ -290,7 +290,7 @@ export async function getCommercialEntities() {
       .from('commercial_entities')
       .select(`
         *,
-        parent:parent_id ( id, name, role )
+        parent:parent_id ( id, name, role, cadastral_data )
       `)
       .order('name')
 

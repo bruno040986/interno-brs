@@ -23,6 +23,8 @@ type PublicCommercialEntityRelation = {
   role: 'superintendente' | 'supervisor' | 'gerente'
   commercial_slug: string | null
   cadastral_data: Record<string, any> | null
+  user_id: string | null
+  avatar_url: string | null
 }
 
 type PublicCommercialUser = {
@@ -78,6 +80,8 @@ function normalizeRelation(entity: {
   role: 'superintendente' | 'supervisor' | 'gerente'
   commercial_slug: string | null
   cadastral_data: Record<string, any> | null
+  user_id: string | null
+  avatar_url: string | null
 } | null | undefined): PublicCommercialEntityRelation | null {
   if (!entity) return null
   return {
@@ -86,6 +90,8 @@ function normalizeRelation(entity: {
     role: entity.role,
     commercial_slug: entity.commercial_slug,
     cadastral_data: entity.cadastral_data || {},
+    user_id: entity.user_id,
+    avatar_url: entity.avatar_url,
   }
 }
 
@@ -150,10 +156,39 @@ async function fetchCardLinks(admin: Awaited<ReturnType<typeof createAdminClient
 function buildCommercialEntityRelations(
   entities: PublicCommercialEntityRow[],
   entity: PublicCommercialEntityRow,
+  users: PublicCommercialUser[],
 ): { parent: PublicCommercialEntityRelation | null; superior: PublicCommercialEntityRelation | null } {
   const byId = new Map(entities.map((item) => [item.id, item]))
-  const parent = normalizeRelation(entity.parent_id ? byId.get(entity.parent_id) : null)
-  const superior = normalizeRelation(parent?.id ? byId.get(byId.get(parent.id)?.parent_id || '') : null)
+  const userById = new Map(
+    users.map((user) => [
+      user.id,
+      {
+        id: user.id,
+        name: user.name || null,
+        avatar_url: user.avatar_url || null,
+      },
+    ]),
+  )
+  const parentEntity = entity.parent_id ? byId.get(entity.parent_id) : null
+  const parent = normalizeRelation(
+    parentEntity
+      ? {
+          ...parentEntity,
+          user_id: parentEntity.user_id,
+          avatar_url: parentEntity.user_id ? userById.get(parentEntity.user_id)?.avatar_url || null : null,
+        }
+      : null,
+  )
+  const superiorEntity = parent?.id ? byId.get(byId.get(parent.id)?.parent_id || '') : null
+  const superior = normalizeRelation(
+    superiorEntity
+      ? {
+          ...superiorEntity,
+          user_id: superiorEntity.user_id,
+          avatar_url: superiorEntity.user_id ? userById.get(superiorEntity.user_id)?.avatar_url || null : null,
+        }
+      : null,
+  )
   return { parent, superior }
 }
 
@@ -178,7 +213,7 @@ async function buildPublicCardData(
     ]),
   )
 
-  const { parent, superior } = await buildCommercialEntityRelations(entities, entity)
+  const { parent, superior } = await buildCommercialEntityRelations(entities, entity, users)
 
   return {
     entity,

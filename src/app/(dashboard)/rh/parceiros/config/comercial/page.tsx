@@ -121,7 +121,7 @@ type CommercialDraft = {
   remuneration_variable_data: Record<string, any>
   vehicle_rental_data: Record<string, any>
   card_data: Record<string, any>
-  parent?: { id: string; name: string; role: string }
+  parent?: { id: string; name: string; role: string; cadastral_data?: Record<string, any> | null }
 }
 
 type CardSocialKey = 'instagram' | 'facebook' | 'linkedin' | 'tiktok' | 'threads' | 'x' | 'youtube' | 'community'
@@ -167,7 +167,7 @@ type EntityRow = {
   remuneration_variable_data?: Record<string, any> | null
   vehicle_rental_data?: Record<string, any> | null
   card_data?: Record<string, any> | null
-  parent?: { id: string; name: string; role: string }
+  parent?: { id: string; name: string; role: string; cadastral_data?: Record<string, any> | null }
 }
 
 const EMPTY_DOCUMENT_ROW = (): CertificationRow => ({
@@ -568,7 +568,7 @@ function buildCardName(draft: CommercialDraft) {
 function buildCardRole(draft: CommercialDraft) {
   const sex = String(draft.cadastral_data?.sex || '').toLowerCase()
   const base = draft.role === 'superintendente' ? 'Superintendente Comercial' : draft.role === 'supervisor' ? 'Supervisor Comercial' : 'Gerente Comercial'
-  if (sex === 'f' && draft.role === 'gerente') return 'Supervisora Comercial'
+  if (draft.role === 'gerente') return 'Gerente Comercial'
   if (sex === 'f' && draft.role === 'supervisor') return 'Supervisora Comercial'
   if (sex === 'f' && draft.role === 'superintendente') return 'Superintendente Comercial'
   return base
@@ -1384,8 +1384,11 @@ export default function ComercialConfigPage() {
                         <td style={{ fontSize: '0.875rem' }}>
                           {ent.parent ? (
                             <div>
-                              {ent.parent.name} <small style={{ color: 'var(--brs-gray-400)' }}>({ent.parent.role})</small>
+                              {((ent.parent as any)?.cadastral_data?.commercial_name || ent.parent.name) as string}{' '}
+                              <small style={{ color: 'var(--brs-gray-400)' }}>({ent.parent.role})</small>
                             </div>
+                          ) : ent.role === 'superintendente' ? (
+                            <span style={{ fontWeight: 600, color: 'var(--brs-gray-700)' }}>Superintendente</span>
                           ) : (
                             <span style={{ color: 'var(--brs-gray-300)' }}>- Direto</span>
                           )}

@@ -4,19 +4,22 @@ import {
   BadgeCheck,
   BadgeInfo,
   Briefcase,
+  BriefcaseBusiness,
   Building2,
   CalendarDays,
   Camera,
   ChevronDown,
   ContactRound,
   ExternalLink,
-  FileSearch,
+  FileCheck,
   FileText,
-  Globe2,
+  Globe,
+  Headset,
+  Landmark,
   Link2,
   Mail,
   MapPin,
-  MessageCircle,
+  MessageCircleHeart,
   MonitorSmartphone,
   Phone,
   QrCode,
@@ -60,17 +63,26 @@ type AppLinkEntry = {
 }
 
 function getRoleLabel(role: PublicCommercialCardData['entity']['role'], sex: string) {
-  const female = String(sex || '').trim().toLowerCase() === 'f'
+  const female = isFemaleSex(sex)
   if (role === 'superintendente') return 'Superintendente Comercial'
   if (role === 'supervisor') return female ? 'Supervisora Comercial' : 'Supervisor Comercial'
-  return female ? 'Supervisora Comercial' : 'Gerente Comercial'
+  return 'Gerente Comercial'
 }
 
 function getSupportRoleLabel(role: PublicCommercialCardData['entity']['role'], sex: string) {
-  const female = String(sex || '').trim().toLowerCase() === 'f'
+  const female = isFemaleSex(sex)
   if (role === 'superintendente') return 'Fale com o Superintendente'
   if (role === 'supervisor') return female ? 'Fale com a Supervisora' : 'Fale com o Supervisor'
   return female ? 'Fale com a Supervisora' : 'Fale com o Supervisor'
+}
+
+function isFemaleSex(value: string | Record<string, any> | null | undefined) {
+  const raw =
+    typeof value === 'string'
+      ? value
+      : value?.sex || value?.gender || value?.sexo || ''
+  const normalized = String(raw || '').trim().toLowerCase()
+  return normalized === 'f' || normalized === 'feminino' || normalized === 'female' || normalized === 'mulher'
 }
 
 function getPublicCardUrl(slug?: string | null) {
@@ -109,18 +121,24 @@ function formatBrazilPhoneDisplay(value: string) {
   return `(${ddd}) ${rest}`.trim()
 }
 
+function getCommercialDisplayName(entity?: { cadastral_data?: Record<string, any> | null; name?: string | null } | null) {
+  const commercialName = String(entity?.cadastral_data?.commercial_name || '').trim()
+  if (commercialName) return commercialName
+  return String(entity?.name || '').trim()
+}
+
 function getCardLinkIcon(iconKey: string): LucideIcon {
   const key = String(iconKey || 'link').trim().toLowerCase()
   const registry: Record<string, LucideIcon> = {
     link: Link2,
-    globe: Globe2,
+    globe: Globe,
     mail: Mail,
     phone: Phone,
-    message: MessageCircle,
-    'message-square': MessageCircle,
+    message: MessageCircleHeart,
+    'message-square': MessageCircleHeart,
     file: FileText,
     book: BadgeInfo,
-    megaphone: MessageCircle,
+    megaphone: MessageCircleHeart,
     users: Users,
     qr: QrCode,
     external: ExternalLink,
@@ -164,7 +182,7 @@ function getCardLinkIcon(iconKey: string): LucideIcon {
     x: XIcon,
     threads: AtSign,
     instagram: Camera,
-    facebook: Globe2,
+    facebook: Globe,
     linkedin: Briefcase,
     youtube: MonitorSmartphone,
   }
@@ -300,32 +318,58 @@ function getRelationLinks(
   parent: PublicCommercialCardData['parent'],
   superior: PublicCommercialCardData['superior'],
 ) {
-  const items: Array<{ label: string; href: string; subtitle: string; icon: LucideIcon; initials: string }> = []
+  const items: {
+    parent: null | {
+      title: string
+      href: string
+      phone: string
+      initials: string
+      avatarUrl?: string | null
+      displayName: string
+      icon: LucideIcon
+    }
+    superior: null | {
+      title: string
+      href: string
+      phone: string
+      initials: string
+      avatarUrl?: string | null
+      displayName: string
+      icon: LucideIcon
+    }
+  } = {
+    parent: null,
+    superior: null,
+  }
 
   const parentSlug = String(parent?.commercial_slug || '').trim()
-  const parentSex = String(parent?.cadastral_data?.sex || '').trim()
+  const parentSex = parent?.cadastral_data || null
   const parentPhone = String(parent?.cadastral_data?.phone_whatsapp || '').trim()
   if (parentSlug) {
-    items.push({
-      label: getSupportRoleLabel(parent?.role || 'supervisor', parentSex),
-      subtitle: parentPhone || parent?.name || 'Contato vinculado',
+    items.parent = {
+      title: isFemaleSex(parentSex) ? 'Fale com a minha Supervisora' : 'Fale com o meu Supervisor',
+      displayName: getCommercialDisplayName(parent) || 'Contato vinculado',
       href: getPublicCardUrl(parentSlug),
-      icon: Users,
-      initials: String(parent?.name || 'C').split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join(''),
-    })
+      icon: Briefcase,
+      phone: formatBrazilPhoneDisplay(parentPhone) || parentPhone || 'Contato vinculado',
+      initials: getInitials(getCommercialDisplayName(parent) || 'C'),
+      avatarUrl: parent?.avatar_url || null,
+    }
   }
 
   const superiorSlug = String(superior?.commercial_slug || '').trim()
-  const superiorSex = String(superior?.cadastral_data?.sex || '').trim()
+  const superiorSex = superior?.cadastral_data || null
   const superiorPhone = String(superior?.cadastral_data?.phone_whatsapp || '').trim()
   if (superiorSlug) {
-    items.push({
-      label: getSupportRoleLabel(superior?.role || 'superintendente', superiorSex),
-      subtitle: superiorPhone || superior?.name || 'Contato vinculado',
+    items.superior = {
+      title: isFemaleSex(superiorSex) ? 'Fale com a minha Superintendente' : 'Fale com o meu Superintendente',
+      displayName: getCommercialDisplayName(superior) || 'Contato vinculado',
       href: getPublicCardUrl(superiorSlug),
-      icon: Building2,
-      initials: String(superior?.name || 'C').split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join(''),
-    })
+      icon: BriefcaseBusiness,
+      phone: formatBrazilPhoneDisplay(superiorPhone) || superiorPhone || 'Contato vinculado',
+      initials: getInitials(getCommercialDisplayName(superior) || 'C'),
+      avatarUrl: superior?.avatar_url || null,
+    }
   }
 
   return items
@@ -608,7 +652,7 @@ function SocialTile({
 function RelationCard({
   entry,
 }: {
-  entry: { label: string; href: string; subtitle: string; icon: LucideIcon; initials: string }
+  entry: { href: string; phone: string; icon: LucideIcon; initials: string; avatarUrl?: string | null; displayName: string }
 }) {
   return (
     <a
@@ -626,29 +670,46 @@ function RelationCard({
         border: '1px solid rgba(0,0,0,0.2)',
         padding: '0.75rem 0.85rem',
       }}
-    >
+      >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <div
-          style={{
-            width: 42,
-            height: 42,
-            borderRadius: 999,
-            display: 'grid',
-            placeItems: 'center',
-            background: 'linear-gradient(135deg, #ff5da7, #2d5cff)',
-            border: '3px solid #fff',
-            color: '#fff',
-            flexShrink: 0,
-            fontWeight: 900,
-            fontSize: '0.76rem',
-            overflow: 'hidden',
-          }}
-        >
-          {entry.initials || <entry.icon size={18} />}
+        <div style={{ width: 46, height: 46, borderRadius: 999, padding: 2.5, background: 'linear-gradient(135deg, #ff5da7, #2d5cff)', flexShrink: 0 }}>
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: 999,
+              display: 'grid',
+              placeItems: 'center',
+              background: '#fff',
+              color: '#fff',
+              fontWeight: 900,
+              fontSize: '0.76rem',
+              overflow: 'hidden',
+            }}
+          >
+            {entry.avatarUrl ? (
+              <img src={entry.avatarUrl} alt={entry.displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: 'linear-gradient(135deg, rgba(255,93,167,0.1), rgba(45,92,255,0.1))',
+                  color: '#2d5cff',
+                }}
+              >
+                {entry.initials || <entry.icon size={18} />}
+              </div>
+            )}
+          </div>
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 900, color: '#111', fontSize: '0.92rem' }}>{entry.label}</div>
-          <div style={{ marginTop: 3, fontSize: '0.84rem', color: '#222', wordBreak: 'break-word' }}>{entry.subtitle}</div>
+          <div style={{ display: 'grid', gap: 3, fontSize: '0.84rem', color: '#222', wordBreak: 'break-word' }}>
+            <span style={{ fontWeight: 800, fontSize: '0.94rem', color: '#111' }}>{entry.displayName}</span>
+            <span>{entry.phone}</span>
+          </div>
         </div>
       </div>
       <ExternalLink size={16} color="#222" style={{ flexShrink: 0 }} />
@@ -885,7 +946,7 @@ export default function PublicCommercialCard({
                       flexShrink: 0,
                     }}
                   >
-                    <BrandIcon iconKey="whatsapp" size={18} color="#fff" fallback={<MessageCircle size={18} />} />
+                    <BrandIcon iconKey="whatsapp" size={18} color="#fff" fallback={<MessageCircleHeart size={18} />} />
                   </div>
                   <div style={{ minWidth: 0, fontWeight: 900, fontSize: '1.02rem' }}>WhatsApp</div>
                 </div>
@@ -937,7 +998,7 @@ export default function PublicCommercialCard({
                 <ExternalLink size={18} style={{ flexShrink: 0 }} />
               </a>
 
-              <AccordionSection icon={MessageCircle} title="Redes Sociais" defaultOpen={socials.length > 0}>
+              <AccordionSection icon={MessageCircleHeart} title="Redes Sociais" defaultOpen={socials.length > 0}>
                 <div
                   style={{
                     display: 'grid',
@@ -966,7 +1027,7 @@ export default function PublicCommercialCard({
           />
 
           <section style={{ display: 'grid', gap: 10 }}>
-            <AccordionSection icon={MessageCircle} title="Suporte Operacional" defaultOpen>
+            <AccordionSection icon={Headset} title="Suporte Operacional" defaultOpen>
               <div style={{ display: 'grid', gap: 10 }}>
                 {supportEntries.length ? (
                   supportEntries.map((entry) => <LinkRow key={entry.label} label={entry.label} value={entry.value} href={entry.href} iconKey={entry.iconKey} />)
@@ -978,7 +1039,7 @@ export default function PublicCommercialCard({
               </div>
             </AccordionSection>
 
-            <AccordionSection icon={Globe2} title="Site">
+            <AccordionSection icon={Globe} title="Site">
               {siteEntry ? (
                 <LinkRow label={siteEntry.label} value={siteEntry.value} href={siteEntry.href} iconKey={siteEntry.iconKey} />
               ) : (
@@ -988,7 +1049,7 @@ export default function PublicCommercialCard({
               )}
             </AccordionSection>
 
-            <AccordionSection icon={MessageCircle} title="Redes Sociais">
+            <AccordionSection icon={MessageCircleHeart} title="Redes Sociais">
               <div
                 style={{
                   display: 'grid',
@@ -1051,25 +1112,35 @@ export default function PublicCommercialCard({
               </div>
             </AccordionSection>
 
-            <AccordionSection icon={BadgeInfo} title="Instituições Financeiras">
+            <AccordionSection icon={Landmark} title="Instituições Financeiras">
               <div style={{ padding: '0.95rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444', lineHeight: 1.6 }}>
                 Em breve todos os links dos sistemas das instituições financeiras em um mesmo local.
               </div>
             </AccordionSection>
 
-            <AccordionSection icon={FileSearch} title="Averbadores">
+            <AccordionSection icon={FileCheck} title="Averbadores">
               <div style={{ padding: '0.95rem 1rem', borderRadius: 14, background: '#d9d9d9', border: '1px solid rgba(0,0,0,0.2)', color: '#444', lineHeight: 1.6 }}>
                 Em breve todos os links dos sistemas dos averbadores em um mesmo local.
               </div>
             </AccordionSection>
 
-            {relationEntries.length ? (
-              <AccordionSection icon={Users} title="Fale com o meu Superintendente">
-                <div style={{ display: 'grid', gap: 10 }}>
-                  {relationEntries.map((entry) => (
-                    <RelationCard key={entry.href} entry={entry} />
-                  ))}
-                </div>
+            {relationEntries.parent ? (
+              <AccordionSection
+                icon={Briefcase}
+                title={relationEntries.parent.title}
+                defaultOpen={false}
+              >
+                <RelationCard entry={relationEntries.parent} />
+              </AccordionSection>
+            ) : null}
+
+            {relationEntries.superior ? (
+              <AccordionSection
+                icon={BriefcaseBusiness}
+                title={relationEntries.superior.title}
+                defaultOpen={false}
+              >
+                <RelationCard entry={relationEntries.superior} />
               </AccordionSection>
             ) : null}
           </section>
