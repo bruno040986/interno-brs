@@ -1,3 +1,5 @@
+'use client'
+
 import {
   ArrowRight,
   AtSign,
@@ -46,6 +48,7 @@ type PublicCommercialCardProps = {
   parent: PublicCommercialCardData['parent']
   superior: PublicCommercialCardData['superior']
   mode?: 'card' | 'links'
+  viewport?: 'mobile' | 'desktop'
 }
 
 type SocialLinkEntry = {
@@ -726,6 +729,7 @@ export default function PublicCommercialCard({
   parent,
   superior,
   mode = 'card',
+  viewport = 'mobile',
 }: PublicCommercialCardProps) {
   const cardData = (entity.card_data || {}) as Record<string, any>
   const name = String(entity.cadastral_data?.commercial_name || entity.cadastral_data?.full_name || entity.name || 'Cartao Virtual').trim()
@@ -740,6 +744,7 @@ export default function PublicCommercialCard({
   const isLinksMode = mode === 'links'
   const companyLegal = `2026 BRS Promotora de Vendas Ltda. CNPJ: 54.303.453/0001-16 Todos os direitos reservados.`
   const currentYear = new Date().getFullYear()
+  const isDesktopViewport = viewport === 'desktop'
 
   const heroAvatar = linkedUser?.avatar_url ? (
     <img
@@ -861,12 +866,12 @@ export default function PublicCommercialCard({
         }}
       />
 
-      <div style={{ position: 'relative', width: '100%', maxWidth: 430, margin: '0 auto' }}>
+      <div style={{ position: 'relative', width: '100%', maxWidth: isDesktopViewport ? 760 : 430, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
           <img
             src="/logotipos/BRS%20PROMOTORA%20LOGO%20DEGRADE%20COM%20LETRA%20PRETA%20SEM%20FUNDO.png"
             alt="BRS Promotora"
-            style={{ width: 190, height: 'auto', display: 'block' }}
+            style={{ width: isDesktopViewport ? 240 : 190, height: 'auto', display: 'block' }}
           />
         </div>
 
@@ -876,7 +881,7 @@ export default function PublicCommercialCard({
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
                 <div
                   style={{
-                    width: 'min(100%, 250px)',
+                    width: `min(100%, ${isDesktopViewport ? 300 : 250}px)`,
                     aspectRatio: '1 / 1',
                     borderRadius: 999,
                     padding: 5,
@@ -899,7 +904,7 @@ export default function PublicCommercialCard({
               </div>
 
               <div style={{ textAlign: 'center', paddingInline: 8 }}>
-                <div style={{ fontSize: 'clamp(1.9rem, 4.7vw, 2.9rem)', lineHeight: 1.02, fontWeight: 900, color: '#111' }}>
+                <div style={{ fontSize: isDesktopViewport ? 'clamp(2rem, 3.2vw, 3rem)' : 'clamp(1.9rem, 4.7vw, 2.9rem)', lineHeight: 1.02, fontWeight: 900, color: '#111' }}>
                   {name}
                 </div>
                 <div
