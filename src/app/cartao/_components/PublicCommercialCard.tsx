@@ -1003,7 +1003,7 @@ export default function PublicCommercialCard({
                 <ExternalLink size={18} style={{ flexShrink: 0 }} />
               </a>
 
-              <AccordionSection icon={MessageCircleHeart} title="Redes Sociais" defaultOpen={socials.length > 0}>
+              <AccordionSection icon={MessageCircleHeart} title="Redes Sociais" defaultOpen={false}>
                 <div
                   style={{
                     display: 'grid',
@@ -1032,7 +1032,7 @@ export default function PublicCommercialCard({
           />
 
           <section style={{ display: 'grid', gap: 10 }}>
-            <AccordionSection icon={Headset} title="Suporte Operacional" defaultOpen>
+            <AccordionSection icon={Headset} title="Suporte Operacional" defaultOpen={false}>
               <div style={{ display: 'grid', gap: 10 }}>
                 {supportEntries.length ? (
                   supportEntries.map((entry) => <LinkRow key={entry.label} label={entry.label} value={entry.value} href={entry.href} iconKey={entry.iconKey} />)
