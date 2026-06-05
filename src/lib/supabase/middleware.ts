@@ -27,8 +27,15 @@ function hasSupabaseSessionCookie(request: NextRequest) {
   return request.cookies.getAll().some(({ name }) => name.startsWith('sb-') && name.includes('auth-token'))
 }
 
+function getRequestHost(request: NextRequest) {
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const hostHeader = request.headers.get('host')
+  const rawHost = forwardedHost || hostHeader || request.nextUrl.hostname || ''
+  return rawHost.toLowerCase().replace(/:\d+$/, '')
+}
+
 function getPublicCardSlugFromHost(request: NextRequest) {
-  const hostname = request.nextUrl.hostname.toLowerCase()
+  const hostname = getRequestHost(request)
   if (!hostname.endsWith('.brspromotora.com.br')) return null
 
   const slug = hostname.replace('.brspromotora.com.br', '')
@@ -62,19 +69,50 @@ async function getUserWithTimeout(
 }
 
 export async function updateSession(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+  const hostHeader = request.headers.get('host')
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const hostname = getRequestHost(request)
   const publicCardSlug = getPublicCardSlugFromHost(request)
-  if (publicCardSlug) {
-    if (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '') {
-      request.nextUrl.pathname = '/cartao'
-      request.nextUrl.searchParams.set('slug', publicCardSlug)
-    } else if (request.nextUrl.pathname === '/links') {
-      request.nextUrl.pathname = '/cartao'
-      request.nextUrl.searchParams.set('slug', publicCardSlug)
-      request.nextUrl.searchParams.set('view', 'links')
-    }
+
+  console.log('[middleware] host debug', {
+    hostHeader,
+    forwardedHost,
+    hostname,
+    pathname,
+    publicCardSlug,
+  })
+
+  if (publicCardSlug && (pathname === '/' || pathname === '')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/cartao'
+    url.search = ''
+    url.searchParams.set('slug', publicCardSlug)
+    console.log('[middleware] rewrite card root', {
+      hostHeader,
+      forwardedHost,
+      hostname,
+      pathname,
+      target: `${url.pathname}${url.search}`,
+    })
+    return NextResponse.rewrite(url)
   }
 
-  const pathname = request.nextUrl.pathname
+  if (publicCardSlug && pathname === '/links') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/cartao'
+    url.search = ''
+    url.searchParams.set('slug', publicCardSlug)
+    url.searchParams.set('view', 'links')
+    console.log('[middleware] rewrite card links', {
+      hostHeader,
+      forwardedHost,
+      hostname,
+      pathname,
+      target: `${url.pathname}${url.search}`,
+    })
+    return NextResponse.rewrite(url)
+  }
 
   // Do not intercept internal Next.js endpoints (RSC/Flight/Server Actions)
   // so navigation does not get stuck waiting on auth checks.
