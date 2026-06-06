@@ -93,6 +93,11 @@ function formatName(label?: string | null) {
   return parts.slice(0, 2).join(' ')
 }
 
+function hasGlobalMessengerNotifier() {
+  if (typeof window === 'undefined') return false
+  return Boolean((window as Window & { __BRS_MESSENGER_GLOBAL_NOTIFIER__?: boolean }).__BRS_MESSENGER_GLOBAL_NOTIFIER__)
+}
+
 export function GoogleChatComponent() {
   const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1)
   const [isLoading, setIsLoading] = useState(true)
@@ -131,6 +136,7 @@ export function GoogleChatComponent() {
   const initializedConversationsRef = useRef(false)
   const lastContactStatusRef = useRef<Record<string, ChatStatus>>({})
   const lastUnreadByConversationRef = useRef<Record<string, number>>({})
+  const stickToBottomRef = useRef(true)
 
   useEffect(() => {
     bootstrap()
@@ -162,6 +168,33 @@ export function GoogleChatComponent() {
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversation?.id || null
   }, [selectedConversation?.id])
+
+  useEffect(() => {
+    const onScrollToBottom = () => {
+      if (!selectedConversation) return
+      stickToBottomRef.current = true
+      setActiveTab(3)
+      window.setTimeout(() => {
+        scrollMessagesToBottom('smooth')
+      }, 50)
+    }
+
+    window.addEventListener('brs-messenger:scroll-to-bottom', onScrollToBottom as EventListener)
+    return () => window.removeEventListener('brs-messenger:scroll-to-bottom', onScrollToBottom as EventListener)
+  }, [selectedConversation])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const updateStickiness = () => {
+      stickToBottomRef.current = isNearBottom(container)
+    }
+
+    updateStickiness()
+    container.addEventListener('scroll', updateStickiness, { passive: true })
+    return () => container.removeEventListener('scroll', updateStickiness)
+  }, [selectedConversation?.id, activeTab])
 
   useEffect(() => {
     if (conversationPollRef.current) window.clearInterval(conversationPollRef.current)
@@ -227,7 +260,9 @@ export function GoogleChatComponent() {
         const nextStatus = (contact.status || 'offline') as ChatStatus
         if (prevStatus === 'offline' && nextStatus !== 'offline') {
           const label = contact.nickname || contact.short_name || formatName(contact.full_name) || contact.email
-          pushToast(`${label} acabou de entrar.`)
+          if (!hasGlobalMessengerNotifier()) {
+            pushToast(`${label} acabou de entrar.`)
+          }
         }
       }
     }
@@ -259,7 +294,7 @@ export function GoogleChatComponent() {
           selectedConversationIdRef.current === conv.id &&
           !document.hidden
 
-        if (!isCurrentChatOpen) {
+        if (!isCurrentChatOpen && !hasGlobalMessengerNotifier()) {
           const label =
             conv.participant.nickname ||
             conv.participant.short_name ||
@@ -280,6 +315,7 @@ export function GoogleChatComponent() {
   }
 
   function pushToast(text: string) {
+    if (hasGlobalMessengerNotifier()) return
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setPopupToasts((prev) => {
       const next = [...prev, { id, text }]
@@ -323,6 +359,7 @@ export function GoogleChatComponent() {
     }
     setSelectedConversation(conversation)
     setActiveTab(3)
+    stickToBottomRef.current = true
     await loadMessages(conversation.id)
   }
 
@@ -334,11 +371,12 @@ export function GoogleChatComponent() {
       setMessages(data)
     }
     if (!silent) setLoadingMessages(false)
-    setTimeout(() => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
-      }
-    }, 50)
+    const shouldStickToBottom = !silent || stickToBottomRef.current
+    if (shouldStickToBottom) {
+      setTimeout(() => {
+        scrollMessagesToBottom('auto')
+      }, 50)
+    }
     await fetchConversations()
   }
 
@@ -380,10 +418,9 @@ export function GoogleChatComponent() {
     setMessages((prev) => prev.map((m) => (m.id === optimisticId ? data : m)))
     setText('')
     setAttachedFiles([])
+    stickToBottomRef.current = true
     setTimeout(() => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
-      }
+      scrollMessagesToBottom('auto')
     }, 50)
     await fetchConversations()
   }
@@ -429,6 +466,21 @@ export function GoogleChatComponent() {
       files.forEach((f) => dt.items.add(f))
       void onPickFile(dt.files)
     }
+  }
+
+  function isNearBottom(container: HTMLDivElement) {
+    const threshold = 120
+    return container.scrollHeight - (container.scrollTop + container.clientHeight) < threshold
+  }
+
+  function scrollMessagesToBottom(behavior: ScrollBehavior = 'auto') {
+    const container = messagesContainerRef.current
+    if (!container) return
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior,
+    })
+    stickToBottomRef.current = true
   }
 
   async function deleteConversation(id: string) {

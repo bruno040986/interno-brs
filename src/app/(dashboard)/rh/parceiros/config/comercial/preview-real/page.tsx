@@ -9,7 +9,7 @@ export default function PreviewRealPage() {
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: 'Preview Real | BRS Promotora',
+    title: 'BRS Workspace',
     description: 'Atalho interno para o seletor do cartão virtual.',
   }
 }

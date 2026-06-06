@@ -15,7 +15,7 @@ export default async function SeletorPreviewPage() {
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: 'Preview Real | BRS Promotora',
+    title: 'BRS Workspace',
     description: 'Selecione uma entidade comercial e abra o cartão virtual público em nova aba.',
   }
 }

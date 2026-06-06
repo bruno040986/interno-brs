@@ -133,7 +133,7 @@ export async function generateMetadata({
 
   if (!slug) {
     return {
-      title: 'Cartão Virtual | BRS Promotora',
+      title: 'Cartão Virtual - BRS Promotora',
       description: 'Cartão virtual público da BRS Promotora.',
     }
   }
@@ -142,19 +142,19 @@ export async function generateMetadata({
     const data = await getPublicCommercialCardBySlug(slug)
     if (!data) {
       return {
-        title: 'Cartão não encontrado | BRS Promotora',
+        title: 'Cartão não encontrado - BRS Promotora',
         description: 'Cartão virtual público não encontrado.',
       }
     }
 
     const name = String(data.entity.cadastral_data?.commercial_name || data.entity.cadastral_data?.full_name || data.entity.name || 'Cartão Virtual').trim()
     return {
-      title: `${name} | Cartão Virtual`,
+      title: `${name} - BRS Promotora`,
       description: 'Cartão virtual público da BRS Promotora.',
     }
   } catch {
     return {
-      title: 'Cartão Virtual | BRS Promotora',
+      title: 'Cartão Virtual - BRS Promotora',
       description: 'Cartão virtual público da BRS Promotora.',
     }
   }

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BRS RH - Sistema Interno',
+  title: 'BRS Workspace',
   description: 'Sistema interno de RH - BRS 2 Promotora Ltda',
   icons: {
     icon: '/favicon/FAVICON-BRS-PROMOTORA.png',

@@ -12,6 +12,17 @@ function isServerActionRequest(request: NextRequest) {
   return request.headers.has('next-action')
 }
 
+function isPublicAssetRequest(pathname: string) {
+  return (
+    pathname === '/notificacao-brs.mp3' ||
+    pathname === '/notificacao-chat-brs.mp3' ||
+    pathname.endsWith('.mp3') ||
+    pathname.endsWith('.ogg') ||
+    pathname.endsWith('.wav') ||
+    pathname.endsWith('.m4a')
+  )
+}
+
 function forbiddenResponse(request: NextRequest) {
   if (isApiRequest(request.nextUrl.pathname)) {
     return NextResponse.json({ error: 'Sem permissao.' }, { status: 403 })
@@ -132,6 +143,9 @@ export async function updateSession(request: NextRequest) {
     '/api/cpfhub',
   ]
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
+  if (isPublicAssetRequest(pathname)) {
+    return NextResponse.next({ request })
+  }
   const hasSessionCookie = hasSupabaseSessionCookie(request)
 
   if (isPublicRoute && !hasSessionCookie) {

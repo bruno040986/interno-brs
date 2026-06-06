@@ -1141,12 +1141,16 @@ table.data-table {
 
 .brs-messenger-toast-stack {
   position: fixed;
-  right: 16px;
-  bottom: 18px;
+  left: 50%;
+  right: auto;
+  bottom: 22px;
   z-index: 1200;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  align-items: center;
+  width: min(92vw, 380px);
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -1175,9 +1179,91 @@ table.data-table {
   }
 }
 
+.brs-messenger-notice-card {
+  pointer-events: auto;
+  width: 100%;
+  min-height: 188px;
+  border-radius: 22px;
+  border: 1px solid #5da7cb;
+  background: linear-gradient(180deg, #eef9ff 0%, #d4efff 48%, #bde4fb 100%);
+  color: #0f2347;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.3);
+  font: 700 12px Tahoma, Arial, sans-serif;
+  padding: 16px 14px 14px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+  animation: messenger-toast-rise 220ms ease-out;
+}
+
+.brs-messenger-notice-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(45, 92, 255, 0.16);
+  color: #1e3a8a;
+}
+
+.brs-messenger-notice-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+
+.brs-messenger-notice-body {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.28;
+  padding: 0 6px;
+}
+
+.brs-messenger-notice-action {
+  border: 1px solid #4b89ad;
+  background: linear-gradient(180deg, #fff, #e6f4ff);
+  color: #17325c;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.brs-messenger-notice-card.is-message {
+  background: linear-gradient(180deg, #eaf8ff 0%, #cdefff 42%, #a9dcfb 100%);
+  border-color: #4ea3c8;
+}
+
+.brs-messenger-notice-card.is-contact {
+  background: linear-gradient(180deg, #f2fbff 0%, #def3ff 50%, #c6e8fb 100%);
+}
+
 :root[data-theme="dark"] .brs-messenger-toast-item {
   border-color: #37608b;
   background: linear-gradient(180deg, #173556, #122d49);
+  color: #eaf6ff;
+}
+
+:root[data-theme="dark"] .brs-messenger-notice-card {
+  border-color: #37608b;
+  background: linear-gradient(180deg, #173556, #122d49);
+  color: #eaf6ff;
+}
+
+:root[data-theme="dark"] .brs-messenger-notice-icon {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(96, 165, 250, 0.22);
+  color: #bfdbfe;
+}
+
+:root[data-theme="dark"] .brs-messenger-notice-action {
+  border-color: #37608b;
+  background: linear-gradient(180deg, #0f2137, #173556);
   color: #eaf6ff;
 }
 

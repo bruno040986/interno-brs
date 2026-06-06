@@ -1,8 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import HubHeader from '@/components/layout/HubHeader'
+import { MessengerNotificationBridge } from '@/components/layout/MessengerNotificationBridge'
 import type { UserProfile } from '@/types'
 import ThemeInit from '@/components/theme/ThemeInit'
+
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   let themePreference: React.ComponentProps<typeof ThemeInit>['preference'] = 'light'
@@ -35,9 +38,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <div className="app-layout">
+      <div className="app-layout">
       <ThemeInit preference={themePreference} />
       <HubHeader user={profile} />
+      <MessengerNotificationBridge />
       <main className="main-content">
         {children}
       </main>
