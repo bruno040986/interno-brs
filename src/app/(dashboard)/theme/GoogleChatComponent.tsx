@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EllipsisVertical, MessageSquareText, Paperclip, Search, Send, Users } from 'lucide-react'
+import { useMessengerDock } from '@/components/layout/MessengerDockContext'
 
 type MoodKey = 'very_happy' | 'well' | 'thinking' | 'tired' | 'irritated' | 'down'
 type ChatStatus = 'online' | 'offline' | 'busy' | 'away'
@@ -60,6 +61,10 @@ type MessengerToast = {
   text: string
 }
 
+type GoogleChatComponentProps = {
+  variant?: 'widget' | 'dock'
+}
+
 const moods: Array<{ key: MoodKey; label: string }> = [
   { key: 'very_happy', label: 'Muito Feliz' },
   { key: 'well', label: 'Bem' },
@@ -98,12 +103,13 @@ function hasGlobalMessengerNotifier() {
   return Boolean((window as Window & { __BRS_MESSENGER_GLOBAL_NOTIFIER__?: boolean }).__BRS_MESSENGER_GLOBAL_NOTIFIER__)
 }
 
-export function GoogleChatComponent() {
+export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentProps) {
+  const isDockVariant = variant === 'dock'
+  const messengerDock = useMessengerDock()
   const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1)
   const [isLoading, setIsLoading] = useState(true)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [search, setSearch] = useState('')
@@ -137,6 +143,17 @@ export function GoogleChatComponent() {
   const lastContactStatusRef = useRef<Record<string, ChatStatus>>({})
   const lastUnreadByConversationRef = useRef<Record<string, number>>({})
   const stickToBottomRef = useRef(true)
+  const selectedConversation = useMemo<Conversation | null>(() => {
+    const activeConversation = messengerDock.activeConversation
+    if (!activeConversation) return null
+    const found = conversations.find((c) => c.id === activeConversation.id)
+    if (found) return found
+    return {
+      id: activeConversation.id,
+      participant: activeConversation.participant,
+      unreadCount: 0,
+    }
+  }, [conversations, messengerDock.activeConversation])
 
   useEffect(() => {
     bootstrap()
@@ -166,8 +183,8 @@ export function GoogleChatComponent() {
   }, [activeTab])
 
   useEffect(() => {
-    selectedConversationIdRef.current = selectedConversation?.id || null
-  }, [selectedConversation?.id])
+    selectedConversationIdRef.current = messengerDock.activeConversation?.id || null
+  }, [messengerDock.activeConversation?.id])
 
   useEffect(() => {
     const onScrollToBottom = () => {
@@ -357,7 +374,10 @@ export function GoogleChatComponent() {
         unreadCount: 0,
       }
     }
-    setSelectedConversation(conversation)
+    messengerDock.setActiveConversation({
+      id: conversation.id,
+      participant: contact,
+    })
     setActiveTab(3)
     stickToBottomRef.current = true
     await loadMessages(conversation.id)
@@ -487,7 +507,7 @@ export function GoogleChatComponent() {
     // soft local removal (historico na base pode ser mantido)
     setConversations((prev) => prev.filter((c) => c.id !== id))
     if (selectedConversation?.id === id) {
-      setSelectedConversation(null)
+      messengerDock.setActiveConversation(null)
       setMessages([])
       setActiveTab(2)
     }
@@ -521,12 +541,16 @@ export function GoogleChatComponent() {
 
   return (
     <div
-      className="brs-messenger rounded-md overflow-hidden"
+      className={`brs-messenger rounded-md overflow-hidden ${isDockVariant ? 'brs-messenger-dock-widget' : ''}`}
       style={{
         border: '1px solid #7aa9c2',
         boxShadow: 'inset 0 0 0 1px #cde9f7',
         background: 'linear-gradient(180deg,#d9f2ff 0%,#b7e7fb 25%,#ffffff 25%,#ffffff 100%)',
         fontFamily: 'Tahoma, Arial, sans-serif',
+        height: isDockVariant ? '100%' : 460,
+        minHeight: isDockVariant ? 0 : undefined,
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <div
@@ -576,7 +600,7 @@ export function GoogleChatComponent() {
         </button>
       </div>
 
-      <div style={{ height: 460 }} className="brs-messenger-body">
+      <div style={{ flex: 1, minHeight: 0 }} className="brs-messenger-body">
         {activeTab === 1 && (
           <div className="p-2 space-y-3 text-xs h-full overflow-y-auto">
             <div className="border rounded p-2 bg-sky-50" style={{ borderColor: '#b7d8ea' }}>
@@ -855,9 +879,9 @@ export function GoogleChatComponent() {
         )}
       </div>
 
-      <div className="brs-messenger-toast-stack" aria-live="polite">
+      <div className="brs-messenger-toast-stack" aria-live="polite" data-brs-messenger-ignore-close="true">
         {popupToasts.map((toast) => (
-          <div key={toast.id} className="brs-messenger-toast-item">
+          <div key={toast.id} className="brs-messenger-toast-item" data-brs-messenger-ignore-close="true">
             {toast.text}
           </div>
         ))}

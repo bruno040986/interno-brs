@@ -17,7 +17,6 @@ import {
 } from '@/lib/auth/permissions'
 import PraiseBoard from './_components/PraiseBoard'
 import { AgendaComponent } from './theme/AgendaComponent'
-import { GoogleChatComponent } from './theme/GoogleChatComponent'
 
 export default function HubPage() {
   const [activeSector, setActiveSector] = useState<string | null>(null)
@@ -471,19 +470,6 @@ export default function HubPage() {
       {/* Coluna Lateral (Widgets) */}
       <div className="hub-sidebar">
         
-        {/* Widget de BRS Messenger */}
-        <div className="widget-card">
-          <div className="widget-header">
-            <h3 className="widget-title">
-              <Users size={18} style={{ color: '#16a34a' }} />
-              BRS Messenger
-            </h3>
-          </div>
-          <div className="widget-content" style={{ padding: '1rem' }}>
-            <GoogleChatComponent />
-          </div>
-        </div>
-
         {/* Widget de Comunicados */}
         <div className="widget-card">
           <div className="widget-header">

@@ -1,7 +1,8 @@
 ﻿'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MessageSquareText, UserPlus } from 'lucide-react'
+import { useMessengerDock } from '@/components/layout/MessengerDockContext'
 
 type ChatStatus = 'online' | 'offline' | 'busy' | 'away'
 
@@ -60,7 +61,7 @@ function messengerTitle(unreadTotal: number) {
 
 export function MessengerNotificationBridge() {
   const [toasts, setToasts] = useState<BridgeToast[]>([])
-  const [unreadTotal, setUnreadTotal] = useState(0)
+  const { unreadCount, setUnreadCount } = useMessengerDock()
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -76,8 +77,6 @@ export function MessengerNotificationBridge() {
   const lastSoundAtRef = useRef(0)
   const originalFaviconHrefRef = useRef<string | null>(null)
   const faviconLinkRef = useRef<HTMLLinkElement | null>(null)
-
-  const title = useMemo(() => messengerTitle(unreadTotal), [unreadTotal])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -211,15 +210,15 @@ export function MessengerNotificationBridge() {
   }, [])
 
   useEffect(() => {
-    document.title = title
+    document.title = messengerTitle(unreadCount)
     return () => {
       document.title = WORKSPACE_TITLE
     }
-  }, [title])
+  }, [unreadCount])
 
   useEffect(() => {
-    updateFaviconBadge(unreadTotal)
-  }, [unreadTotal])
+    updateFaviconBadge(unreadCount)
+  }, [unreadCount])
 
   useEffect(() => {
     void bootstrap()
@@ -303,7 +302,7 @@ export function MessengerNotificationBridge() {
 
       unreadByConversationRef.current = unreadMap
       initializedConversationsRef.current = true
-      setUnreadTotal(nextUnreadTotal)
+      setUnreadCount(nextUnreadTotal)
 
       if (silent || alerts.length === 0) return
 
@@ -469,12 +468,18 @@ export function MessengerNotificationBridge() {
   }
 
   return (
-    <div className="brs-messenger-toast-stack" aria-live="polite" aria-atomic="true">
+    <div
+      className="brs-messenger-toast-stack"
+      aria-live="polite"
+      aria-atomic="true"
+      data-brs-messenger-ignore-close="true"
+    >
       {toasts.map((toast) => (
         <div
           key={toast.id}
           className={`brs-messenger-notice-card ${toast.kind === 'message' ? 'is-message' : 'is-contact'}`}
           role="status"
+          data-brs-messenger-ignore-close="true"
         >
           <div className="brs-messenger-notice-icon">
             {toast.kind === 'contact' ? <UserPlus size={18} /> : <MessageSquareText size={18} />}

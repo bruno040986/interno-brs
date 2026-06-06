@@ -178,7 +178,7 @@ export function CardActionButtons({
             position: 'fixed',
             inset: 0,
             background: 'rgba(15, 23, 42, 0.55)',
-            zIndex: 60,
+            zIndex: 200,
             display: 'grid',
             placeItems: 'center',
             padding: 16,

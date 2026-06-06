@@ -294,6 +294,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
               color: 'var(--brs-gray-800)',
               cursor: 'pointer',
             }}
+            data-brs-messenger-ignore-close="true"
             onClick={() => {
               setShowNotifications(true)
               loadNotifications()
@@ -306,6 +307,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
         <div style={{ position: 'relative' }} ref={notificationsRef}>
         <button
           className="icon-button"
+          data-brs-messenger-ignore-close="true"
           onClick={async () => {
             const next = !showNotifications
             setShowNotifications(next)
@@ -318,11 +320,12 @@ export default function HubHeader({ user }: HubHeaderProps) {
           {praiseUnread > 0 && <span className="notification-badge">{Math.min(99, praiseUnread)}</span>}
         </button>
 
-        {showNotifications && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '50px',
+          {showNotifications && (
+            <div
+              data-brs-messenger-ignore-close="true"
+              style={{
+                position: 'absolute',
+                top: '50px',
               right: 0,
               zIndex: 1000,
               width: '320px',
@@ -395,6 +398,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
         <div style={{ position: 'relative' }} ref={appsRef}>
           <button 
             className="icon-button"
+            data-brs-messenger-ignore-close="true"
             onClick={() => setShowApps(!showApps)}
           >
             <Grid size={20} />
@@ -402,6 +406,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
 
           {showApps && (
             <div 
+              data-brs-messenger-ignore-close="true"
               style={{ 
                 position: 'absolute', 
                 top: '50px', 
@@ -478,6 +483,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
         <div style={{ position: 'relative' }} ref={userMenuRef}>
           <button 
             className="user-profile-button"
+            data-brs-messenger-ignore-close="true"
             onClick={() => setShowUserMenu(!showUserMenu)}
           >
             <div className="user-avatar" style={{ overflow: 'hidden' }}>
@@ -491,6 +497,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
 
           {showUserMenu && (
             <div 
+              data-brs-messenger-ignore-close="true"
               style={{ 
                 position: 'absolute', 
                 top: '55px', 

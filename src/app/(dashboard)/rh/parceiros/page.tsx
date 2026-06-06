@@ -388,7 +388,7 @@ export default function ParceirosCRMPage() {
       )}
 
       {detailOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }} onClick={() => setDetailOpen(false)}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.45)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1rem' }} onClick={() => setDetailOpen(false)}>
           <div className="card" style={{ width: 'min(1100px, 100%)', maxHeight: 'min(84dvh, 860px)', overflow: 'hidden', padding: 0 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--brs-gray-100)' }}>
               <div style={{ fontWeight: 900, color: 'var(--brs-gray-900)' }}>Detalhe da Instância</div>
