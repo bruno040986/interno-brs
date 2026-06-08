@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { EllipsisVertical, MessageSquareText, Paperclip, Search, Send, Users } from 'lucide-react'
+import { EllipsisVertical, MessageSquareText, MessagesSquare, Paperclip, Search, Send, Users } from 'lucide-react'
 import { useMessengerDock } from '@/components/layout/MessengerDockContext'
 
 type MoodKey = 'very_happy' | 'well' | 'thinking' | 'tired' | 'irritated' | 'down'
@@ -32,7 +32,6 @@ type ChatMessage = {
     bold?: boolean
     italic?: boolean
     underline?: boolean
-    bgColor?: string
   } | null
   attachments?: Array<{ name?: string; url?: string; size?: number; type?: string }>
   delivery_status?: 'sending' | 'sent' | 'read' | null
@@ -90,12 +89,22 @@ const statusIcon: Record<ChatStatus, string> = {
   away: '🚫',
 }
 
-const bgPalette = ['#fef3c7', '#dbeafe', '#dcfce7', '#fee2e2', '#f3e8ff', '#ffffff']
-
 function formatName(label?: string | null) {
   if (!label) return ''
   const parts = label.trim().split(' ').filter(Boolean)
-  return parts.slice(0, 2).join(' ')
+  return parts[0] || ''
+}
+
+function displayName(label?: string | null, nickname?: string | null) {
+  return nickname || formatName(label) || ''
+}
+
+function contactDisplayName(contact: Pick<Contact, 'full_name' | 'email' | 'nickname' | 'short_name'>) {
+  return displayName(contact.full_name || contact.email, contact.nickname) || contact.email
+}
+
+function conversationDisplayName(contact: Pick<Contact, 'full_name' | 'email' | 'nickname' | 'short_name'>) {
+  return displayName(contact.full_name || contact.email, contact.nickname) || contact.email
 }
 
 function hasGlobalMessengerNotifier() {
@@ -123,11 +132,10 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
   const [mood, setMood] = useState<MoodKey | ''>('')
   const [statusMessage, setStatusMessage] = useState('')
   const [isDarkTheme, setIsDarkTheme] = useState(false)
-  const [style, setStyle] = useState<{ bold: boolean; italic: boolean; underline: boolean; bgColor: string }>({
+  const [style, setStyle] = useState<{ bold: boolean; italic: boolean; underline: boolean }>({
     bold: false,
     italic: false,
     underline: false,
-    bgColor: '#ffffff',
   })
   const [popupToasts, setPopupToasts] = useState<MessengerToast[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -276,7 +284,7 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
         const prevStatus = previous[contact.id] || 'offline'
         const nextStatus = (contact.status || 'offline') as ChatStatus
         if (prevStatus === 'offline' && nextStatus !== 'offline') {
-          const label = contact.nickname || contact.short_name || formatName(contact.full_name) || contact.email
+          const label = displayName(contact.full_name || contact.email, contact.nickname)
           if (!hasGlobalMessengerNotifier()) {
             pushToast(`${label} acabou de entrar.`)
           }
@@ -312,11 +320,7 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
           !document.hidden
 
         if (!isCurrentChatOpen && !hasGlobalMessengerNotifier()) {
-          const label =
-            conv.participant.nickname ||
-            conv.participant.short_name ||
-            formatName(conv.participant.full_name) ||
-            conv.participant.email
+          const label = displayName(conv.participant.full_name || conv.participant.email, conv.participant.nickname)
           pushToast(`${label} te enviou uma mensagem.`)
         }
       }
@@ -514,17 +518,17 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
   }
 
   const onlineContacts = useMemo(
-    () => contacts.filter((c) => (c.status || 'offline') !== 'offline' && `${c.nickname || c.short_name || c.full_name || c.email}`.toLowerCase().includes(search.toLowerCase())),
+    () => contacts.filter((c) => (c.status || 'offline') !== 'offline' && `${contactDisplayName(c) || c.email}`.toLowerCase().includes(search.toLowerCase())),
     [contacts, search],
   )
   const offlineContacts = useMemo(
-    () => contacts.filter((c) => (c.status || 'offline') === 'offline' && `${c.nickname || c.short_name || c.full_name || c.email}`.toLowerCase().includes(search.toLowerCase())),
+    () => contacts.filter((c) => (c.status || 'offline') === 'offline' && `${contactDisplayName(c) || c.email}`.toLowerCase().includes(search.toLowerCase())),
     [contacts, search],
   )
   const filteredConversations = useMemo(
     () =>
       conversations.filter((c) =>
-        `${c.participant.nickname || c.participant.short_name || c.participant.full_name || c.participant.email}`
+        `${conversationDisplayName(c.participant) || c.participant.email}`
           .toLowerCase()
           .includes(search.toLowerCase()),
       ),
@@ -541,90 +545,84 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
 
   return (
     <div
-      className={`brs-messenger rounded-md overflow-hidden ${isDockVariant ? 'brs-messenger-dock-widget' : ''}`}
+      className={`brs-messenger rounded-[2px] overflow-hidden ${isDockVariant ? 'brs-messenger-dock-widget' : ''}`}
       style={{
-        border: '1px solid #7aa9c2',
-        boxShadow: 'inset 0 0 0 1px #cde9f7',
-        background: 'linear-gradient(180deg,#d9f2ff 0%,#b7e7fb 25%,#ffffff 25%,#ffffff 100%)',
-        fontFamily: 'Tahoma, Arial, sans-serif',
+        border: '1px solid #A0C8E8',
+        boxShadow: 'inset 0 0 0 1px #FFFFFF',
+        background: '#EAF4FB',
+        fontFamily: 'Tahoma, Geneva, sans-serif',
         height: isDockVariant ? '100%' : 460,
         minHeight: isDockVariant ? 0 : undefined,
         display: 'flex',
         flexDirection: 'column',
       }}
     >
-      <div
-        className="px-3 py-2 border-b flex items-center justify-between"
-        style={
-          isDarkTheme
-            ? { background: 'linear-gradient(180deg,#1d4f73,#163f61)', borderBottomColor: '#2f5f83' }
-            : { background: 'linear-gradient(180deg,#9fdef9,#74c8ec)', borderBottomColor: '#6fb5d5' }
-        }
-      >
-        <div className="text-sm font-semibold tracking-tight" style={{ color: isDarkTheme ? '#eaf6ff' : '#1e293b' }}>
+      <div className="brs-messenger-titlebar">
+        <div className="brs-messenger-titlebar-left">
           BRS Messenger
         </div>
-        <div className="text-xs text-slate-700">{statusIcon[status]}</div>
+        <div className="brs-messenger-titlebar-status">{statusIcon[status]}</div>
       </div>
 
-      <div className="px-2 py-2 border-b brs-messenger-surface">
+      <div className="brs-messenger-searchbar">
         <div className="relative">
           <Search size={14} className="absolute left-2 top-2 text-gray-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Localizar contato..."
-            className="w-full pl-7 pr-2 py-1.5 text-xs border rounded"
+            className="brs-messenger-search-input"
           />
         </div>
       </div>
 
-      <div className="flex border-b bg-slate-50 text-xs" style={{ borderBottomColor: '#bdd9e8' }}>
+      <div className="brs-messenger-tabs">
         <button
-          className={`px-3 py-2 border-r ${activeTab === 1 ? 'bg-white font-semibold' : ''}`}
-          style={{ borderRightColor: '#d4e5ef' }}
+          className={`brs-messenger-tab ${activeTab === 1 ? 'is-active' : ''}`}
           onClick={() => setActiveTab(1)}
         >
-          👥 Perfil e Contatos
+          <Users size={12} />
+          <span>Perfil e Contatos</span>
         </button>
         <button
-          className={`px-3 py-2 border-r relative ${activeTab === 2 ? 'bg-white font-semibold' : ''}`}
-          style={{ borderRightColor: '#d4e5ef' }}
+          className={`brs-messenger-tab ${activeTab === 2 ? 'is-active' : ''}`}
           onClick={() => setActiveTab(2)}
         >
-          💬 Conversas
+          <MessagesSquare size={12} />
+          <span>Conversas</span>
           {unreadTotal > 0 && <span className="ml-1 inline-flex min-w-4 h-4 px-1 rounded-full bg-red-600 text-white text-[10px] items-center justify-center">{unreadTotal}</span>}
         </button>
-        <button className={`px-3 py-2 ${activeTab === 3 ? 'bg-white font-semibold' : ''}`} onClick={() => setActiveTab(3)} disabled={!selectedConversation}>
-          🗨 Chat
+        <button className={`brs-messenger-tab ${activeTab === 3 ? 'is-active' : ''}`} onClick={() => setActiveTab(3)} disabled={!selectedConversation}>
+          <MessageSquareText size={12} />
+          <span>Chat</span>
         </button>
       </div>
 
       <div style={{ flex: 1, minHeight: 0 }} className="brs-messenger-body">
         {activeTab === 1 && (
-          <div className="p-2 space-y-3 text-xs h-full overflow-y-auto">
-            <div className="border rounded p-2 bg-sky-50" style={{ borderColor: '#b7d8ea' }}>
+          <div className="brs-messenger-tab-panel brs-messenger-profile-panel">
+            <div className="brs-messenger-profile-card">
               <div className="flex gap-2">
-                <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex items-center justify-center text-sm font-bold">
+                <div className="brs-messenger-profile-avatar">
                   {myProfile.user?.avatar_url ? <img src={myProfile.user.avatar_url} alt={myNameDefault} className="w-full h-full object-cover" /> : myNameDefault.charAt(0)}
                 </div>
                 <div className="flex-1">
-                  <div className="font-semibold">{myNameDisplay}</div>
+                  <div className="brs-messenger-profile-name">{myNameDisplay}</div>
                   <input
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value.slice(0, 40))}
                     placeholder="Nickname do Messenger"
-                    className="mt-1 w-full border rounded px-1 py-1 text-xs"
+                    className="brs-messenger-profile-input"
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mt-2">
-                <select value={status} onChange={(e) => setStatus(e.target.value as ChatStatus)} className="border rounded px-1 py-1">
+                <select value={status} onChange={(e) => setStatus(e.target.value as ChatStatus)} className="brs-messenger-select">
                   <option value="online">Online</option>
                   <option value="busy">Ocupado</option>
                   <option value="away">Ausente</option>
                 </select>
-                <select value={mood} onChange={(e) => setMood(e.target.value as MoodKey | '')} className="border rounded px-1 py-1">
+                <select value={mood} onChange={(e) => setMood(e.target.value as MoodKey | '')} className="brs-messenger-select">
                   <option value="">{hasMoodToday ? 'Humor de hoje' : 'Humor do Dia'}</option>
                   {moods.map((m) => (
                     <option key={m.key} value={m.key}>
@@ -637,16 +635,16 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                 value={statusMessage}
                 onChange={(e) => setStatusMessage(e.target.value.slice(0, 50))}
                 placeholder="Mensagem de status (max 50)"
-                className="mt-2 w-full border rounded px-1 py-1"
+                className="brs-messenger-profile-input mt-2"
               />
-              <button onClick={saveProfile} className="mt-2 w-full py-1 rounded bg-blue-600 text-white">
+              <button onClick={saveProfile} className="brs-messenger-primary-button mt-2 w-full py-1">
                 Salvar Perfil
               </button>
             </div>
 
-            <div className="border rounded">
-              <div className="px-2 py-1.5 bg-green-50 font-semibold">Online ({onlineContacts.length})</div>
-              <div>
+            <div className="brs-messenger-group">
+              <div className="brs-messenger-group-header">Online ({onlineContacts.length})</div>
+              <div className="brs-messenger-group-list">
                 {onlineContacts.map((c) => (
                   <button
                     key={c.id}
@@ -655,21 +653,21 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                       e.stopPropagation()
                       void openConversation(c)
                     }}
-                    className="w-full text-left px-2 py-1.5 brs-messenger-item border-b"
+                    className={`brs-messenger-contact ${selectedConversation?.participant.id === c.id ? 'is-active' : ''}`}
                   >
-                    <span>{statusIcon[(c.status as ChatStatus) || 'online']}</span>{' '}
-                    <span className="font-medium">{c.nickname || c.short_name || formatName(c.full_name) || c.email}</span>
+                    <span className="brs-messenger-contact-status">{statusIcon[(c.status as ChatStatus) || 'online']}</span>{' '}
+                    <span className="brs-messenger-contact-name">{contactDisplayName(c)}</span>
                     {c.status === 'busy' ? ' ⛔' : c.status === 'away' ? ' 🚫' : ''}
-                    {c.status_message ? <span className="text-gray-500"> - {c.status_message}</span> : null}
+                    {c.status_message ? <span className="brs-messenger-contact-status-message"> - {c.status_message}</span> : null}
                   </button>
                 ))}
-                {onlineContacts.length === 0 && <div className="px-2 py-2 text-gray-500">Sem contatos online.</div>}
+                {onlineContacts.length === 0 && <div className="brs-messenger-empty-state">Sem contatos online.</div>}
               </div>
             </div>
 
-            <div className="border rounded">
-              <div className="px-2 py-1.5 bg-slate-100 font-semibold">Offline ({offlineContacts.length})</div>
-              <div>
+            <div className="brs-messenger-group">
+              <div className="brs-messenger-group-header">Offline ({offlineContacts.length})</div>
+              <div className="brs-messenger-group-list">
                 {offlineContacts.map((c) => (
                   <button
                     key={c.id}
@@ -678,20 +676,20 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                       e.stopPropagation()
                       void openConversation(c)
                     }}
-                    className="w-full text-left px-2 py-1.5 brs-messenger-item border-b"
+                    className={`brs-messenger-contact ${selectedConversation?.participant.id === c.id ? 'is-active' : ''}`}
                   >
-                    <span>{statusIcon.offline}</span>{' '}
-                    <span className="text-gray-600">{c.nickname || c.short_name || formatName(c.full_name) || c.email}</span>
+                    <span className="brs-messenger-contact-status">{statusIcon.offline}</span>{' '}
+                    <span className="brs-messenger-contact-name is-offline">{contactDisplayName(c)}</span>
                   </button>
                 ))}
-                {offlineContacts.length === 0 && <div className="px-2 py-2 text-gray-500">Sem contatos offline.</div>}
+                {offlineContacts.length === 0 && <div className="brs-messenger-empty-state">Sem contatos offline.</div>}
               </div>
             </div>
           </div>
         )}
 
         {activeTab === 2 && (
-          <div className="p-2 space-y-2 h-full overflow-y-auto">
+          <div className="brs-messenger-tab-panel brs-messenger-conversation-panel">
             {filteredConversations.map((conv) => (
               <div
                 key={conv.id}
@@ -700,22 +698,21 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                   e.stopPropagation()
                   void openConversation(conv.participant)
                 }}
-                className="border rounded p-2 brs-messenger-item"
-                style={{ borderColor: '#d6e4ec' }}
+                className={`brs-messenger-conversation ${selectedConversation?.id === conv.id ? 'is-active' : ''}`}
               >
                 <div className="flex items-start gap-2">
-                  <div className="w-10 h-10 rounded-full bg-slate-300 overflow-hidden flex items-center justify-center text-sm font-bold">
+                  <div className="brs-messenger-avatar">
                     {conv.participant.avatar_url ? (
                       <img src={conv.participant.avatar_url} alt={conv.participant.full_name || conv.participant.email} className="w-full h-full object-cover" />
                     ) : (
-                      (conv.participant.nickname || conv.participant.short_name || conv.participant.full_name || conv.participant.email || '?').charAt(0)
+                      (conversationDisplayName(conv.participant) ||
+                        conv.participant.email ||
+                        '?').charAt(0)
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between gap-2">
-                      <p className="text-sm font-semibold truncate">
-                        {conv.participant.nickname || conv.participant.short_name || formatName(conv.participant.full_name) || conv.participant.email}
-                      </p>
+                      <p className="brs-messenger-conversation-name">{conversationDisplayName(conv.participant) || conv.participant.email}</p>
                       <div className="relative">
                         <button onClick={() => setMenuConversationId(menuConversationId === conv.id ? null : conv.id)} className="text-gray-500 hover:text-gray-700">
                           <EllipsisVertical size={14} />
@@ -744,25 +741,28 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                         )}
                       </div>
                     </div>
-                    <p className="text-xs text-gray-500 truncate">{conv.lastMessage?.text || 'Sem mensagens ainda.'}</p>
+                    <p className="brs-messenger-conversation-preview">{conv.lastMessage?.text || 'Sem mensagens ainda.'}</p>
                   </div>
                   {conv.unreadCount > 0 ? <span className="bg-red-600 text-white text-[10px] rounded-full px-1.5 py-0.5">{conv.unreadCount}</span> : null}
                 </div>
               </div>
             ))}
-            {filteredConversations.length === 0 && <div className="text-xs text-gray-500 p-2">Nenhuma conversa.</div>}
+            {filteredConversations.length === 0 && <div className="brs-messenger-empty-state">Nenhuma conversa.</div>}
           </div>
         )}
 
         {activeTab === 3 && (
-          <div className="h-full flex flex-col min-h-0">
+          <div className="h-full flex flex-col min-h-0 brs-messenger-chat-shell">
             {!selectedConversation ? (
               <div className="p-4 text-sm text-gray-500">Abra uma conversa pela aba de Contatos ou Conversas.</div>
             ) : (
               <>
-                <div className="px-3 py-2 border-b brs-messenger-chat-head text-sm font-semibold flex items-center gap-2">
+                <div className="brs-messenger-chat-head text-sm font-semibold flex items-center gap-2">
                   <MessageSquareText size={14} />
-                  {selectedConversation.participant.nickname || selectedConversation.participant.short_name || formatName(selectedConversation.participant.full_name) || selectedConversation.participant.email}
+                  {displayName(
+                    selectedConversation.participant.full_name || selectedConversation.participant.email,
+                    selectedConversation.participant.nickname,
+                  ) || selectedConversation.participant.email}
                 </div>
                 <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-3 brs-messenger-chat-scroll">
                   {loadingMessages ? (
@@ -771,14 +771,13 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                     <div className="space-y-2">
                       {messages.map((m) => {
                         const mine = m.sender.id === myProfile.user?.id
-                        const customBg = m.text_style?.bgColor && m.text_style.bgColor !== '#ffffff'
-                        const bgColor = customBg ? (m.text_style?.bgColor as string) : mine ? '#1e3a8a' : '#bfdbfe'
-                        const textColor = customBg ? '#0f172a' : mine ? '#ffffff' : '#0f172a'
+                        const bgColor = mine ? '#dcf0fb' : '#f0f0f0'
+                        const textColor = '#0f172a'
                         return (
                           <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                             <div
-                              className="max-w-[82%] rounded px-2 py-1.5 text-xs border"
-                              style={{ background: bgColor, color: textColor, borderColor: mine ? '#1e3a8a' : '#93c5fd' }}
+                              className={`brs-messenger-message-bubble ${mine ? 'is-mine' : 'is-theirs'}`}
+                              style={{ background: bgColor, color: textColor }}
                             >
                               <div
                                 style={{
@@ -799,7 +798,7 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                                   ))}
                                 </div>
                               )}
-                              <div className="mt-1 text-[10px] text-gray-500">
+                              <div className="brs-messenger-message-meta mt-1 text-gray-500">
                                 {new Date(m.timestamp).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
                                 {mine ? (
                                   <>
@@ -821,33 +820,17 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                   )}
                 </div>
                 <div className="border-t p-2 brs-messenger-editor space-y-2">
-                  <div className="flex items-center gap-1">
-                    <button className={`px-2 py-1 text-xs border rounded ${style.bold ? 'bg-slate-200' : ''}`} onClick={() => setStyle((s) => ({ ...s, bold: !s.bold }))}>
+                  <div className="brs-messenger-toolbar">
+                    <button className={`brs-messenger-toolbar-btn ${style.bold ? 'is-active' : ''}`} onClick={() => setStyle((s) => ({ ...s, bold: !s.bold }))}>
                       B
                     </button>
-                    <button className={`px-2 py-1 text-xs border rounded ${style.italic ? 'bg-slate-200' : ''}`} onClick={() => setStyle((s) => ({ ...s, italic: !s.italic }))}>
+                    <button className={`brs-messenger-toolbar-btn ${style.italic ? 'is-active' : ''}`} onClick={() => setStyle((s) => ({ ...s, italic: !s.italic }))}>
                       I
                     </button>
-                    <button className={`px-2 py-1 text-xs border rounded ${style.underline ? 'bg-slate-200' : ''}`} onClick={() => setStyle((s) => ({ ...s, underline: !s.underline }))}>
+                    <button className={`brs-messenger-toolbar-btn ${style.underline ? 'is-active' : ''}`} onClick={() => setStyle((s) => ({ ...s, underline: !s.underline }))}>
                       U
                     </button>
-                    <select
-                      className="text-xs border rounded px-1 py-1 w-[116px]"
-                      value={style.bgColor}
-                      onChange={(e) => setStyle((s) => ({ ...s, bgColor: e.target.value }))}
-                      title="Cor de fundo"
-                    >
-                      {bgPalette.map((c) => (
-                        <option
-                          key={c}
-                          value={c}
-                          style={{ backgroundColor: c, color: '#0f172a' }}
-                        >
-                          {'Cor de Fundo'}
-                        </option>
-                      ))}
-                    </select>
-                    <label className="px-2 py-1 text-xs border rounded cursor-pointer flex items-center justify-center" title="Enviar arquivo">
+                    <label className="brs-messenger-toolbar-btn brs-messenger-toolbar-file" title="Enviar arquivo">
                       <Paperclip size={12} />
                       <input type="file" className="hidden" onChange={(e) => void onPickFile(e.target.files)} />
                     </label>
@@ -865,10 +848,10 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                       onChange={(e) => setText(e.target.value)}
                       onPaste={onPaste}
                       onKeyDown={onComposerKeyDown}
-                      className="flex-1 border rounded px-2 py-1.5 text-xs min-h-[54px]"
+                      className="brs-messenger-composer-input"
                       placeholder="Digite sua mensagem, cole texto ou imagem..."
                     />
-                    <button onClick={sendMessage} disabled={isSending || (!text.trim() && attachedFiles.length === 0)} className="px-3 rounded bg-blue-600 text-white disabled:bg-gray-400">
+                    <button onClick={sendMessage} disabled={isSending || (!text.trim() && attachedFiles.length === 0)} className="brs-messenger-primary-button brs-messenger-send-button">
                       <Send size={14} />
                     </button>
                   </div>

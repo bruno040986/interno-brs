@@ -33,7 +33,7 @@ type BridgeToast = {
 
 const WORKSPACE_TITLE = 'BRS Workspace'
 const NOTIFICATION_ICON = '/favicon/FAVICON-BRS-PROMOTORA.png'
-const SOUND_URL = '/notificacao-chat-brs.mp3'
+const MESSAGE_SOUND_URL = '/notificacao-chat-brs.mp3'
 
 function firstName(label?: string | null) {
   if (!label) return ''
@@ -44,12 +44,11 @@ function firstName(label?: string | null) {
 function contactLabel(contact: BridgeContact) {
   return (
     contact.nickname ||
-    contact.short_name ||
     String(contact.full_name || '')
       .trim()
       .split(/\s+/)
       .filter(Boolean)
-      .slice(0, 2)
+      .slice(0, 1)
       .join(' ') ||
     contact.email
   )
@@ -74,7 +73,8 @@ export function MessengerNotificationBridge() {
   const initializedConversationsRef = useRef(false)
   const initializedContactsRef = useRef(false)
   const permissionRequestedRef = useRef(false)
-  const lastSoundAtRef = useRef(0)
+  const lastMessageSoundAtRef = useRef(0)
+  const lastContactSoundAtRef = useRef(0)
   const originalFaviconHrefRef = useRef<string | null>(null)
   const faviconLinkRef = useRef<HTMLLinkElement | null>(null)
 
@@ -89,7 +89,7 @@ export function MessengerNotificationBridge() {
     faviconLinkRef.current = faviconLink
     originalFaviconHrefRef.current = faviconLink?.href || null
 
-    const audio = new Audio(SOUND_URL)
+    const audio = new Audio(MESSAGE_SOUND_URL)
     audio.preload = 'auto'
     audio.load()
     audioRef.current = audio
@@ -130,7 +130,7 @@ export function MessengerNotificationBridge() {
         if (audioBufferRef.current) return
 
         try {
-          const response = await fetch(SOUND_URL, { cache: 'force-cache' })
+          const response = await fetch(MESSAGE_SOUND_URL, { cache: 'force-cache' })
           const arrayBuffer = await response.arrayBuffer()
           audioBufferRef.current = await context.decodeAudioData(arrayBuffer.slice(0))
         } catch {
@@ -258,7 +258,7 @@ export function MessengerNotificationBridge() {
             played = true
           }
         }
-        if (played) playSound()
+        if (played) playContactSound()
       }
 
       const statusMap: Record<string, ChatStatus> = {}
@@ -325,17 +325,17 @@ export function MessengerNotificationBridge() {
         showBrowserNotification('BRS Messenger', body, `message-${alert.name || 'user'}-${Date.now()}`)
       }
 
-      playSound()
+      playMessageSound()
     } catch (error) {
       console.error('Erro ao atualizar conversas do Messenger:', error)
     }
   }
 
-  function playSound() {
+  function playMessageSound() {
     if (typeof window === 'undefined') return
     const now = Date.now()
-    if (now - lastSoundAtRef.current < 850) return
-    lastSoundAtRef.current = now
+    if (now - lastMessageSoundAtRef.current < 850) return
+    lastMessageSoundAtRef.current = now
 
     const audio = audioRef.current
     const context = audioContextRef.current
@@ -356,27 +356,40 @@ export function MessengerNotificationBridge() {
       if (!audio) return
       audio.currentTime = 0
       void audio.play().catch(() => {
-        if (!context) return
-        try {
-          if (context.state === 'suspended') {
-            void context.resume().catch(() => {})
-          }
-          const oscillator = context.createOscillator()
-          const gain = context.createGain()
-          oscillator.type = 'sine'
-          oscillator.frequency.value = 880
-          gain.gain.value = 0.0001
-          oscillator.connect(gain)
-          gain.connect(context.destination)
-          const startAt = context.currentTime
-          gain.gain.exponentialRampToValueAtTime(0.08, startAt + 0.01)
-          gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.14)
-          oscillator.start(startAt)
-          oscillator.stop(startAt + 0.16)
-        } catch {
-          // ignore autoplay restrictions silently
-        }
+        playFallbackTone()
       })
+    } catch {
+      // ignore autoplay restrictions silently
+    }
+  }
+
+  function playContactSound() {
+    if (typeof window === 'undefined') return
+    const now = Date.now()
+    if (now - lastContactSoundAtRef.current < 1200) return
+    lastContactSoundAtRef.current = now
+    playFallbackTone()
+  }
+
+  function playFallbackTone() {
+    const context = audioContextRef.current
+    if (!context) return
+    try {
+      if (context.state === 'suspended') {
+        void context.resume().catch(() => {})
+      }
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      oscillator.type = 'sine'
+      oscillator.frequency.value = 880
+      gain.gain.value = 0.0001
+      oscillator.connect(gain)
+      gain.connect(context.destination)
+      const startAt = context.currentTime
+      gain.gain.exponentialRampToValueAtTime(0.08, startAt + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.14)
+      oscillator.start(startAt)
+      oscillator.stop(startAt + 0.16)
     } catch {
       // ignore autoplay restrictions silently
     }

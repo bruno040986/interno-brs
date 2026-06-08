@@ -33,7 +33,7 @@ type MessengerDockContextValue = {
 const MessengerDockContext = createContext<MessengerDockContextValue | null>(null)
 
 export function MessengerDockProvider({ children }: { children: ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(true)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [activeConversation, setActiveConversation] = useState<MessengerDockConversation | null>(null)

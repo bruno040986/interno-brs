@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight, MessageSquareText, MessagesSquare, X } from 'lucide-react'
+import { ChevronRight, CircleChevronLeft, MessageSquareText, MessagesSquare, X } from 'lucide-react'
 import { GoogleChatComponent } from '@/app/(dashboard)/theme/GoogleChatComponent'
 import { useMessengerDock } from '@/components/layout/MessengerDockContext'
 
@@ -112,11 +112,24 @@ export function MessengerDockShell() {
         aria-label="Abrir BRS Messenger"
         title="Abrir BRS Messenger"
       >
-        <span className="brs-messenger-dock-rail-icon">
-          <MessagesSquare size={20} />
+        <span className="brs-messenger-dock-rail-badge-wrap">
+          {dock.hasUnread ? <span className="brs-messenger-dock-rail-badge">{Math.min(99, dock.unreadCount)}</span> : null}
         </span>
-        {dock.hasUnread ? <span className="brs-messenger-dock-rail-badge">{Math.min(99, dock.unreadCount)}</span> : null}
-        <span className="brs-messenger-dock-rail-label">BRS Messenger</span>
+        <span className="brs-messenger-dock-rail-brand">
+          <img
+            src="/logotipos/logotipo-brs-messenger-fundo-escuro.png"
+            alt="BRS Messenger"
+            className="brs-messenger-dock-rail-brand-logo brs-messenger-dock-rail-brand-logo-light"
+          />
+          <img
+            src="/logotipos/logotipo-brs-messenger-fundo-escuro.png"
+            alt="BRS Messenger"
+            className="brs-messenger-dock-rail-brand-logo brs-messenger-dock-rail-brand-logo-dark"
+          />
+        </span>
+        <span className="brs-messenger-dock-rail-chevron" aria-hidden="true">
+          <CircleChevronLeft size={28} strokeWidth={2.25} />
+        </span>
       </button>
     ),
     [dock],
@@ -165,7 +178,7 @@ export function MessengerDockShell() {
         <div className="brs-messenger-dock-panel" ref={desktopDockRef}>
           <button
             type="button"
-            className="brs-messenger-sheet-close-overlay"
+            className="brs-messenger-sheet-close-overlay brs-messenger-sheet-close-overlay--dock"
             onClick={() => dock.collapseDock()}
             aria-label="Recolher BRS Messenger"
             title="Recolher BRS Messenger"
