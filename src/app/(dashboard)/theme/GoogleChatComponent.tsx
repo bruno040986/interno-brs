@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EllipsisVertical, MessageSquareText, MessagesSquare, Paperclip, Search, Send, Users } from 'lucide-react'
 import { useMessengerDock } from '@/components/layout/MessengerDockContext'
+import { deriveChatStatus, normalizeManualStatus, type ChatStatus } from '@/lib/chat/presence'
 
 type MoodKey = 'very_happy' | 'well' | 'thinking' | 'tired' | 'irritated' | 'down'
-type ChatStatus = 'online' | 'offline' | 'busy' | 'away'
+type PresenceMode = 'online' | 'busy'
 
 type Contact = {
   id: string
@@ -49,9 +50,14 @@ type MyProfile = {
   profile: {
     nickname?: string | null
     status?: ChatStatus
+    manual_status?: PresenceMode
     mood?: MoodKey | null
     mood_date?: string | null
     status_message?: string | null
+    last_seen_at?: string | null
+    last_interaction_at?: string | null
+    is_visible?: boolean | null
+    has_focus?: boolean | null
   } | null
 }
 
@@ -128,7 +134,8 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
   const [menuConversationId, setMenuConversationId] = useState<string | null>(null)
   const [myProfile, setMyProfile] = useState<MyProfile>({ user: null, profile: null })
   const [nickname, setNickname] = useState('')
-  const [status, setStatus] = useState<ChatStatus>('online')
+  const [status, setStatus] = useState<PresenceMode>('online')
+  const [effectiveStatus, setEffectiveStatus] = useState<ChatStatus>('offline')
   const [mood, setMood] = useState<MoodKey | ''>('')
   const [statusMessage, setStatusMessage] = useState('')
   const [isDarkTheme, setIsDarkTheme] = useState(false)
@@ -144,6 +151,15 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
   const conversationPollRef = useRef<number | null>(null)
   const messagesPollRef = useRef<number | null>(null)
   const contactsPollRef = useRef<number | null>(null)
+  const presenceSyncRef = useRef<Promise<void> | null>(null)
+  const lastPresenceSyncAtRef = useRef(0)
+  const presenceStateRef = useRef<{
+    status?: string | null
+    last_seen_at?: string | null
+    last_interaction_at?: string | null
+    is_visible?: boolean | null
+    has_focus?: boolean | null
+  } | null>(null)
   const activeTabRef = useRef<1 | 2 | 3>(1)
   const selectedConversationIdRef = useRef<string | null>(null)
   const initializedContactsRef = useRef(false)
@@ -248,11 +264,43 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
     }
   }, [selectedConversation?.id])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const syncVisibility = () => {
+      void syncPresenceUpdate({ force: true })
+    }
+
+    const syncActivity = () => {
+      void syncPresenceUpdate({ activityAt: new Date().toISOString() })
+    }
+
+    window.addEventListener('focus', syncVisibility)
+    window.addEventListener('blur', syncVisibility)
+    document.addEventListener('visibilitychange', syncVisibility)
+    window.addEventListener('mousemove', syncActivity, { passive: true })
+    window.addEventListener('mousedown', syncActivity, { passive: true })
+    window.addEventListener('keydown', syncActivity)
+    window.addEventListener('touchstart', syncActivity, { passive: true })
+    window.addEventListener('scroll', syncActivity, { passive: true })
+
+    return () => {
+      window.removeEventListener('focus', syncVisibility)
+      window.removeEventListener('blur', syncVisibility)
+      document.removeEventListener('visibilitychange', syncVisibility)
+      window.removeEventListener('mousemove', syncActivity)
+      window.removeEventListener('mousedown', syncActivity)
+      window.removeEventListener('keydown', syncActivity)
+      window.removeEventListener('touchstart', syncActivity)
+      window.removeEventListener('scroll', syncActivity)
+    }
+  }, [])
+
   async function bootstrap() {
     setIsLoading(true)
     await Promise.all([fetchMyProfile(), fetchContacts(), fetchConversations()])
-    await heartbeat()
-    heartbeatRef.current = window.setInterval(() => void heartbeat(), 60000)
+    await syncPresenceUpdate({ activityAt: new Date().toISOString(), force: true })
+    heartbeatRef.current = window.setInterval(() => void syncPresenceUpdate(), 60000)
     setIsLoading(false)
   }
 
@@ -262,15 +310,52 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
     if (!response.ok) return
     setMyProfile(data)
     setNickname(data.profile?.nickname || '')
-    setStatus(data.profile?.status || 'online')
+    setStatus(normalizeManualStatus(data.profile?.manual_status || data.profile?.status))
+    setEffectiveStatus((data.profile?.status || 'offline') as ChatStatus)
+    presenceStateRef.current = data.profile
     const today = new Date().toISOString().slice(0, 10)
     const currentMood = data.profile?.mood && data.profile?.mood_date === today ? data.profile.mood : ''
     setMood(currentMood || '')
     setStatusMessage(data.profile?.status_message || '')
   }
 
-  async function heartbeat() {
-    await fetch('/api/chat/presence', { method: 'POST' })
+  async function syncPresenceUpdate(options: { activityAt?: string; force?: boolean } = {}) {
+    if (presenceSyncRef.current && !options.force) return presenceSyncRef.current
+
+    const now = Date.now()
+    if (!options.force && now - lastPresenceSyncAtRef.current < 15000) return
+
+    const presencePromise: Promise<void> = fetch('/api/chat/presence', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        visibility_state: document.visibilityState,
+        has_focus: document.hasFocus(),
+        activity_at: options.activityAt || null,
+      }),
+    })
+      .then(() => undefined)
+      .catch(() => undefined)
+
+    presenceSyncRef.current = presencePromise.finally(() => {
+      presenceSyncRef.current = null
+    })
+    lastPresenceSyncAtRef.current = now
+    await presencePromise
+
+    const nowIso = new Date().toISOString()
+    const currentPresence = presenceStateRef.current || {}
+    const snapshot = {
+      status,
+      last_seen_at: nowIso,
+      last_interaction_at: options.activityAt || currentPresence.last_interaction_at || currentPresence.last_seen_at || null,
+      is_visible: document.visibilityState === 'visible',
+      has_focus: document.hasFocus(),
+    }
+    presenceStateRef.current = snapshot
+    setEffectiveStatus(deriveChatStatus(snapshot, Date.now()))
   }
 
   async function fetchContacts() {
@@ -561,7 +646,7 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
         <div className="brs-messenger-titlebar-left">
           BRS Messenger
         </div>
-        <div className="brs-messenger-titlebar-status">{statusIcon[status]}</div>
+        <div className="brs-messenger-titlebar-status">{statusIcon[effectiveStatus]}</div>
       </div>
 
       <div className="brs-messenger-searchbar">
@@ -617,10 +702,9 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mt-2">
-                <select value={status} onChange={(e) => setStatus(e.target.value as ChatStatus)} className="brs-messenger-select">
-                  <option value="online">Online</option>
+                <select value={status} onChange={(e) => setStatus(e.target.value as PresenceMode)} className="brs-messenger-select">
+                  <option value="online">Automático</option>
                   <option value="busy">Ocupado</option>
-                  <option value="away">Ausente</option>
                 </select>
                 <select value={mood} onChange={(e) => setMood(e.target.value as MoodKey | '')} className="brs-messenger-select">
                   <option value="">{hasMoodToday ? 'Humor de hoje' : 'Humor do Dia'}</option>
@@ -643,7 +727,7 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
             </div>
 
             <div className="brs-messenger-group">
-              <div className="brs-messenger-group-header">Online ({onlineContacts.length})</div>
+              <div className="brs-messenger-group-header">Ativos ({onlineContacts.length})</div>
               <div className="brs-messenger-group-list">
                 {onlineContacts.map((c) => (
                   <button
@@ -661,7 +745,7 @@ export function GoogleChatComponent({ variant = 'widget' }: GoogleChatComponentP
                     {c.status_message ? <span className="brs-messenger-contact-status-message"> - {c.status_message}</span> : null}
                   </button>
                 ))}
-                {onlineContacts.length === 0 && <div className="brs-messenger-empty-state">Sem contatos online.</div>}
+                {onlineContacts.length === 0 && <div className="brs-messenger-empty-state">Sem contatos ativos.</div>}
               </div>
             </div>
 

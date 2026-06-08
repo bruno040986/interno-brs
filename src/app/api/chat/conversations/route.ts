@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { deriveChatStatus } from '@/lib/chat/presence'
 
 export async function GET() {
   try {
@@ -39,7 +40,7 @@ export async function GET() {
 
     const { data: profiles } = await admin
       .from('workspace_chat_user_profiles')
-      .select('user_id, nickname, status, mood, mood_date, status_message, last_seen_at')
+      .select('user_id, nickname, status, mood, mood_date, status_message, last_seen_at, last_interaction_at, is_visible, has_focus')
       .in('user_id', otherUserIds)
 
     const { data: messages, error: msgErr } = await admin
@@ -86,13 +87,7 @@ export async function GET() {
               .join(' '),
             avatar_url: participant.avatar_url || null,
             nickname: profileMap.get(participant.id)?.nickname || null,
-            status: (() => {
-              const p = profileMap.get(participant.id)
-              if (!p?.last_seen_at) return 'offline'
-              const diff = now - new Date(p.last_seen_at).getTime()
-              if (diff > 5 * 60 * 1000) return 'offline'
-              return p.status || 'online'
-            })(),
+            status: deriveChatStatus(profileMap.get(participant.id), now),
           },
           lastMessage: lastMessage
             ? {
