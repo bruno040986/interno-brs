@@ -8,6 +8,7 @@ import { useMessengerDock } from '@/components/layout/MessengerDockContext'
 const HEADER_HEIGHT = 64
 const DESKTOP_DOCK_WIDTH = 392
 const DESKTOP_COLLAPSED_WIDTH = 72
+const DESKTOP_DOCK_GAP = 16
 const MOBILE_BREAKPOINT = 768
 
 function useIsMobile() {
@@ -63,6 +64,22 @@ export function MessengerDockShell() {
     const raf = window.requestAnimationFrame(() => setIsReady(true))
     return () => window.cancelAnimationFrame(raf)
   }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    const reservedWidth = isMobile
+      ? 0
+      : dock.isCollapsed
+        ? DESKTOP_COLLAPSED_WIDTH + DESKTOP_DOCK_GAP
+        : DESKTOP_DOCK_WIDTH + DESKTOP_DOCK_GAP
+
+    document.documentElement.style.setProperty('--brs-messenger-dock-reserve', `${reservedWidth}px`)
+
+    return () => {
+      document.documentElement.style.removeProperty('--brs-messenger-dock-reserve')
+    }
+  }, [dock.isCollapsed, isMobile])
 
   useEffect(() => {
     if (isMobile) {

@@ -454,7 +454,7 @@ export default function UsuariosPage() {
                           {user.active ? 'Ativo' : 'Inativo'}
                         </span>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td style={{ textAlign: 'right', paddingRight: 'calc(0.75rem + var(--brs-messenger-dock-reserve, 0px))' }}>
                         <button className="btn btn-ghost btn-sm btn-icon" onClick={async () => {
                           // Carregar permissões via Servidor
                           const result = await getUserPermissions(user.id)
@@ -496,7 +496,7 @@ export default function UsuariosPage() {
                   <tr key={profile.id}>
                     <td style={{ fontWeight: 600 }}>{profile.name}</td>
                     <td>{new Date(profile.created_at).toLocaleDateString()}</td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', paddingRight: 'calc(0.75rem + var(--brs-messenger-dock-reserve, 0px))' }}>
                       <button className="btn btn-ghost btn-sm btn-icon" onClick={async () => {
                         // Carregar permissões via Servidor
                         const result = await getProfilePermissions(profile.id)
