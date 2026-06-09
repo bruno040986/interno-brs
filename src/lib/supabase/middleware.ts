@@ -23,6 +23,10 @@ function isPublicAssetRequest(pathname: string) {
   )
 }
 
+function isAuthenticatedOpenApi(pathname: string) {
+  return pathname.startsWith('/api/comunicados')
+}
+
 function forbiddenResponse(request: NextRequest) {
   if (isApiRequest(request.nextUrl.pathname)) {
     return NextResponse.json({ error: 'Sem permissao.' }, { status: 403 })
@@ -160,6 +164,10 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
+  }
+
+  if (isAuthenticatedOpenApi(pathname)) {
+    return NextResponse.next({ request })
   }
 
   let supabaseResponse = NextResponse.next({ request })

@@ -17,6 +17,7 @@ import {
 } from '@/lib/auth/permissions'
 import PraiseBoard from './_components/PraiseBoard'
 import { AgendaComponent } from './theme/AgendaComponent'
+import { ComunicadosBoardWidget } from '@/components/comunicados/ComunicadosBoardWidget'
 
 export default function HubPage() {
   const [activeSector, setActiveSector] = useState<string | null>(null)
@@ -470,20 +471,7 @@ export default function HubPage() {
       {/* Coluna Lateral (Widgets) */}
       <div className="hub-sidebar">
         
-        {/* Widget de Comunicados */}
-        <div className="widget-card">
-          <div className="widget-header">
-            <h3 className="widget-title">
-              <Megaphone size={18} style={{ color: 'var(--brs-danger)' }} />
-              Comunicados
-            </h3>
-          </div>
-          <div className="widget-content" style={{ textAlign: 'center', padding: '1.5rem 1rem' }}>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--brs-gray-400)', margin: 0 }}>
-              Nenhum comunicado no momento.
-            </p>
-          </div>
-        </div>
+        <ComunicadosBoardWidget />
 
         <PraiseBoard initialTab={initialPraiseTab} focusPraiseId={focusPraiseId} />
 

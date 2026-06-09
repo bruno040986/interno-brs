@@ -70,7 +70,7 @@ const SYSTEM_MODULES = [
   { id: 'sistema-config-instituicoes', name: 'API Instituições Financeiras', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-config-crm', name: 'API CRM', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-config-empresa', name: 'Cadastro da Empresa', parentId: 'sistema-config-root', level: 2 },
-  { id: 'sistema-comunicados', name: 'Comunicados', parentId: 'cat-sistema', level: 1 },
+  { id: 'sistema-comunicados', name: 'Comunicados (Editor)', parentId: 'cat-sistema', level: 1 },
   { id: 'sistema-mural-elogios', name: 'Mural de Elogios', parentId: 'cat-sistema', level: 1 },
   { id: 'sistema-links', name: 'Links', parentId: 'cat-sistema', level: 1 },
   { id: 'sistema-ajuda', name: 'Ajuda', parentId: 'cat-sistema', level: 1 },

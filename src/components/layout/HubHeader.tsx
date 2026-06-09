@@ -21,6 +21,26 @@ interface HubHeaderProps {
   user: UserProfile
 }
 
+type PraiseNotification = {
+  kind: 'praise'
+  id: string
+  type?: string
+  created_at?: string
+  praise_id?: string
+  from_user?: { name?: string }
+  praise?: { from_user_id?: string }
+}
+
+type ComunicadoNotification = {
+  kind: 'comunicado'
+  id: string
+  titulo: string
+  texto_html: string
+  created_at: string
+}
+
+type HeaderNotification = PraiseNotification | ComunicadoNotification
+
 export default function HubHeader({ user }: HubHeaderProps) {
   const router = useRouter()
   const [showApps, setShowApps] = useState(false)
@@ -30,14 +50,16 @@ export default function HubHeader({ user }: HubHeaderProps) {
   const [loading, setLoading] = useState(true)
 
   const [praiseUnread, setPraiseUnread] = useState<number>(0)
+  const [comunicadoUnread, setComunicadoUnread] = useState<number>(0)
   const [loadingNotifs, setLoadingNotifs] = useState(false)
-  const [notifItems, setNotifItems] = useState<any[]>([])
+  const [notifItems, setNotifItems] = useState<HeaderNotification[]>([])
   const [toast, setToast] = useState<{ id: string; text: string } | null>(null)
   const [themePref, setThemePref] = useState<ThemePreference>('light')
   const [isDarkTheme, setIsDarkTheme] = useState(false)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const appsRef = useRef<HTMLDivElement | null>(null)
   const userMenuRef = useRef<HTMLDivElement | null>(null)
+  const lastComunicadoUnreadRef = useRef(0)
 
   useEffect(() => {
     async function loadPerms() {
@@ -112,22 +134,71 @@ export default function HubHeader({ user }: HubHeaderProps) {
 
   async function loadNotifications() {
     setLoadingNotifs(true)
-    const res = await getPraiseNotifications({ limit: 10 })
-    if (res.success) setNotifItems((res.notifications || []) as any)
-    setLoadingNotifs(false)
+    try {
+      const [praiseRes, comunicadoRes] = await Promise.all([
+        getPraiseNotifications({ limit: 10 }),
+        fetch('/api/comunicados/notifications')
+          .then(async (response) => response.json())
+          .catch(() => null),
+      ])
+
+      const praiseItems = praiseRes.success
+        ? ((praiseRes.notifications || []) as PraiseNotification[]).map((item) => ({ ...item, kind: 'praise' as const }))
+        : []
+
+      const comunicadoItems = Array.isArray(comunicadoRes?.items)
+        ? ((comunicadoRes.items || []) as ComunicadoNotification[]).map((item) => ({ ...item, kind: 'comunicado' as const }))
+        : []
+
+      setNotifItems(
+        [...comunicadoItems, ...praiseItems].sort((a, b) => {
+          const left = new Date(String((b as any).created_at || '')).getTime()
+          const right = new Date(String((a as any).created_at || '')).getTime()
+          return left - right
+        }) as HeaderNotification[],
+      )
+    } finally {
+      setLoadingNotifs(false)
+    }
+  }
+
+  async function refreshComunicadoBadge() {
+    try {
+      const response = await fetch('/api/comunicados/notifications')
+      const data = await response.json()
+      const nextUnread = Number(data?.count || 0)
+      if (lastComunicadoUnreadRef.current > 0 && nextUnread > lastComunicadoUnreadRef.current) {
+        setToast({ id: `com_${Date.now()}`, text: 'Há um novo comunicado para ser lido!' })
+      }
+      lastComunicadoUnreadRef.current = nextUnread
+      setComunicadoUnread(nextUnread)
+    } catch {
+      // keep the previous badge state if the request fails
+    }
   }
 
   useEffect(() => {
     refreshPraiseBadge()
-    const handler = () => refreshPraiseBadge()
+    refreshComunicadoBadge()
+    const handler = () => {
+      refreshPraiseBadge()
+      refreshComunicadoBadge()
+    }
     window.addEventListener('praise:refresh', handler)
+    window.addEventListener('comunicados:refresh', handler)
     const interval = window.setInterval(() => refreshPraiseBadge(), 30000)
-    const onFocus = () => refreshPraiseBadge()
+    const intervalComunicados = window.setInterval(() => refreshComunicadoBadge(), 30000)
+    const onFocus = () => {
+      refreshPraiseBadge()
+      refreshComunicadoBadge()
+    }
     window.addEventListener('focus', onFocus)
     return () => {
       window.removeEventListener('praise:refresh', handler)
+      window.removeEventListener('comunicados:refresh', handler)
       window.removeEventListener('focus', onFocus)
       window.clearInterval(interval)
+      window.clearInterval(intervalComunicados)
     }
   }, [user?.id])
 
@@ -191,7 +262,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
     { label: 'Home HUB', icon: LayoutGrid, href: '/', color: '#475569', id: 'home' },
     { label: 'Usuários', icon: User, href: '/usuarios', color: '#7c3aed', id: 'sistema-usuarios-root' },
     { label: 'Configurações', icon: Settings, href: '/rh/parceiros/config/provedores/email', color: '#475569', id: 'sistema-config-root' },
-    { label: 'Comunicados', icon: Megaphone, href: '#', color: '#dc2626', id: 'sistema-comunicados' },
+    { label: 'Comunicados', icon: Megaphone, href: '/comunicados', color: '#dc2626', id: 'sistema-comunicados' },
     { label: 'Links', icon: ExternalLink, href: '/links', color: '#ea580c', id: 'sistema-links' },
     { label: 'Ajuda', icon: HelpCircle, href: '#', color: '#db2777', id: 'sistema-ajuda' },
   ]
@@ -312,12 +383,12 @@ export default function HubHeader({ user }: HubHeaderProps) {
             const next = !showNotifications
             setShowNotifications(next)
             if (next) {
-              await Promise.all([refreshPraiseBadge(), loadNotifications()])
+              await Promise.all([refreshPraiseBadge(), refreshComunicadoBadge(), loadNotifications()])
             }
           }}
         >
           <Bell size={20} />
-          {praiseUnread > 0 && <span className="notification-badge">{Math.min(99, praiseUnread)}</span>}
+          {(praiseUnread + comunicadoUnread) > 0 && <span className="notification-badge">{Math.min(99, praiseUnread + comunicadoUnread)}</span>}
         </button>
 
           {showNotifications && (
@@ -354,14 +425,26 @@ export default function HubHeader({ user }: HubHeaderProps) {
                     key={n.id}
                     type="button"
                     onClick={async () => {
-                      await markPraiseNotificationsRead({ praise_id: n.praise_id })
-                      window.dispatchEvent(new Event('praise:refresh'))
                       setShowNotifications(false)
-                      const type = String(n.type || 'praise_received')
-                      if (type === 'praise_reaction') {
-                        router.push(`/?praiseTab=feed&praiseId=${encodeURIComponent(String(n.praise_id))}`)
+                      if (n.kind === 'comunicado') {
+                        window.dispatchEvent(
+                          new CustomEvent('comunicados:open', {
+                            detail: {
+                              id: n.id,
+                              titulo: n.titulo,
+                              texto_html: n.texto_html,
+                            },
+                          }),
+                        )
                       } else {
-                        router.push('/?praiseTab=received')
+                        await markPraiseNotificationsRead({ praise_id: n.praise_id })
+                        window.dispatchEvent(new Event('praise:refresh'))
+                        const type = String(n.type || 'praise_received')
+                        if (type === 'praise_reaction') {
+                          router.push(`/?praiseTab=feed&praiseId=${encodeURIComponent(String(n.praise_id))}`)
+                        } else {
+                          router.push('/?praiseTab=received')
+                        }
                       }
                     }}
                     style={{
@@ -375,7 +458,11 @@ export default function HubHeader({ user }: HubHeaderProps) {
                       gap: '0.25rem',
                     }}
                   >
-                    {String(n.type || 'praise_received') === 'praise_reaction' ? (
+                    {n.kind === 'comunicado' ? (
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brs-gray-800)' }}>
+                        Há um novo comunicado para ser lido!
+                      </div>
+                    ) : String(n.type || 'praise_received') === 'praise_reaction' ? (
                       <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--brs-gray-800)' }}>
                         {`${String(n?.from_user?.name || 'Alguém')} reagiu ao seu elogio ${
                           String(n?.praise?.from_user_id || '') === String(user?.id || '') ? 'enviado' : 'recebido'

@@ -71,6 +71,7 @@ const exactRouteRules: Record<string, RouteAccessRule> = {
     view('sistema-usuarios-perfis'),
   ]),
   '/links': any([view('sistema-links')]),
+  '/comunicados': any([view('sistema-comunicados')]),
   '/rh': any([view('rh-painel')]),
   '/api/import': any([include('rh-importacoes')]),
   '/api/users/list': any([

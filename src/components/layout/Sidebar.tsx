@@ -120,6 +120,12 @@ export default function Sidebar() {
       { section: 'Sistema' },
       { label: 'Voltar ao Workspace', href: '/', icon: LayoutDashboard },
     ]
+  } else if (pathname.startsWith('/comunicados')) {
+    navItems = [
+      { section: 'Comunicados' },
+      { label: 'Lista de Comunicados', href: '/comunicados', icon: MessageSquare },
+      { label: 'Voltar ao Workspace', href: '/', icon: LayoutDashboard },
+    ]
   } else {
     navItems = [
       { label: 'Painel RH', href: '/?sector=rh', icon: LayoutDashboard },
@@ -180,6 +186,8 @@ export default function Sidebar() {
     if (item.href === '/rh/parceiros/config/documentos') return canView('scp-documentos')
     if (item.href === '/rh/parceiros/config/emails') return canView('scp-emails')
     if (item.href === '/rh/parceiros/config/whatsapp') return canView('scp-whatsapp')
+
+    if (item.href === '/comunicados') return canView('sistema-comunicados')
 
     if (item.href === '/rh/colaboradores') return canView('rh-colaboradores')
     if (item.href === '/rh/importacoes') return canView('rh-importacoes')

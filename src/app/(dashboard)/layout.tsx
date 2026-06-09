@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import HubHeader from '@/components/layout/HubHeader'
+import { ComunicadosBridge } from '@/components/layout/ComunicadosBridge'
 import { MessengerNotificationBridge } from '@/components/layout/MessengerNotificationBridge'
 import { MessengerDockProvider } from '@/components/layout/MessengerDockContext'
 import { MessengerDockShell } from '@/components/layout/MessengerDockShell'
@@ -44,6 +45,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="app-layout">
         <ThemeInit preference={themePreference} />
         <HubHeader user={profile} />
+        <ComunicadosBridge />
         <MessengerNotificationBridge />
         <MessengerDockShell />
         <main className="main-content">{children}</main>
