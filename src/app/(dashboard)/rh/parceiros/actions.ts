@@ -10,6 +10,7 @@ import {
 } from '@/lib/auth/server'
 import { registerAgentDomain } from '@/lib/vercel/register-domain'
 import { type PermissionAction, type PermissionRequirement } from '@/lib/auth/permissions'
+import { normalizeCompanyBankAccounts } from '@/lib/company-bank-accounts'
 
 // Inicialização do cliente Supabase Admin para operações privilegiadas
 const supabaseAdmin = createClient(
@@ -1034,11 +1035,12 @@ export async function saveCompanyProfile(payload: CompanyProfileRow) {
   try {
     await requirePermission('sistema-config-empresa', payload.id ? 'can_edit' : 'can_include')
 
+    const companyData = normalizeCompanyBankAccounts(payload.company_data ?? {}, String(payload.cnpj || ''))
     const row: any = {
       nickname: String(payload.nickname || '').trim(),
       is_active: payload.is_active !== false,
       cnpj: sanitizeDigits(payload.cnpj || '') || null,
-      company_data: payload.company_data ?? {},
+      company_data: companyData,
       partner_primary_data: payload.partner_primary_data ?? {},
       partner_secondary_data: payload.partner_secondary_data ?? {},
       witness_data: payload.witness_data ?? {},

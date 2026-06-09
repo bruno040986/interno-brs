@@ -2,7 +2,27 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { archiveCompanyProfile, getCompanyProfiles, saveCompanyProfile } from '../../actions'
-import { AlertCircle, Building2, CheckCircle, Loader2, Plus, Save } from 'lucide-react'
+import { AlertCircle, BadgeCheck, Banknote, Building2, CheckCircle, ImageIcon, Loader2, Plus, Save, Trash2, Upload } from 'lucide-react'
+import {
+  createEmptyBankAccount,
+  formatBankAccountFromSeq,
+  formatBankAgencyWithDigitFromSeq,
+  formatBankLabel,
+  getBankBrandIcon,
+  maskCnpj,
+  maskCep,
+  maskCpf,
+  maskEmailInput,
+  maskPhone,
+  maskUuidInput,
+  normalizeCompanyBankAccounts,
+  normalizePixKeyValue,
+  onlyDigits,
+  parseBankAccountSeq,
+  parseBankAgencySeq,
+  type BankLookup,
+  type CompanyBankAccount,
+} from '@/lib/company-bank-accounts'
 
 type PersonData = {
   cpf?: string
@@ -39,9 +59,15 @@ type CompanyData = {
   email_principal?: string
   email_support?: string
   phone_principal?: string
+  bank_accounts?: CompanyBankAccount[]
   bank_name?: string
+  bank_code?: string
+  bank_ispb?: string
+  bank_full_name?: string
+  bank_logo_data_url?: string
   bank_agency?: string
   bank_account?: string
+  bank_account_type?: 'Corrente' | 'Poupança'
   pix_type?: 'cnpj' | 'bank' | 'email' | 'phone' | 'random'
   pix_key?: string
   latitude?: string
@@ -107,9 +133,15 @@ const EMPTY_PROFILE: CompanyProfileRow = {
     email_principal: '',
     email_support: '',
     phone_principal: '',
+    bank_accounts: [createEmptyBankAccount({ is_principal: true })],
     bank_name: '',
+    bank_code: '',
+    bank_ispb: '',
+    bank_full_name: '',
+    bank_logo_data_url: '',
     bank_agency: '',
     bank_account: '',
+    bank_account_type: 'Corrente',
     pix_type: 'cnpj',
     pix_key: '',
     latitude: '',
@@ -129,49 +161,545 @@ const EMPTY_PROFILE: CompanyProfileRow = {
   witness_data: { ...EMPTY_PERSON },
 }
 
-function onlyDigits(value: string) {
-  return String(value || '').replace(/\D/g, '')
-}
-
-function maskCnpj(value: string) {
-  const v = onlyDigits(value).slice(0, 14)
-  return v
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d)/, '.$1/$2')
-    .replace(/(\d{4})(\d)/, '$1-$2')
-}
-
-function maskCpf(value: string) {
-  const v = onlyDigits(value).slice(0, 11)
-  return v
-    .replace(/^(\d{3})(\d)/, '$1.$2')
-    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d)/, '.$1-$2')
-}
-
-function maskCep(value: string) {
-  const v = onlyDigits(value).slice(0, 8)
-  return v.replace(/^(\d{5})(\d)/, '$1-$2')
-}
-
-function maskPhone(value: string) {
-  const v = onlyDigits(value).slice(0, 11)
-  if (v.length <= 10) return v.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d)/, '$1-$2')
-  return v.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2')
-}
-
-function normalizeProfile(raw: any): CompanyProfileRow {
+function normalizeProfile(
+  raw: Partial<CompanyProfileRow> & {
+    company_data?: CompanyData
+    partner_primary_data?: PersonData
+    partner_secondary_data?: PersonData
+    witness_data?: PersonData
+  },
+): CompanyProfileRow {
+  const normalizedCompanyData = normalizeCompanyBankAccounts(raw?.company_data || {}, String(raw?.cnpj || ''))
   return {
     id: raw?.id,
     nickname: String(raw?.nickname || ''),
     is_active: raw?.is_active !== false,
     cnpj: String(raw?.cnpj || ''),
-    company_data: { ...EMPTY_PROFILE.company_data, ...(raw?.company_data || {}) },
+    company_data: { ...EMPTY_PROFILE.company_data, ...normalizedCompanyData },
     partner_primary_data: { ...EMPTY_PERSON, ...(raw?.partner_primary_data || {}) },
     partner_secondary_data: { ...EMPTY_PERSON, ...(raw?.partner_secondary_data || {}) },
     witness_data: { ...EMPTY_PERSON, ...(raw?.witness_data || {}) },
   }
+}
+
+function inferAppendOnlySequence(prevSeq: string, currentValue: string, maxDigits: number): string {
+  const prev = String(prevSeq || '').replace(/\D/g, '').slice(0, maxDigits)
+  const next = String(currentValue || '').replace(/\D/g, '').slice(0, maxDigits)
+  if (!prev) return next
+  if (!next) return ''
+  if (next.startsWith(prev)) return next.slice(0, maxDigits)
+  if (next.length < prev.length) return next
+  if (next.length - prev.length > 1) return next.slice(0, maxDigits)
+  const lastDigit = next.slice(-1)
+  return `${prev}${lastDigit}`.slice(0, maxDigits)
+}
+
+function handleDigitSequenceKeyDown(
+  e: React.KeyboardEvent<HTMLInputElement>,
+  prevSeq: string,
+  setSeq: (next: string) => void,
+  maxDigits: number,
+) {
+  const key = e.key
+  const digitFromCode = (() => {
+    const code = String(e.code || '')
+    const m = code.match(/^Numpad([0-9])$/)
+    return m ? m[1] : null
+  })()
+
+  if (key === 'Backspace') {
+    e.preventDefault()
+    setSeq(prevSeq.slice(0, -1))
+    return
+  }
+
+  if (key === 'Delete') {
+    e.preventDefault()
+    setSeq('')
+    return
+  }
+
+  if (key === 'Tab' || key.startsWith('Arrow') || key === 'Home' || key === 'End') return
+
+  const digit = /^\d$/.test(key) ? key : digitFromCode
+  if (digit) {
+    e.preventDefault()
+    if (prevSeq.length >= maxDigits) return
+    setSeq((prevSeq + digit).slice(0, maxDigits))
+    return
+  }
+
+  if (key.length === 1) {
+    e.preventDefault()
+  }
+}
+
+function handleDigitSequencePaste(
+  e: React.ClipboardEvent<HTMLInputElement>,
+  prevSeq: string,
+  setSeq: (next: string) => void,
+  maxDigits: number,
+) {
+  const txt = e.clipboardData.getData('text') || ''
+  const digits = txt.replace(/\D/g, '')
+  if (!digits) return
+  e.preventDefault()
+  const next = (String(prevSeq || '').replace(/\D/g, '') + digits).slice(0, maxDigits)
+  setSeq(next)
+}
+
+function handleDigitSequenceChange(
+  e: React.ChangeEvent<HTMLInputElement>,
+  prevSeq: string,
+  setSeq: (next: string) => void,
+  maxDigits: number,
+) {
+  const native = e.nativeEvent as unknown as { data?: string | null; inputType?: string }
+  const inputType = String(native?.inputType || '')
+  const dataDigits = String(native?.data ?? '').replace(/\D/g, '')
+
+  if (inputType.startsWith('delete')) {
+    setSeq(prevSeq.slice(0, -1))
+    return
+  }
+
+  if (dataDigits) {
+    setSeq((String(prevSeq || '').replace(/\D/g, '') + dataDigits).slice(0, maxDigits))
+    return
+  }
+
+  setSeq(inferAppendOnlySequence(prevSeq, e.target.value, maxDigits))
+}
+
+function BankIcon({
+  bankCode,
+  bankName,
+}: {
+  bankCode?: string
+  bankName?: string
+}) {
+  const icon = getBankBrandIcon(bankCode, bankName)
+
+  if (icon) {
+    return (
+      <svg viewBox="0 0 24 24" role="img" aria-label={icon.title} style={{ width: 28, height: 28, display: 'block' }}>
+        <path fill={`#${icon.hex}`} d={icon.path} />
+      </svg>
+    )
+  }
+
+  return <Banknote size={22} />
+}
+
+function CompanyBankAccountCard({
+  account,
+  companyCnpj,
+  banks,
+  banksLoading,
+  onChange,
+  onRemove,
+  onMakePrincipal,
+}: {
+  account: CompanyBankAccount
+  companyCnpj: string
+  banks: BankLookup[]
+  banksLoading: boolean
+  onChange: (next: CompanyBankAccount) => void
+  onRemove: () => void
+  onMakePrincipal: () => void
+}) {
+  const [bankSearch, setBankSearch] = useState(account.bank_code || account.bank_name ? formatBankLabel({
+    code: account.bank_code,
+    name: account.bank_name,
+    fullName: account.bank_full_name,
+  }) : '')
+  const [bankDropdownOpen, setBankDropdownOpen] = useState(false)
+  const [agencySeq, setAgencySeq] = useState(parseBankAgencySeq(account.bank_agency))
+  const [accountSeq, setAccountSeq] = useState(parseBankAccountSeq(account.bank_account))
+
+  useEffect(() => {
+    setAgencySeq(parseBankAgencySeq(account.bank_agency))
+  }, [account.bank_agency])
+
+  useEffect(() => {
+    setAccountSeq(parseBankAccountSeq(account.bank_account))
+  }, [account.bank_account])
+
+  const filteredBanks = useMemo(() => {
+    const query = bankSearch.trim().toLowerCase()
+    if (!bankDropdownOpen || query.length < 3) return []
+    return banks
+      .filter((bank) => {
+        const label = formatBankLabel(bank).toLowerCase()
+        const code = String(bank.code || '').toLowerCase()
+        const fullName = String(bank.fullName || '').toLowerCase()
+        return label.includes(query) || code.includes(query) || fullName.includes(query)
+      })
+      .slice(0, 12)
+  }, [banks, bankDropdownOpen, bankSearch])
+
+  const uploadedLogo = String(account.bank_logo_data_url || '').trim()
+  const autoIcon = getBankBrandIcon(account.bank_code, account.bank_name)
+
+  async function handleLogoUpload(file: File | null) {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      onChange({
+        ...account,
+        bank_logo_data_url: String(reader.result || ''),
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div className="card" style={{ padding: '0.9rem', border: '1px solid var(--brs-gray-100)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.96))' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.9rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, border: '1px solid var(--brs-gray-200)', background: '#fff', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+            {uploadedLogo ? (
+              <img src={uploadedLogo} alt="Logo do banco" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : autoIcon ? (
+              <BankIcon bankCode={account.bank_code} bankName={account.bank_name} />
+            ) : (
+              <ImageIcon size={20} color="var(--brs-gray-400)" />
+            )}
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div style={{ fontWeight: 800, color: 'var(--brs-gray-900)' }}>Conta Bancária {account.name ? `- ${account.name}` : `#${String(account.id || '').slice(0, 6)}`}</div>
+              {account.is_principal ? (
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.25rem 0.5rem', borderRadius: 999, background: '#DCFCE7', color: '#166534' }}>
+                  Conta Principal
+                </span>
+              ) : null}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--brs-gray-500)' }}>
+              {account.bank_name || 'Selecione um banco'} {account.bank_code ? `• ${String(account.bank_code).padStart(3, '0')}` : ''}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {!account.is_principal ? (
+            <button type="button" className="btn btn-outline" onClick={onMakePrincipal}>
+              <BadgeCheck size={16} />
+              Definir como principal
+            </button>
+          ) : null}
+          <button type="button" className="btn btn-outline" onClick={onRemove}>
+            <Trash2 size={16} />
+            Remover
+          </button>
+        </div>
+      </div>
+
+      <div className="form-grid form-grid-2">
+        <div className="form-group">
+          <label className="form-label">Nome da Conta</label>
+          <input
+            className="form-control"
+            maxLength={100}
+            value={account.name || ''}
+            onChange={(e) => onChange({ ...account, name: e.target.value.slice(0, 100) })}
+            placeholder="Conta principal, reserva, folha..."
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Banco</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              className="form-control"
+              value={bankSearch}
+              onChange={(e) => {
+                const next = e.target.value
+                setBankSearch(next)
+                setBankDropdownOpen(true)
+                onChange({
+                  ...account,
+                  bank_code: '',
+                  bank_name: '',
+                  bank_ispb: '',
+                  bank_full_name: '',
+                  bank_logo_data_url: '',
+                })
+              }}
+              onFocus={() => setBankDropdownOpen(true)}
+              onBlur={() => {
+                window.setTimeout(() => setBankDropdownOpen(false), 150)
+              }}
+              placeholder={banksLoading ? 'Carregando bancos...' : 'Digite ao menos 3 caracteres'}
+            />
+            {bankSearch.trim().length > 0 && bankSearch.trim().length < 3 ? (
+              <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>Digite pelo menos 3 caracteres para buscar.</div>
+            ) : null}
+            {bankDropdownOpen ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  right: 0,
+                  zIndex: 25,
+                  background: 'var(--brs-white)',
+                  border: '1px solid var(--brs-gray-200)',
+                  borderRadius: 12,
+                  maxHeight: 240,
+                  overflowY: 'auto',
+                  boxShadow: '0 12px 40px rgba(0, 0, 0, 0.12)',
+                }}
+              >
+                {filteredBanks.map((bank) => {
+                  const label = formatBankLabel(bank)
+                  return (
+                    <button
+                      key={`${bank.code}-${bank.name}`}
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0, padding: '0.65rem 0.85rem' }}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        setBankSearch(label)
+                        setBankDropdownOpen(false)
+                        onChange({
+                          ...account,
+                          bank_code: String(bank.code || ''),
+                          bank_name: String(bank.name || '').trim(),
+                          bank_ispb: String(bank.ispb || '').trim(),
+                          bank_full_name: String(bank.fullName || '').trim(),
+                          bank_logo_data_url: '',
+                        })
+                      }}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+                {bankSearch.trim().length >= 3 && filteredBanks.length === 0 ? (
+                  <div style={{ padding: '0.75rem 0.85rem', color: 'var(--brs-gray-500)', fontSize: '0.85rem' }}>Nenhum banco encontrado.</div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Logotipo</label>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ width: 72, height: 72, borderRadius: 16, border: '1px solid var(--brs-gray-200)', background: '#fff', overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+              {uploadedLogo ? (
+                <img src={uploadedLogo} alt="Logo do banco" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : autoIcon ? (
+                <BankIcon bankCode={account.bank_code} bankName={account.bank_name} />
+              ) : (
+                <ImageIcon size={22} color="var(--brs-gray-400)" />
+              )}
+            </div>
+            <div style={{ display: 'grid', gap: '0.35rem' }}>
+              <label className="btn btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', width: 'fit-content' }}>
+                <Upload size={16} />
+                Upload do logo
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null
+                    void handleLogoUpload(file)
+                    e.currentTarget.value = ''
+                  }}
+                />
+              </label>
+              {uploadedLogo ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ width: 'fit-content' }}
+                  onClick={() => onChange({ ...account, bank_logo_data_url: '' })}
+                >
+                  Remover logo enviado
+                </button>
+              ) : null}
+              <div style={{ fontSize: '0.75rem', color: 'var(--brs-gray-400)' }}>
+                Se houver ícone público compatível, usamos automaticamente. Caso contrário, faça o upload.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Agência com dígito</label>
+          <input
+            className="form-control"
+            inputMode="numeric"
+            value={formatBankAgencyWithDigitFromSeq(agencySeq)}
+            onChange={(e) => {
+              handleDigitSequenceChange(e, agencySeq, (nextSeq) => {
+                const seq = parseBankAgencySeq(nextSeq)
+                setAgencySeq(seq)
+                onChange({ ...account, bank_agency: seq })
+              }, 5)
+            }}
+            onKeyDown={(e) => {
+              handleDigitSequenceKeyDown(e, agencySeq, (nextSeq) => {
+                const seq = parseBankAgencySeq(nextSeq)
+                setAgencySeq(seq)
+                onChange({ ...account, bank_agency: seq })
+              }, 5)
+            }}
+            onPaste={(e) => {
+              handleDigitSequencePaste(e, agencySeq, (nextSeq) => {
+                const seq = parseBankAgencySeq(nextSeq)
+                setAgencySeq(seq)
+                onChange({ ...account, bank_agency: seq })
+              }, 5)
+            }}
+            placeholder="1234-5"
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Conta com dígito</label>
+          <input
+            className="form-control"
+            inputMode="numeric"
+            value={formatBankAccountFromSeq(accountSeq)}
+            onChange={(e) => {
+              handleDigitSequenceChange(e, accountSeq, (nextSeq) => {
+                const seq = parseBankAccountSeq(nextSeq)
+                setAccountSeq(seq)
+                onChange({ ...account, bank_account: seq })
+              }, 11)
+            }}
+            onKeyDown={(e) => {
+              handleDigitSequenceKeyDown(e, accountSeq, (nextSeq) => {
+                const seq = parseBankAccountSeq(nextSeq)
+                setAccountSeq(seq)
+                onChange({ ...account, bank_account: seq })
+              }, 11)
+            }}
+            onPaste={(e) => {
+              handleDigitSequencePaste(e, accountSeq, (nextSeq) => {
+                const seq = parseBankAccountSeq(nextSeq)
+                setAccountSeq(seq)
+                onChange({ ...account, bank_account: seq })
+              }, 11)
+            }}
+            placeholder="0000000000-0"
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Tipo de Conta</label>
+          <select
+            className="form-control"
+            value={account.bank_account_type || 'Corrente'}
+            onChange={(e) => onChange({ ...account, bank_account_type: e.target.value === 'Poupança' ? 'Poupança' : 'Corrente' })}
+          >
+            <option value="Corrente">Corrente</option>
+            <option value="Poupança">Poupança</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Tipo de Chave Pix</label>
+          <select
+            className="form-control"
+            value={account.pix_type || 'cnpj'}
+            onChange={(e) => {
+              const nextType = e.target.value as CompanyBankAccount['pix_type']
+              onChange({
+                ...account,
+                pix_type: nextType,
+                pix_key:
+                  nextType === 'cnpj'
+                    ? normalizePixKeyValue(companyCnpj, 'cnpj', companyCnpj)
+                    : nextType === 'bank'
+                      ? ''
+                      : '',
+              })
+            }}
+          >
+            <option value="cnpj">CNPJ</option>
+            <option value="phone">Celular</option>
+            <option value="email">E-mail</option>
+            <option value="bank">Dados Bancários</option>
+            <option value="random">Aleatória</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Chave Pix</label>
+          {account.pix_type === 'bank' ? (
+            <div className="form-control" style={{ display: 'flex', alignItems: 'center', color: 'var(--brs-gray-500)' }}>
+              Dados bancários cadastrados
+            </div>
+          ) : (
+            <input
+              className="form-control"
+              autoComplete={account.pix_type === 'email' ? 'email' : 'off'}
+              inputMode={account.pix_type === 'phone' ? 'numeric' : account.pix_type === 'email' ? 'email' : 'text'}
+              value={
+                account.pix_type === 'cnpj'
+                  ? maskCnpj(companyCnpj)
+                  : account.pix_type === 'phone'
+                    ? maskPhone(account.pix_key || '')
+                    : account.pix_type === 'random'
+                      ? maskUuidInput(account.pix_key || '')
+                      : account.pix_type === 'email'
+                        ? maskEmailInput(account.pix_key || '')
+                        : account.pix_key || ''
+              }
+              onChange={(e) => {
+                if (account.pix_type === 'phone') {
+                  onChange({ ...account, pix_key: onlyDigits(e.target.value).slice(0, 11) })
+                  return
+                }
+                if (account.pix_type === 'random') {
+                  onChange({ ...account, pix_key: maskUuidInput(e.target.value) })
+                  return
+                }
+                if (account.pix_type === 'email') {
+                  onChange({ ...account, pix_key: maskEmailInput(e.target.value) })
+                  return
+                }
+                onChange({ ...account, pix_key: e.target.value })
+              }}
+              onBlur={(e) =>
+                onChange({
+                  ...account,
+                  pix_key: normalizePixKeyValue(e.target.value, String(account.pix_type || 'cnpj'), companyCnpj),
+                })
+              }
+              placeholder={
+                account.pix_type === 'random'
+                  ? '123e4567-e89b-12d3-a456-426614174000'
+                  : account.pix_type === 'phone'
+                    ? '(99) 99999-9999'
+                    : account.pix_type === 'email'
+                      ? 'nome@dominio.com'
+                      : maskCnpj(companyCnpj)
+              }
+            />
+          )}
+        </div>
+
+        <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+          <label style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', marginTop: '0.55rem' }}>
+            <input
+              type="checkbox"
+              checked={!!account.is_principal}
+              onChange={(e) => {
+                if (e.target.checked) onMakePrincipal()
+              }}
+            />
+            Conta principal
+          </label>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function PersonSection({
@@ -265,6 +793,8 @@ function PersonSection({
 export default function CompanyProfilesPage() {
   const [items, setItems] = useState<CompanyProfileRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [banks, setBanks] = useState<BankLookup[]>([])
+  const [banksLoading, setBanksLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [searching, setSearching] = useState<Record<string, boolean>>({})
   const [view, setView] = useState<'list' | 'edit'>('list')
@@ -274,6 +804,19 @@ export default function CompanyProfilesPage() {
   async function loadData() {
     setLoading(true)
     try {
+      if (!banks.length && !banksLoading) {
+        setBanksLoading(true)
+        try {
+          const banksRes = await fetch('/api/lookups/banks')
+          if (banksRes.ok) {
+            const banksData = await banksRes.json()
+            setBanks(Array.isArray(banksData?.banks) ? banksData.banks : [])
+          }
+        } finally {
+          setBanksLoading(false)
+        }
+      }
+
       const res = await getCompanyProfiles()
       if (res.success) {
         const rows = ((res.companies as any[]) || []).map(normalizeProfile)
@@ -289,12 +832,79 @@ export default function CompanyProfilesPage() {
   }
 
   useEffect(() => {
+    // Initial load needs client-side state updates after fetching.
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
     loadData()
-  }, [])
+    }, [])
 
   const canSave = useMemo(() => {
     return !!selected?.nickname?.trim()
   }, [selected?.nickname])
+
+  const bankAccounts = useMemo(() => {
+    return Array.isArray(selected?.company_data?.bank_accounts) ? selected?.company_data?.bank_accounts : []
+  }, [selected?.company_data?.bank_accounts])
+
+  function syncBankAccounts(nextAccounts: CompanyBankAccount[]) {
+    setSelected((prev) => {
+      if (!prev) return prev
+      const nextCompanyData = normalizeCompanyBankAccounts(
+        {
+          ...(prev.company_data || {}),
+          bank_accounts: nextAccounts,
+        },
+        String(prev.cnpj || ''),
+      )
+      return {
+        ...prev,
+        company_data: {
+          ...(prev.company_data || {}),
+          ...nextCompanyData,
+        },
+      }
+    })
+  }
+
+  function updateBankAccount(index: number, nextAccount: CompanyBankAccount) {
+    const next = [...bankAccounts]
+    next[index] = nextAccount
+    if (!next.some((account) => account.is_principal)) {
+      next[0] = { ...next[0], is_principal: true }
+    }
+    syncBankAccounts(next)
+  }
+
+  function addBankAccount() {
+    const next = [
+      ...bankAccounts,
+      createEmptyBankAccount({
+        id: `bank-${Date.now()}`,
+        is_principal: bankAccounts.length === 0,
+      }),
+    ]
+    if (!next.some((account) => account.is_principal)) {
+      next[0] = { ...next[0], is_principal: true }
+    }
+    syncBankAccounts(next)
+  }
+
+  function removeBankAccount(index: number) {
+    const next = bankAccounts.filter((_, currentIndex) => currentIndex !== index)
+    if (!next.length) {
+      next.push(createEmptyBankAccount({ is_principal: true }))
+    } else if (!next.some((account) => account.is_principal)) {
+      next[0] = { ...next[0], is_principal: true }
+    }
+    syncBankAccounts(next)
+  }
+
+  function makePrincipalBankAccount(index: number) {
+    const next = bankAccounts.map((account, currentIndex) => ({
+      ...account,
+      is_principal: currentIndex === index,
+    }))
+    syncBankAccounts(next)
+  }
 
   async function fillCompanyByCnpj() {
     if (!selected) return
@@ -621,11 +1231,6 @@ export default function CompanyProfilesPage() {
               <div className="form-group"><label className="form-label">Complemento</label><input className="form-control" value={selected?.company_data?.address_complement || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), address_complement: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">E-mail Principal</label><input type="email" className="form-control" value={selected?.company_data?.email_principal || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), email_principal: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">Telefone Principal</label><input className="form-control" value={maskPhone(selected?.company_data?.phone_principal || '')} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), phone_principal: onlyDigits(e.target.value) } } : prev)} /></div>
-              <div className="form-group"><label className="form-label">Banco Principal</label><input className="form-control" value={selected?.company_data?.bank_name || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), bank_name: e.target.value } } : prev)} /></div>
-              <div className="form-group"><label className="form-label">Agência</label><input className="form-control" value={selected?.company_data?.bank_agency || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), bank_agency: e.target.value } } : prev)} /></div>
-              <div className="form-group"><label className="form-label">Conta Corrente</label><input className="form-control" value={selected?.company_data?.bank_account || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), bank_account: e.target.value } } : prev)} /></div>
-              <div className="form-group"><label className="form-label">Tipo de Chave Pix</label><select className="form-control" value={selected?.company_data?.pix_type || 'cnpj'} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), pix_type: e.target.value as any } } : prev)}><option value="cnpj">CNPJ</option><option value="bank">Dados Bancários</option><option value="email">E-mail</option><option value="phone">Telefone</option><option value="random">Aleatória</option></select></div>
-              <div className="form-group"><label className="form-label">Chave Pix</label><input className="form-control" value={selected?.company_data?.pix_key || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), pix_key: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">Latitude</label><input className="form-control" value={selected?.company_data?.latitude || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), latitude: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">Longitude</label><input className="form-control" value={selected?.company_data?.longitude || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), longitude: e.target.value } } : prev)} /></div>
               <div className="form-group"><label className="form-label">Site</label><input className="form-control" value={selected?.company_data?.site || ''} onChange={(e) => setSelected((prev) => prev ? { ...prev, company_data: { ...(prev.company_data || {}), site: e.target.value } } : prev)} /></div>
@@ -667,6 +1272,42 @@ export default function CompanyProfilesPage() {
             onFetchCpf={() => fillPersonByCpf('witness')}
             onFetchCep={() => fillAddressByCep('witness')}
           />
+
+          <div className="card" style={{ padding: '1rem', border: '1px solid var(--brs-gray-100)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '0.9rem', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontWeight: 800, color: 'var(--brs-gray-900)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Banknote size={18} />
+                  Contas Bancárias
+                </div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--brs-gray-500)' }}>
+                  Cadastre uma ou mais contas da empresa. Apenas uma pode ser principal.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: '0.9rem' }}>
+              {bankAccounts.map((account, index) => (
+                <CompanyBankAccountCard
+                  key={account.id || index}
+                  account={account}
+                  companyCnpj={String(selected?.cnpj || '')}
+                  banks={banks}
+                  banksLoading={banksLoading}
+                  onChange={(next) => updateBankAccount(index, next)}
+                  onRemove={() => removeBankAccount(index)}
+                  onMakePrincipal={() => makePrincipalBankAccount(index)}
+                />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.9rem' }}>
+              <button type="button" className="btn btn-primary" onClick={addBankAccount}>
+                <Plus size={16} />
+                Nova Conta Bancária
+              </button>
+            </div>
+          </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
             <button type="button" className="btn btn-outline" onClick={() => setView('list')}>
