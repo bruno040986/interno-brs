@@ -1,4 +1,4 @@
-import { siMercadopago, siNeon, siNubank, siPicpay } from 'simple-icons'
+﻿import { siMercadopago, siNeon, siNubank, siPicpay } from 'simple-icons'
 
 export type BankLookup = {
   code?: number | string
@@ -308,3 +308,4 @@ export function normalizePrincipalBankAccount(companyData: CompanyDataWithBankAc
     pix_key: String(normalizePixKeyValue(String(principal?.pix_key || normalized.pix_key || ''), String(principal?.pix_type || normalized.pix_type || 'cnpj'), companyCnpj)),
   }
 }
+

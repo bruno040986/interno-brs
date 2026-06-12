@@ -9,8 +9,27 @@ import {
   requirePermission as requireServerPermission,
 } from '@/lib/auth/server'
 import { registerAgentDomain } from '@/lib/vercel/register-domain'
-import { type PermissionAction, type PermissionRequirement } from '@/lib/auth/permissions'
+import { systemConfigRouteOptions, type PermissionAction, type PermissionRequirement } from '@/lib/auth/permissions'
 import { normalizeCompanyBankAccounts } from '@/lib/company-bank-accounts'
+import { normalizeCompanyFiscalData } from '@/lib/company-fiscal-data'
+import {
+  createEmptyTaxRegimeConfiguration,
+  normalizeTaxRegimeRecord,
+  normalizeTaxRegimeVersion,
+  sortTaxRegimeVersions,
+  type TaxRegimeConfiguration,
+  type TaxRegimeRecord,
+  type TaxRegimeVersionRecord,
+} from '@/lib/tax-regimes'
+import { normalizeCommercialTypeName, type CommercialTypeRecord } from '@/lib/commercial-types'
+import { normalizeCnaeCodeDigits, normalizeCnaeDescription, type CnaeRecord } from '@/lib/cnaes'
+import { normalizeCtnCodeDigits, normalizeCtnDescription, type CtnRecord } from '@/lib/ctns'
+import { normalizeNbsCodeDigits, normalizeNbsDescription, type NbsRecord } from '@/lib/nbs'
+import { normalizeCompanySectorName, type CompanySectorRecord } from '@/lib/company-sectors'
+import { normalizeNfseEmissionTypeName, type NfseEmissionTypeRecord } from '@/lib/nfse-emission-types'
+import { normalizeReceiptMethodName, type ReceiptMethodRecord } from '@/lib/receipt-methods'
+import { normalizeRemunerationTypeName, type RemunerationTypeRecord } from '@/lib/remuneration-types'
+import { normalizeSystemTypeName, type SystemTypeRecord } from '@/lib/system-types'
 
 // Inicialização do cliente Supabase Admin para operações privilegiadas
 const supabaseAdmin = createClient(
@@ -1036,11 +1055,15 @@ export async function saveCompanyProfile(payload: CompanyProfileRow) {
     await requirePermission('sistema-config-empresa', payload.id ? 'can_edit' : 'can_include')
 
     const companyData = normalizeCompanyBankAccounts(payload.company_data ?? {}, String(payload.cnpj || ''))
+    const fiscalData = normalizeCompanyFiscalData((companyData as Record<string, any>).fiscal_data)
     const row: any = {
       nickname: String(payload.nickname || '').trim(),
       is_active: payload.is_active !== false,
       cnpj: sanitizeDigits(payload.cnpj || '') || null,
-      company_data: companyData,
+      company_data: {
+        ...companyData,
+        fiscal_data: fiscalData,
+      },
       partner_primary_data: payload.partner_primary_data ?? {},
       partner_secondary_data: payload.partner_secondary_data ?? {},
       witness_data: payload.witness_data ?? {},
@@ -1137,7 +1160,1114 @@ export async function deleteCompanyProfile(id: string) {
 }
 
 // =========================================================================
-// 7. Construtor de Processos (Workflow / Kanban por tipo de processo)
+// 7. Tipos de Comercial
+// =========================================================================
+
+export async function getCommercialTypes() {
+  try {
+    await requirePermission('sistema-config-comercial-tipos')
+
+    const { data, error } = await supabaseAdmin
+      .from('commercial_types')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('name', { ascending: true })
+    if (error) throw error
+    return { success: true, types: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar tipos de comercial:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getActiveCommercialTypes() {
+  try {
+    const res = await getCommercialTypes()
+    if (!res.success) return res
+    return {
+      success: true,
+      types: (res.types || []).filter((item: CommercialTypeRecord) => !!item.is_active && !item.deleted_at),
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveCommercialType(payload: CommercialTypeRecord) {
+  try {
+    await requirePermission('sistema-config-comercial-tipos', payload.id ? 'can_edit' : 'can_include')
+
+    const name = normalizeCommercialTypeName(payload.name)
+    if (!name) {
+      return { success: false, error: 'O nome do tipo de comercial é obrigatório.' }
+    }
+
+    const row = {
+      name,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('commercial_types')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('commercial_types')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/tipos-comercial')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar tipo de comercial:', error)
+    if (String(error?.message || '').includes("Could not find the 'commercial_types'")) {
+      return {
+        success: false,
+        error:
+          "A tabela 'commercial_types' ainda não existe. Aplique a migration do Supabase criada para Tipos de Comercial.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um tipo de comercial com esse nome.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setCommercialTypeStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-comercial-tipos', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('commercial_types')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/tipos-comercial')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status do tipo de comercial:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getCompanySectors() {
+  try {
+    await requirePermission('sistema-config-setores')
+
+    const { data, error } = await supabaseAdmin
+      .from('company_sectors')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('name', { ascending: true })
+    if (error) throw error
+    return { success: true, sectors: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar setores:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveCompanySector(payload: CompanySectorRecord) {
+  try {
+    await requirePermission('sistema-config-setores', payload.id ? 'can_edit' : 'can_include')
+
+    const name = normalizeCompanySectorName(payload.name)
+    if (!name) {
+      return { success: false, error: 'O nome do setor é obrigatório.' }
+    }
+
+    const row = {
+      name,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('company_sectors')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('company_sectors')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/setores')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar setor:', error)
+    if (String(error?.message || '').includes("Could not find the 'company_sectors'")) {
+      return {
+        success: false,
+        error:
+          "A tabela 'company_sectors' ainda não existe. Aplique a migration do Supabase criada para Setores.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um setor com esse nome.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setCompanySectorStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-setores', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('company_sectors')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/setores')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status do setor:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// =========================================================================
+// 8. CNAEs
+// =========================================================================
+
+export async function getCnaes() {
+  try {
+    await requirePermission('sistema-config-cnae')
+
+    const { data, error } = await supabaseAdmin
+      .from('cnaes')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('code', { ascending: true })
+    if (error) throw error
+    return { success: true, cnaes: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar CNAEs:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveCnae(payload: CnaeRecord) {
+  try {
+    await requirePermission('sistema-config-cnae', payload.id ? 'can_edit' : 'can_include')
+
+    const code = normalizeCnaeCodeDigits(payload.code)
+    const description = normalizeCnaeDescription(payload.description)
+
+    if (code.length !== 7) {
+      return { success: false, error: 'O código do CNAE deve conter 7 dígitos.' }
+    }
+    if (!description) {
+      return { success: false, error: 'A descrição do CNAE é obrigatória.' }
+    }
+
+    const row = {
+      code,
+      description,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('cnaes')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('cnaes')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/cnae')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar CNAE:', error)
+    if (String(error?.message || '').includes("Could not find the 'cnaes'")) {
+      return {
+        success: false,
+        error: "A tabela 'cnaes' ainda não existe. Aplique a migration do Supabase criada para CNAE.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um CNAE com esse código.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setCnaeStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-cnae', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('cnaes')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/cnae')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status do CNAE:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// =========================================================================
+// 7B. CTNs
+// =========================================================================
+
+export async function getCtns() {
+  try {
+    await requirePermission('sistema-config-ctn')
+
+    const { data, error } = await supabaseAdmin
+      .from('ctns')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('code', { ascending: true })
+    if (error) throw error
+    return { success: true, ctns: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar CTNs:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveCtn(payload: CtnRecord) {
+  try {
+    await requirePermission('sistema-config-ctn', payload.id ? 'can_edit' : 'can_include')
+
+    const code = normalizeCtnCodeDigits(payload.code)
+    const description = normalizeCtnDescription(payload.description)
+
+    if (code.length !== 6) {
+      return { success: false, error: 'O código do CTN deve conter 6 dígitos.' }
+    }
+    if (!description) {
+      return { success: false, error: 'A descrição do CTN é obrigatória.' }
+    }
+
+    const row = {
+      code,
+      description,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('ctns')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('ctns')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/ctn')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar CTN:', error)
+    if (String(error?.message || '').includes("Could not find the 'ctns'")) {
+      return {
+        success: false,
+        error: "A tabela 'ctns' ainda não existe. Aplique a migration do Supabase criada para CTN.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um CTN com esse código.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setCtnStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-ctn', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('ctns')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/ctn')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status do CTN:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// =========================================================================
+// 7C. NBSes
+// =========================================================================
+
+export async function getNbses() {
+  try {
+    await requirePermission('sistema-config-nbs')
+
+    const { data, error } = await supabaseAdmin
+      .from('nbses')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('code', { ascending: true })
+    if (error) throw error
+    return { success: true, nbses: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar NBSes:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveNbs(payload: NbsRecord) {
+  try {
+    await requirePermission('sistema-config-nbs', payload.id ? 'can_edit' : 'can_include')
+
+    const code = normalizeNbsCodeDigits(payload.code)
+    const description = normalizeNbsDescription(payload.description)
+
+    if (code.length !== 9) {
+      return { success: false, error: 'O cÃ³digo do NBS deve conter 9 dÃ­gitos.' }
+    }
+    if (!description) {
+      return { success: false, error: 'A descriÃ§Ã£o do NBS Ã© obrigatÃ³ria.' }
+    }
+
+    const row = {
+      code,
+      description,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('nbses')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('nbses')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/nbs')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar NBS:', error)
+    if (String(error?.message || '').includes("Could not find the 'nbses'")) {
+      return {
+        success: false,
+        error: "A tabela 'nbses' ainda não existe. Aplique a migration do Supabase criada para NBS.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um NBS com esse código.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setNbsStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-nbs', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('nbses')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/nbs')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status do NBS:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getNfseEmissionTypes() {
+  try {
+    await requirePermission('sistema-config-nfse-emissao')
+
+    const { data, error } = await supabaseAdmin
+      .from('nfse_emission_types')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('name', { ascending: true })
+    if (error) throw error
+    return { success: true, items: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar tipos de emissão de NFSe:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveNfseEmissionType(payload: NfseEmissionTypeRecord) {
+  try {
+    await requirePermission('sistema-config-nfse-emissao', payload.id ? 'can_edit' : 'can_include')
+
+    const name = normalizeNfseEmissionTypeName(payload.name)
+    if (!name) {
+      return { success: false, error: 'O nome do tipo de emissão de NFSe é obrigatório.' }
+    }
+
+    const row = {
+      name,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('nfse_emission_types')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('nfse_emission_types')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/tipos-emissao-nfse')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar tipo de emissão de NFSe:', error)
+    if (String(error?.message || '').includes("Could not find the 'nfse_emission_types'")) {
+      return {
+        success: false,
+        error:
+          "A tabela 'nfse_emission_types' ainda não existe. Aplique a migration do Supabase criada para Tipo de Emissão de NFSe.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um tipo de emissão de NFSe com esse nome.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setNfseEmissionTypeStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-nfse-emissao', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('nfse_emission_types')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/tipos-emissao-nfse')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status do tipo de emissão de NFSe:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getReceiptMethods() {
+  try {
+    await requirePermission('sistema-config-formas-recebimento')
+
+    const { data, error } = await supabaseAdmin
+      .from('receipt_methods')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('name', { ascending: true })
+    if (error) throw error
+    return { success: true, items: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar formas de recebimento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveReceiptMethod(payload: ReceiptMethodRecord) {
+  try {
+    await requirePermission('sistema-config-formas-recebimento', payload.id ? 'can_edit' : 'can_include')
+
+    const name = normalizeReceiptMethodName(payload.name)
+    if (!name) {
+      return { success: false, error: 'O nome da forma de recebimento é obrigatório.' }
+    }
+
+    const row = {
+      name,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('receipt_methods')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('receipt_methods')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/formas-recebimento')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar forma de recebimento:', error)
+    if (String(error?.message || '').includes("Could not find the 'receipt_methods'")) {
+      return {
+        success: false,
+        error:
+          "A tabela 'receipt_methods' ainda não existe. Aplique a migration do Supabase criada para Formas de Recebimento.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe uma forma de recebimento com esse nome.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setReceiptMethodStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-formas-recebimento', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('receipt_methods')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/formas-recebimento')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status da forma de recebimento:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getSystemTypes() {
+  try {
+    await requirePermission('sistema-config-tipos-sistemas')
+
+    const { data, error } = await supabaseAdmin
+      .from('system_types')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('name', { ascending: true })
+    if (error) throw error
+    return { success: true, types: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar tipos de sistemas:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveSystemType(payload: SystemTypeRecord) {
+  try {
+    await requirePermission('sistema-config-tipos-sistemas', payload.id ? 'can_edit' : 'can_include')
+
+    const name = normalizeSystemTypeName(payload.name)
+    if (!name) {
+      return { success: false, error: 'O nome do tipo de sistema é obrigatório.' }
+    }
+
+    const row = {
+      name,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('system_types')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('system_types')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/tipos-sistemas')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar tipo de sistema:', error)
+    if (String(error?.message || '').includes("Could not find the 'system_types'")) {
+      return {
+        success: false,
+        error:
+          "A tabela 'system_types' ainda não existe. Aplique a migration do Supabase criada para Tipos de Sistemas.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um tipo de sistema com esse nome.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setSystemTypeStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-tipos-sistemas', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('system_types')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/tipos-sistemas')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status do tipo de sistema:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+function normalizeDateOnly(value: string) {
+  const raw = String(value || '').trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : ''
+}
+
+function shiftDateByDays(value: string, days: number) {
+  const normalized = normalizeDateOnly(value)
+  if (!normalized) return ''
+  const date = new Date(`${normalized}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function normalizeTaxRegimeName(value: string) {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function pickActiveTaxRegimeVersion(versions: TaxRegimeVersionRecord[]) {
+  return versions.find((version) => version.effective_to === null) || versions[0] || null
+}
+
+async function fetchTaxRegimePayloads(regimeIds?: string[]) {
+  const regimesQuery = supabaseAdmin.from('tax_regimes').select('*').order('name', { ascending: true })
+  const versionsQuery = supabaseAdmin.from('tax_regime_versions').select('*').order('effective_from', { ascending: false })
+
+  if (regimeIds?.length) {
+    regimesQuery.in('id', regimeIds)
+    versionsQuery.in('tax_regime_id', regimeIds)
+  }
+
+  const [regimesRes, versionsRes] = await Promise.all([regimesQuery, versionsQuery])
+  const firstError = regimesRes.error || versionsRes.error
+  if (firstError) throw firstError
+
+  const groupedVersions = new Map<string, TaxRegimeVersionRecord[]>()
+  for (const rawVersion of (versionsRes.data || []) as unknown[]) {
+    const version = normalizeTaxRegimeVersion(rawVersion)
+    const taxRegimeId = String(version.tax_regime_id || '')
+    if (!taxRegimeId) continue
+    const list = groupedVersions.get(taxRegimeId) || []
+    list.push(version)
+    groupedVersions.set(taxRegimeId, list)
+  }
+
+  const regimes = ((regimesRes.data || []) as unknown[]).map((rawRegime) => {
+    const normalized = normalizeTaxRegimeRecord(rawRegime)
+    const versions = sortTaxRegimeVersions(groupedVersions.get(String(normalized.id || '')) || [])
+    const currentVersion = pickActiveTaxRegimeVersion(versions)
+    return {
+      ...normalized,
+      versions,
+      current_version: currentVersion,
+    }
+  })
+
+  return regimes
+}
+
+export async function getTaxRegimes() {
+  try {
+    await requireAny(systemConfigRouteOptions)
+    const regimes = await fetchTaxRegimePayloads()
+    return { success: true, regimes }
+  } catch (error: any) {
+    console.error('Erro ao buscar regimes tributários:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getTaxRegime(id: string) {
+  try {
+    await requireAny(systemConfigRouteOptions)
+
+    if (!id || id === 'novo') {
+      return { success: true, regime: null }
+    }
+
+    const regimes = await fetchTaxRegimePayloads([id])
+    return { success: true, regime: regimes[0] || null }
+  } catch (error: any) {
+    console.error('Erro ao buscar regime tributário:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveTaxRegime(payload: {
+  id?: string
+  name: string
+  create_new_version?: boolean
+  version: TaxRegimeVersionRecord
+}) {
+  try {
+    await requireAny(systemConfigRouteOptions)
+
+    const name = normalizeTaxRegimeName(payload.name)
+    if (!name) {
+      return { success: false, error: 'Informe o nome do regime tributário.' }
+    }
+
+    const version = normalizeTaxRegimeVersion(payload.version)
+    const effectiveFrom = normalizeDateOnly(version.effective_from)
+    if (!effectiveFrom) {
+      return { success: false, error: 'Informe a data de vigência inicial.' }
+    }
+
+    const config = version.config || createEmptyTaxRegimeConfiguration()
+    const now = new Date().toISOString()
+
+    let regimeId = payload.id || ''
+    if (regimeId) {
+      const { error: updateNameError } = await supabaseAdmin
+        .from('tax_regimes')
+        .update({
+          name,
+          updated_at: now,
+        })
+        .eq('id', regimeId)
+      if (updateNameError) throw updateNameError
+    } else {
+      const { data, error: insertRegimeError } = await supabaseAdmin
+        .from('tax_regimes')
+        .insert({
+          name,
+          created_at: now,
+          updated_at: now,
+        })
+        .select('id')
+        .single()
+      if (insertRegimeError) throw insertRegimeError
+      regimeId = String(data?.id || '')
+    }
+
+    if (!regimeId) {
+      return { success: false, error: 'Não foi possível identificar o regime tributário salvo.' }
+    }
+
+    if (payload.create_new_version) {
+      const { data: currentVersion, error: currentVersionError } = await supabaseAdmin
+        .from('tax_regime_versions')
+        .select('id, effective_from, locked_at, effective_to')
+        .eq('tax_regime_id', regimeId)
+        .is('effective_to', null)
+        .maybeSingle()
+      if (currentVersionError) throw currentVersionError
+
+      if (currentVersion?.locked_at) {
+        return { success: false, error: 'A vigência atual está bloqueada e não pode ser alterada.' }
+      }
+
+      if (currentVersion?.effective_from && effectiveFrom <= String(currentVersion.effective_from)) {
+        return { success: false, error: 'A nova vigência deve iniciar após a vigência atual.' }
+      }
+
+      if (currentVersion?.id) {
+        const previousEndDate = shiftDateByDays(effectiveFrom, -1)
+        const { error: closeError } = await supabaseAdmin
+          .from('tax_regime_versions')
+          .update({
+            effective_to: previousEndDate || null,
+            updated_at: now,
+          })
+          .eq('id', currentVersion.id)
+        if (closeError) throw closeError
+      }
+
+      const { error: insertVersionError } = await supabaseAdmin.from('tax_regime_versions').insert({
+        tax_regime_id: regimeId,
+        effective_from: effectiveFrom,
+        effective_to: null,
+        locked_at: null,
+        config,
+        created_at: now,
+        updated_at: now,
+      })
+      if (insertVersionError) throw insertVersionError
+    } else if (payload.id && version.id) {
+      const { data: existingVersion, error: existingVersionError } = await supabaseAdmin
+        .from('tax_regime_versions')
+        .select('id, effective_to, locked_at, tax_regime_id')
+        .eq('id', version.id)
+        .maybeSingle()
+      if (existingVersionError) throw existingVersionError
+
+      if (!existingVersion) {
+        return { success: false, error: 'A vigência informada não foi encontrada.' }
+      }
+      if (existingVersion.locked_at) {
+        return { success: false, error: 'A vigência está bloqueada e não pode ser alterada.' }
+      }
+      if (existingVersion.effective_to !== null) {
+        return { success: false, error: 'Somente a vigência ativa pode ser alterada.' }
+      }
+
+      const { error: updateVersionError } = await supabaseAdmin
+        .from('tax_regime_versions')
+        .update({
+          effective_from: effectiveFrom,
+          config,
+          updated_at: now,
+        })
+        .eq('id', version.id)
+      if (updateVersionError) throw updateVersionError
+    } else {
+      const { error: insertVersionError } = await supabaseAdmin.from('tax_regime_versions').insert({
+        tax_regime_id: regimeId,
+        effective_from: effectiveFrom,
+        effective_to: null,
+        locked_at: null,
+        config,
+        created_at: now,
+        updated_at: now,
+      })
+      if (insertVersionError) throw insertVersionError
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/regimes-tributarios')
+    if (regimeId) revalidatePath(`/rh/parceiros/config/provedores/regimes-tributarios/${regimeId}`)
+    revalidatePath('/rh/parceiros/config/provedores/recalculo-tributario')
+    return { success: true, id: regimeId }
+  } catch (error: any) {
+    console.error('Erro ao salvar regime tributário:', error)
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um regime tributário com esse nome ou vigência.' }
+    }
+    if (String(error?.message || '').includes("Could not find the 'tax_regimes'")) {
+      return {
+        success: false,
+        error: "A tabela 'tax_regimes' ainda não existe. Aplique a migration do Supabase criada para Regimes Tributários.",
+      }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getRemunerationTypes() {
+  try {
+    await requirePermission('sistema-config-tipos-remuneracao')
+
+    const { data, error } = await supabaseAdmin
+      .from('remuneration_types')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('name', { ascending: true })
+    if (error) throw error
+    return { success: true, types: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar tipos de remuneração:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveRemunerationType(payload: RemunerationTypeRecord) {
+  try {
+    await requirePermission('sistema-config-tipos-remuneracao', payload.id ? 'can_edit' : 'can_include')
+
+    const name = normalizeRemunerationTypeName(payload.name)
+    if (!name) {
+      return { success: false, error: 'O nome do tipo de remuneração é obrigatório.' }
+    }
+
+    const row = {
+      name,
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('remuneration_types')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('remuneration_types')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/tipos-remuneracao')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar tipo de remuneração:', error)
+    if (String(error?.message || '').includes("Could not find the 'remuneration_types'")) {
+      return {
+        success: false,
+        error:
+          "A tabela 'remuneration_types' ainda não existe. Aplique a migration do Supabase criada para Tipos de Remuneração.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe um tipo de remuneração com esse nome.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setRemunerationTypeStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-tipos-remuneracao', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('remuneration_types')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/rh/parceiros/config/provedores/tipos-remuneracao')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status do tipo de remuneração:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// =========================================================================
+// 8. Construtor de Processos (Workflow / Kanban por tipo de processo)
 // =========================================================================
 
 type ProcessModelRow = {

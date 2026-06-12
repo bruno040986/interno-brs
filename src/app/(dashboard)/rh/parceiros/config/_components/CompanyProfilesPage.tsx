@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { archiveCompanyProfile, getCompanyProfiles, saveCompanyProfile } from '../../actions'
 import { AlertCircle, BadgeCheck, Banknote, Building2, CheckCircle, ImageIcon, Loader2, Plus, Save, Trash2, Upload } from 'lucide-react'
+import CompanyFiscalDataCard from './CompanyFiscalDataCard'
 import {
   createEmptyBankAccount,
   formatBankAccountFromSeq,
@@ -23,6 +24,11 @@ import {
   type BankLookup,
   type CompanyBankAccount,
 } from '@/lib/company-bank-accounts'
+import {
+  createEmptyCompanyFiscalData,
+  normalizeCompanyFiscalData,
+  type CompanyFiscalData,
+} from '@/lib/company-fiscal-data'
 
 type PersonData = {
   cpf?: string
@@ -70,6 +76,7 @@ type CompanyData = {
   bank_account_type?: 'Corrente' | 'Poupança'
   pix_type?: 'cnpj' | 'bank' | 'email' | 'phone' | 'random'
   pix_key?: string
+  fiscal_data?: CompanyFiscalData
   latitude?: string
   longitude?: string
   site?: string
@@ -110,6 +117,8 @@ const EMPTY_PERSON: PersonData = {
   email_signature: '',
 }
 
+const EMPTY_FISCAL_DATA = createEmptyCompanyFiscalData()
+
 const EMPTY_PROFILE: CompanyProfileRow = {
   nickname: '',
   is_active: true,
@@ -144,6 +153,7 @@ const EMPTY_PROFILE: CompanyProfileRow = {
     bank_account_type: 'Corrente',
     pix_type: 'cnpj',
     pix_key: '',
+    fiscal_data: EMPTY_FISCAL_DATA,
     latitude: '',
     longitude: '',
     site: '',
@@ -170,12 +180,13 @@ function normalizeProfile(
   },
 ): CompanyProfileRow {
   const normalizedCompanyData = normalizeCompanyBankAccounts(raw?.company_data || {}, String(raw?.cnpj || ''))
+  const fiscalData = normalizeCompanyFiscalData((normalizedCompanyData as CompanyData)?.fiscal_data)
   return {
     id: raw?.id,
     nickname: String(raw?.nickname || ''),
     is_active: raw?.is_active !== false,
     cnpj: String(raw?.cnpj || ''),
-    company_data: { ...EMPTY_PROFILE.company_data, ...normalizedCompanyData },
+    company_data: { ...EMPTY_PROFILE.company_data, ...normalizedCompanyData, fiscal_data: fiscalData },
     partner_primary_data: { ...EMPTY_PERSON, ...(raw?.partner_primary_data || {}) },
     partner_secondary_data: { ...EMPTY_PERSON, ...(raw?.partner_secondary_data || {}) },
     witness_data: { ...EMPTY_PERSON, ...(raw?.witness_data || {}) },
@@ -800,6 +811,11 @@ export default function CompanyProfilesPage() {
   const [view, setView] = useState<'list' | 'edit'>('list')
   const [selected, setSelected] = useState<CompanyProfileRow | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const selectedRef = useRef<CompanyProfileRow | null>(null)
+
+  useEffect(() => {
+    selectedRef.current = selected
+  }, [selected])
 
   async function loadData() {
     setLoading(true)
@@ -840,6 +856,28 @@ export default function CompanyProfilesPage() {
   const canSave = useMemo(() => {
     return !!selected?.nickname?.trim()
   }, [selected?.nickname])
+
+  function updateSelectedCompanyData(nextFiscalData: CompanyFiscalData) {
+    if (!selectedRef.current) return
+    const next = {
+      ...selectedRef.current,
+      company_data: {
+        ...(selectedRef.current.company_data || {}),
+        fiscal_data: nextFiscalData,
+      },
+    }
+    selectedRef.current = next
+    setSelected(next)
+  }
+
+  async function saveCurrentSelectedProfile() {
+    const current = selectedRef.current
+    if (!current?.id) return
+    const res = await saveCompanyProfile(current)
+    if (!res.success) {
+      setMessage({ type: 'error', text: res.error || 'Erro ao salvar dados fiscais.' })
+    }
+  }
 
   const bankAccounts = useMemo(() => {
     return Array.isArray(selected?.company_data?.bank_accounts) ? selected?.company_data?.bank_accounts : []
@@ -1308,6 +1346,12 @@ export default function CompanyProfilesPage() {
               </button>
             </div>
           </div>
+
+          <CompanyFiscalDataCard
+            value={(selected?.company_data?.fiscal_data || EMPTY_FISCAL_DATA) as CompanyFiscalData}
+            onChange={updateSelectedCompanyData}
+            onAutoSave={saveCurrentSelectedProfile}
+          />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
             <button type="button" className="btn btn-outline" onClick={() => setView('list')}>
