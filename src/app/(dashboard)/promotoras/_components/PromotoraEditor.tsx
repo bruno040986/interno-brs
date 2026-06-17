@@ -904,7 +904,7 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
       setBanks(Array.isArray(bankRes?.banks) ? bankRes.banks : [])
 
       if (itemRes.success) {
-        setItem(itemRes.item || null)
+        if (itemRes.item) setItem(itemRes.item)
       } else {
         setMessage({ type: 'error', text: 'Erro ao carregar promotora.' })
       }
@@ -963,8 +963,6 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
         systems: [],
         is_active: true,
       })
-      setLoading(false)
-      return
     }
 
     loadData()
@@ -1377,7 +1375,7 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
                 <option value="">Selecione</option>
                 {lookups?.companies?.map((company) => (
                   <option key={company.id} value={company.id}>
-                    {company.nickname}{company.is_active ? '' : ' (Inativa)'}
+                    {company.display_name}{company.is_active ? '' : ' (Inativa)'}
                   </option>
                 ))}
               </select>

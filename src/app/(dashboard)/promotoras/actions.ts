@@ -17,7 +17,14 @@ const supabaseAdmin = createClient(
 )
 
 export type PromotoraLookupPayload = {
-  companies: Array<{ id: string; nickname: string; cnpj: string | null; is_active: boolean; company_data?: any }>
+  companies: Array<{
+    id: string
+    nickname: string
+    display_name: string
+    cnpj: string | null
+    is_active: boolean
+    company_data?: any
+  }>
   commercialTypes: Array<{ id: string; name: string; is_active: boolean }>
   sectors: Array<{ id: string; name: string; is_active: boolean }>
   nfseEmissionTypes: Array<{ id: string; name: string; is_active: boolean }>
@@ -25,6 +32,15 @@ export type PromotoraLookupPayload = {
   receiptMethods: Array<{ id: string; name: string; is_active: boolean }>
   systemTypes: Array<{ id: string; name: string; is_active: boolean }>
   financialInstitutions: Array<{ id: string; name: string; logo_url: string; is_active: boolean }>
+}
+
+async function safeLookup<T>(query: PromiseLike<{ data: T | null; error: any } | { data: T | null; error: any }>) {
+  try {
+    const res = await query
+    return { data: res.data || null, error: res.error || null }
+  } catch (error: any) {
+    return { data: null, error }
+  }
 }
 
 function validateFinancialConfigurations(payload: PromotoraRecord) {
@@ -105,21 +121,43 @@ export async function getPromotoraLookups() {
     await requirePermission('promotoras')
 
     const [companiesRes, commercialRes, sectorsRes, nfseRes, remunerationRes, receiptRes, systemRes, financialInstitutionsRes] = await Promise.all([
-      supabaseAdmin.from('company_profiles').select('id, nickname, cnpj, is_active, company_data').order('nickname', { ascending: true }),
-      supabaseAdmin.from('commercial_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
-      supabaseAdmin.from('company_sectors').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
-      supabaseAdmin.from('nfse_emission_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
-      supabaseAdmin.from('remuneration_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
-      supabaseAdmin.from('receipt_methods').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
-      supabaseAdmin.from('system_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
-      supabaseAdmin.from('financial_institutions').select('id, name, logo_url, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
+      safeLookup(supabaseAdmin.from('company_profiles').select('id, nickname, cnpj, is_active, company_data').order('nickname', { ascending: true })),
+      safeLookup(supabaseAdmin.from('commercial_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true })),
+      safeLookup(supabaseAdmin.from('company_sectors').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true })),
+      safeLookup(supabaseAdmin.from('nfse_emission_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true })),
+      safeLookup(supabaseAdmin.from('remuneration_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true })),
+      safeLookup(supabaseAdmin.from('receipt_methods').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true })),
+      safeLookup(supabaseAdmin.from('system_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true })),
+      safeLookup(supabaseAdmin.from('financial_institutions').select('id, name, logo_url, is_active').order('is_active', { ascending: false }).order('name', { ascending: true })),
     ])
 
-    const firstError = [companiesRes.error, commercialRes.error, sectorsRes.error, nfseRes.error, remunerationRes.error, receiptRes.error, systemRes.error, financialInstitutionsRes.error].find(Boolean)
-    if (firstError) throw firstError
+    if (companiesRes.error) throw companiesRes.error
+
+    const reportLookupError = (label: string, error: any) => {
+      if (error) console.error(`Erro ao carregar lookup de ${label}:`, error)
+    }
+
+    reportLookupError('tipos de comercial', commercialRes.error)
+    reportLookupError('setores', sectorsRes.error)
+    reportLookupError('tipos de emissão NFS-e', nfseRes.error)
+    reportLookupError('tipos de remuneração', remunerationRes.error)
+    reportLookupError('formas de recebimento', receiptRes.error)
+    reportLookupError('tipos de sistema', systemRes.error)
+    reportLookupError('instituições financeiras', financialInstitutionsRes.error)
+
+    const companies = (companiesRes.data || []).map((company: any) => {
+      const nickname = String(company?.nickname || '').trim()
+      const companyName = String(company?.company_data?.name || '').trim()
+      const cnpj = String(company?.cnpj || '').trim()
+      return {
+        ...company,
+        nickname,
+        display_name: nickname || companyName || cnpj || 'Empresa sem identificação',
+      }
+    })
 
     const payload: PromotoraLookupPayload = {
-      companies: (companiesRes.data || []) as PromotoraLookupPayload['companies'],
+      companies,
       commercialTypes: (commercialRes.data || []) as PromotoraLookupPayload['commercialTypes'],
       sectors: (sectorsRes.data || []) as PromotoraLookupPayload['sectors'],
       nfseEmissionTypes: (nfseRes.data || []) as PromotoraLookupPayload['nfseEmissionTypes'],
