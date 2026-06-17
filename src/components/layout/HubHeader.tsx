@@ -251,6 +251,7 @@ export default function HubHeader({ user }: HubHeaderProps) {
     { resource: 'sistema-config-empresa', href: '/rh/parceiros/config/provedores/empresas' },
     { resource: 'sistema-config-google', href: '/rh/parceiros/config/provedores/google' },
     { resource: 'sistema-config-nbs', href: '/rh/parceiros/config/provedores/nbs' },
+    { resource: 'sistema-config-tipos-remuneracao', href: '/rh/parceiros/config/provedores/tipos-remuneracao' },
     { resource: 'sistema-config-regimes-tributarios', href: '/rh/parceiros/config/provedores/regimes-tributarios' },
     { resource: 'sistema-config-recalculo-tributario', href: '/rh/parceiros/config/provedores/recalculo-tributario' },
     { resource: 'sistema-config-quarkrh', href: '/rh/parceiros/config/provedores/breve?api=QuarkRH' },

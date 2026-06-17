@@ -221,8 +221,9 @@ export default function HubPage() {
       links: [
         { label: 'Sistema de Cadastro de Parceiros (SCP)', href: '/rh/parceiros' },
         { label: 'Links de Bancos', href: '#', disabled: true },
+        { label: 'Instituições Financeiras', href: '/instituicoes-financeiras' },
         { label: 'Link de Averbadores', href: '#', disabled: true },
-        { label: 'Cadastro de Promotoras', href: '/promotoras' },
+        { label: 'Promotoras', href: '/promotoras' },
         { label: 'Manual de Rotinas Operacionais', href: '#', disabled: true },
         { label: 'Propostas Digitadas Internamente', href: '#', disabled: true },
         { label: 'Logins e Acessos Criados', href: '#', disabled: true },

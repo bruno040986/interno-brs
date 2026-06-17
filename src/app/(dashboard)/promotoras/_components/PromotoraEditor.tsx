@@ -41,7 +41,21 @@ import {
   type BankLookup,
   type CompanyBankAccount,
 } from '@/lib/company-bank-accounts'
-import type { PromotoraRecord, PromotoraCommercialContact, PromotoraOperationalContact, PromotoraSystemEntry } from '@/lib/promotoras'
+import { createEmptyFiscalFigure, normalizeCompanyFiscalData, type CompanyFiscalData, type FiscalFigureRecord } from '@/lib/company-fiscal-data'
+import { formatCnaeCode } from '@/lib/cnaes'
+import { formatCtnCode } from '@/lib/ctns'
+import { formatNbsCode } from '@/lib/nbs'
+import type {
+  PromotoraRecord,
+  PromotoraCommercialContact,
+  PromotoraOperationalContact,
+  PromotoraSystemEntry,
+  PromotoraFiscalConfiguration,
+  PromotoraFiscalData,
+  PromotoraFiscalRetentionOverride,
+} from '@/lib/promotoras'
+import PromotoraFinancialConfigurations from './PromotoraFinancialConfigurations'
+import PromotoraFiscalConfigurations from './PromotoraFiscalConfigurations'
 import type { PromotoraLookupPayload } from '../actions'
 import { getPromotora, getPromotoraLookups, savePromotora, setPromotoraStatus } from '../actions'
 
@@ -70,6 +84,20 @@ function onlyDigitsWithFallback(value: string) {
 
 function normalizeUrlValue(value: string) {
   return String(value || '').trim()
+}
+
+function formatDateDisplay(value: string | null | undefined) {
+  const raw = String(value || '').trim()
+  if (!raw) return '-'
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split('-')
+    return `${day}/${month}/${year}`
+  }
+  return raw
+}
+
+function createId(prefix = 'prom-fiscal') {
+  return globalThis.crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 function formatTaxPercentValue(value: string) {
@@ -394,6 +422,10 @@ function ReadOnlyField({
             gap: '0.75rem',
             paddingRight: '4.2rem',
             cursor: clickable ? 'pointer' : 'default',
+            background: '#fff',
+            color: 'var(--brs-gray-800)',
+            borderColor: 'var(--brs-gray-200)',
+            boxShadow: 'none',
           }}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -588,7 +620,7 @@ function emptyOperationalContact(): PromotoraOperationalContact {
 function emptySystemEntry(): PromotoraSystemEntry {
   return {
     id: globalThis.crypto?.randomUUID?.() || `system-${Date.now()}`,
-    system_type_ids: [],
+    system_type_id: '',
     descricao: '',
     url: '',
     observacoes: '',
@@ -855,6 +887,7 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
   const [saving, setSaving] = useState(false)
   const [busyStatus, setBusyStatus] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const lastFinanceSystemUrlRef = useRef('')
 
   async function loadData() {
     setLoading(true)
@@ -907,20 +940,7 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
         contacts_commercial: [],
         contacts_operational: [],
         fiscal_data: {
-          exige_nfse: false,
-          nfse_emission_type_id: '',
-          simples_nacional: '',
-          iss: '',
-          irpj_retido: '',
-          csll_retido: '',
-          pis_retido: '',
-          cofins_retido: '',
-          cbs_retido: '',
-          ibs_retido: '',
-          total_retencoes: '',
-          meio_envio_nfse: 'email',
-          nfse_email: '',
-          nfse_system_url: '',
+          configurations: [],
         },
         financial_data: {
           realiza_comissao: false,
@@ -937,6 +957,7 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
           empresa_contratada_id: '',
           conta_recebimento_index: '',
           forma_recebimento_id: '',
+          configurations: [],
         },
         bank_accounts: [createEmptyBankAccount({ is_principal: true })],
         systems: [],
@@ -955,10 +976,20 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
     return lookups.companies.find((company: any) => company.id === item.financial_data.empresa_contratada_id) || null
   }, [item?.financial_data?.empresa_contratada_id, lookups?.companies])
 
+  const selectedCompanyFiscalData = useMemo<CompanyFiscalData | null>(() => {
+    const raw = (selectedCompany as any)?.company_data?.fiscal_data
+    return normalizeCompanyFiscalData(raw)
+  }, [selectedCompany])
+
   const companyBankAccounts: CompanyBankAccount[] = useMemo(() => {
     const raw = (selectedCompany as any)?.company_data?.bank_accounts
     return Array.isArray(raw) ? raw : []
   }, [selectedCompany])
+
+  const availableFinancialRemunerationTypes = useMemo(() => {
+    const linkedIds = new Set((item?.fiscal_data?.configurations || []).map((config) => String(config.remuneration_type_id || '').trim()).filter(Boolean))
+    return (lookups?.remunerationTypes || []).filter((type) => linkedIds.has(type.id))
+  }, [item?.fiscal_data?.configurations, lookups?.remunerationTypes])
 
   const totalRetencoes = useMemo(() => {
     if (!item) return '0,00'
@@ -991,21 +1022,61 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
     if (!item) return
     setItem((prev) => {
       if (!prev) return prev
-      const fiscalUrl = String(prev.fiscal_data?.nfse_system_url || '').trim()
       const financeUrl = String(prev.financial_data?.url_sistema || '').trim()
       const systems = Array.isArray(prev.systems) ? [...prev.systems] : []
-      const ensureSystem = (url: string) => {
-        if (!url) return
-        const exists = systems.some((entry) => String(entry.url || '').trim() === url)
-        if (!exists) systems.push({ ...emptySystemEntry(), url })
+      const isMinimalSystem = (entry: PromotoraSystemEntry) =>
+        !String(entry.system_type_id || '').trim() &&
+        !String(entry.descricao || '').trim() &&
+        !String(entry.observacoes || '').trim()
+
+      const findEmptySlot = () => systems.findIndex((entry) => !String(entry.url || '').trim() && isMinimalSystem(entry))
+      const findUrlSlot = (url: string) => systems.findIndex((entry) => String(entry.url || '').trim() === url)
+
+      const syncFinanceUrl = (previousUrl: string, nextUrl: string) => {
+        if (previousUrl && previousUrl !== nextUrl) {
+          const previousIndex = findUrlSlot(previousUrl)
+          if (previousIndex >= 0 && isMinimalSystem(systems[previousIndex])) {
+            if (nextUrl) {
+              systems[previousIndex] = { ...systems[previousIndex], url: nextUrl }
+            } else {
+              systems.splice(previousIndex, 1)
+            }
+            return true
+          }
+        }
+
+        if (!nextUrl) return false
+        if (findUrlSlot(nextUrl) >= 0) return false
+
+        const emptyIndex = findEmptySlot()
+        if (emptyIndex >= 0) {
+          systems[emptyIndex] = { ...systems[emptyIndex], url: nextUrl }
+        } else {
+          systems.push({ ...emptySystemEntry(), url: nextUrl })
+        }
+        return true
       }
-      if (prev.fiscal_data?.meio_envio_nfse === 'sistema') ensureSystem(fiscalUrl)
-      if (prev.financial_data?.url_sistema) ensureSystem(financeUrl)
-      if (systems.length === (prev.systems || []).length) return prev
+
+      for (const config of prev.fiscal_data?.configurations || []) {
+        if (config?.meio_envio_nfse !== 'sistema') continue
+        const nextUrl = String(config.nfse_system_url || '').trim()
+        if (!nextUrl) continue
+        if (findUrlSlot(nextUrl) >= 0) continue
+        const emptyIndex = findEmptySlot()
+        if (emptyIndex >= 0) {
+          systems[emptyIndex] = { ...systems[emptyIndex], url: nextUrl }
+        } else {
+          systems.push({ ...emptySystemEntry(), url: nextUrl })
+        }
+      }
+
+      const changed = syncFinanceUrl(lastFinanceSystemUrlRef.current, financeUrl)
+      lastFinanceSystemUrlRef.current = financeUrl
+      if (!changed && systems.length === (prev.systems || []).length) return prev
       return { ...prev, systems }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.fiscal_data?.nfse_system_url, item?.financial_data?.url_sistema, item?.fiscal_data?.meio_envio_nfse])
+  }, [item?.fiscal_data?.configurations, item?.financial_data?.url_sistema])
 
   async function fillByCnpj() {
     if (!item) return
@@ -1176,7 +1247,7 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
   const isReadOnly = readOnly && !isNew
 
   return (
-    <div className="page-content">
+    <div className={`page-content ${isReadOnly ? 'promotora-readonly' : ''}`}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', fontSize: '1.15rem', fontWeight: 800, color: 'var(--brs-gray-900)' }}>
@@ -1530,282 +1601,43 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
       )}
 
       {activeTab === 'fiscal' && (
-        <div className="card" style={{ padding: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.9rem' }}>
-            <label className="form-group" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <input type="checkbox" checked={!!item.fiscal_data?.exige_nfse} disabled={isReadOnly} onChange={(e) => updateItem(item ? { ...item, fiscal_data: { ...(item.fiscal_data || {}), exige_nfse: e.target.checked } } : item)} />
-              Exige Emissão de NFSe
-            </label>
-            <div className="form-group">
-              <label className="form-label">Tipo de Emissão de NFSe</label>
-              <select className="form-control" disabled={isReadOnly || !item.fiscal_data?.exige_nfse} value={item.fiscal_data?.nfse_emission_type_id || ''} onChange={(e) => updateItem(item ? { ...item, fiscal_data: { ...(item.fiscal_data || {}), nfse_emission_type_id: e.target.value } } : item)}>
-                <option value="">Selecione</option>
-                {lookups?.nfseEmissionTypes?.map((opt) => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-              </select>
-            </div>
-            <div style={{ gridColumn: '1 / -1', overflowX: 'auto' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.35rem', flexWrap: 'nowrap', minWidth: 1040 }}>
-                {fiscalTaxFields.map((field, index) => {
-                  const rawValue = String((item.fiscal_data as any)?.[field.key] || '')
-
-                  return (
-                    <div key={field.key} style={{ display: 'flex', alignItems: 'flex-end', gap: '0.35rem', flex: '1 1 0', minWidth: 110 }}>
-                      <div style={{ flex: '1 1 0', minWidth: 0 }}>
-                        <label className="form-label">{field.label}</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <input
-                            className="form-control"
-                            disabled={isReadOnly || !item.fiscal_data?.exige_nfse}
-                          value={editingFiscalField === field.key ? rawValue : formatTaxPercentValue(rawValue)}
-                          onFocus={() => setEditingFiscalField(field.key)}
-                          onBlur={() => {
-                            setEditingFiscalField(null)
-                            updateItem(
-                              item
-                                ? {
-                                    ...item,
-                                    fiscal_data: {
-                                      ...(item.fiscal_data || {}),
-                                      [field.key]: formatTaxPercentValue(String((item.fiscal_data as any)?.[field.key] || '')),
-                                    },
-                                  }
-                                : item,
-                            )
-                          }}
-                          onChange={(e) =>
-                            updateItem(
-                              item
-                                ? {
-                                    ...item,
-                                    fiscal_data: {
-                                      ...(item.fiscal_data || {}),
-                                      [field.key]: sanitizeTaxPercentValue(e.target.value),
-                                    },
-                                  }
-                                : item,
-                            )
-                          }
-                            placeholder="0,00"
-                          inputMode="decimal"
-                          maxLength={6}
-                            style={{ width: '100%', minWidth: 0, textAlign: 'right' }}
-                          />
-                          <span aria-hidden="true" style={{ color: 'var(--brs-gray-400)', fontWeight: 700, pointerEvents: 'none', flex: '0 0 auto' }}>%</span>
-                        </div>
-                      </div>
-                      {index < fiscalTaxFields.length - 1 && (
-                        <div
-                          aria-hidden="true"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 20,
-                            minWidth: 20,
-                            paddingBottom: '0.95rem',
-                            color: 'var(--brs-gray-500)',
-                            fontWeight: 800,
-                            fontSize: '1.2rem',
-                            flex: '0 0 auto',
-                          }}
-                        >
-                          +
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-
-                <div
-                  aria-hidden="true"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 20,
-                    minWidth: 20,
-                    paddingBottom: '0.95rem',
-                    color: 'var(--brs-gray-500)',
-                    fontWeight: 800,
-                    fontSize: '1.2rem',
-                    flex: '0 0 auto',
-                  }}
-                >
-                  =
-                </div>
-
-                <div style={{ flex: '1 1 0', minWidth: 130 }}>
-                  <label className="form-label">Totalizador</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <input
-                      className="form-control"
-                      readOnly
-                      value={totalRetencoes}
-                      style={{
-                        background: '#EFF6FF',
-                        borderColor: '#93C5FD',
-                        color: 'var(--brs-navy)',
-                        fontWeight: 800,
-                        width: '100%',
-                        minWidth: 0,
-                        textAlign: 'right',
-                      }}
-                    />
-                    <span aria-hidden="true" style={{ color: 'var(--brs-navy)', fontWeight: 800, pointerEvents: 'none', flex: '0 0 auto' }}>%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Meio de Envio de NFSe</label>
-              <select className="form-control" disabled={isReadOnly || !item.fiscal_data?.exige_nfse} value={item.fiscal_data?.meio_envio_nfse || 'email'} onChange={(e) => updateItem(item ? { ...item, fiscal_data: { ...(item.fiscal_data || {}), meio_envio_nfse: e.target.value as any } } : item)}>
-                <option value="email">E-mail</option>
-                <option value="sistema">Sistema</option>
-              </select>
-            </div>
-            {item.fiscal_data?.meio_envio_nfse === 'email' ? (
-              <div className="form-group">
-                <label className="form-label">E-mail</label>
-                {isReadOnly ? (
-                  <ReadOnlyField label="" value={maskEmailInput(item.fiscal_data?.nfse_email || '')} kind="email" />
-                ) : (
-                  <input className="form-control" disabled={!item.fiscal_data?.exige_nfse} value={maskEmailInput(item.fiscal_data?.nfse_email || '')} onChange={(e) => updateItem(item ? { ...item, fiscal_data: { ...(item.fiscal_data || {}), nfse_email: maskEmailInput(e.target.value) } } : item)} />
-                )}
-              </div>
-            ) : (
-              <div className="form-group">
-                <label className="form-label">URL do Sistema</label>
-                {isReadOnly ? (
-                  <ReadOnlyField label="" value={item.fiscal_data?.nfse_system_url || ''} kind="url" />
-                ) : (
-                  <input className="form-control" disabled={!item.fiscal_data?.exige_nfse} type="url" value={item.fiscal_data?.nfse_system_url || ''} onChange={(e) => updateItem(item ? { ...item, fiscal_data: { ...(item.fiscal_data || {}), nfse_system_url: normalizeUrlValue(e.target.value) } } : item)} />
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        <PromotoraFiscalConfigurations
+          value={item.fiscal_data || { configurations: [] }}
+          companyFiscalData={selectedCompanyFiscalData}
+          companyLabel={String(selectedCompany?.nickname || '')}
+          companyId={String(selectedCompany?.id || '')}
+          lookups={lookups}
+          disabled={isReadOnly}
+          onChange={(next) => updateItem(item ? { ...item, fiscal_data: next } : item)}
+          onAutoSave={save}
+        />
       )}
 
       {activeTab === 'financeiro' && (
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          <div className="card" style={{ padding: '1rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.9rem' }}>
-              <label className="form-group" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <input type="checkbox" checked={!!item.financial_data?.realiza_comissao} disabled={isReadOnly} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), realiza_comissao: e.target.checked } } : item)} />
-                Realiza pagamento de Comissão
-              </label>
-              <label className="form-group" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <input type="checkbox" checked={!!item.financial_data?.solicitar_saque} disabled={isReadOnly} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), solicitar_saque: e.target.checked } } : item)} />
-                Solicitar saque
-              </label>
-              <div className="form-group">
-                <label className="form-label">Dias de Saque</label>
-                <select className="form-control" multiple size={7} disabled={isReadOnly || !item.financial_data?.solicitar_saque} value={item.financial_data?.saque_dias || []} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), saque_dias: Array.from(e.target.selectedOptions).map((opt) => opt.value) } } : item)}>
-                  {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((day) => <option key={day} value={day}>{day}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Horário de Saque Início/Fim</label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <input className="form-control" type="time" disabled={isReadOnly || !item.financial_data?.solicitar_saque} value={item.financial_data?.saque_inicio || ''} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), saque_inicio: e.target.value } } : item)} />
-                  <input className="form-control" type="time" disabled={isReadOnly || !item.financial_data?.solicitar_saque} value={item.financial_data?.saque_fim || ''} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), saque_fim: e.target.value } } : item)} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Prazo Pagamento</label>
-                <input className="form-control" type="number" min={1} max={99} disabled={isReadOnly} value={item.financial_data?.prazo_pagamento || 1} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), prazo_pagamento: Math.max(1, Math.min(99, Number(e.target.value || 1))) } } : item)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Dia de Pagamento</label>
-                <select className="form-control" disabled={isReadOnly} value={item.financial_data?.flag_dia_pagamento ? 'true' : 'false'} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), flag_dia_pagamento: e.target.value === 'true' } } : item)}>
-                  <option value="false">Não</option>
-                  <option value="true">Sim</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Modo do Dia</label>
-                <select className="form-control" disabled={isReadOnly || !item.financial_data?.flag_dia_pagamento} value={item.financial_data?.dia_semana_ativo ? 'semana' : 'mes'} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), dia_semana_ativo: e.target.value === 'semana' } } : item)}>
-                  <option value="semana">Dia da Semana</option>
-                  <option value="mes">Dia do Mês</option>
-                </select>
-              </div>
-              {item.financial_data?.dia_semana_ativo ? (
-                <div className="form-group">
-                  <label className="form-label">Dia da Semana</label>
-                  <select className="form-control" disabled={isReadOnly || !item.financial_data?.flag_dia_pagamento} value={item.financial_data?.dia_semana_valor || ''} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), dia_semana_valor: e.target.value } } : item)}>
-                    <option value="">Selecione</option>
-                    {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'].map((day) => <option key={day} value={day}>{day}</option>)}
-                  </select>
-                </div>
-              ) : (
-                <div className="form-group">
-                  <label className="form-label">Dia do Mês</label>
-                  <input className="form-control" type="number" min={1} max={31} disabled={isReadOnly || !item.financial_data?.flag_dia_pagamento} value={item.financial_data?.dia_mes_valor || ''} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), dia_mes_valor: e.target.value } } : item)} />
-                </div>
-              )}
-              <div className="form-group">
-                <label className="form-label">Empresa Contratada</label>
-                <select className="form-control" disabled={isReadOnly} value={item.financial_data?.empresa_contratada_id || ''} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), empresa_contratada_id: e.target.value, conta_recebimento_index: '' } } : item)}>
-                  <option value="">Selecione</option>
-                  {lookups?.companies?.map((company) => <option key={company.id} value={company.id}>{company.nickname}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Conta para Recebimento</label>
-                <select className="form-control" disabled={isReadOnly || !selectedCompany} value={item.financial_data?.conta_recebimento_index || ''} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), conta_recebimento_index: e.target.value } } : item)}>
-                  <option value="">Selecione</option>
-                  {companyBankAccounts.map((acc, index) => (
-                    <option key={acc.id || index} value={String(index)}>
-                      {formatBankLabel({ code: acc.bank_code, name: acc.bank_name, fullName: acc.bank_full_name })}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Forma de Recebimento</label>
-                <select className="form-control" disabled={isReadOnly} value={item.financial_data?.forma_recebimento_id || ''} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), forma_recebimento_id: e.target.value } } : item)}>
-                  <option value="">Selecione</option>
-                  {lookups?.receiptMethods?.map((opt) => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">URL do Sistema</label>
-                {isReadOnly ? (
-                  <ReadOnlyField label="" value={item.financial_data?.url_sistema || ''} kind="url" />
-                ) : (
-                  <input className="form-control" type="url" value={item.financial_data?.url_sistema || ''} onChange={(e) => updateItem(item ? { ...item, financial_data: { ...(item.financial_data || {}), url_sistema: normalizeUrlValue(e.target.value) } } : item)} />
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="card" style={{ padding: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-              <div style={{ fontWeight: 800, color: 'var(--brs-gray-900)' }}>Dados Bancários da Promotora</div>
-              {!isReadOnly && (
-                <button type="button" className="btn btn-outline" onClick={() => updateItem(item ? { ...item, bank_accounts: [...item.bank_accounts, createEmptyBankAccount()] } : item)}>
-                  <Plus size={16} />
-                  Nova Conta Bancária
-                </button>
-              )}
-            </div>
-
-            <div style={{ display: 'grid', gap: '1rem' }}>
-              {item.bank_accounts.map((account, index) => (
-                <BankAccountCard
-                  key={account.id || index}
-                  account={account}
-                  companyCnpj={item.cnpj || ''}
-                  banks={banks}
-                  readonly={isReadOnly}
-                  onChange={(next) => updateItem(item ? { ...item, bank_accounts: item.bank_accounts.map((acc, i) => (i === index ? next : acc)) } : item)}
-                  onRemove={() => updateItem(item ? { ...item, bank_accounts: item.bank_accounts.filter((_, i) => i !== index) } : item)}
-                  onMakePrincipal={() => updateItem(item ? { ...item, bank_accounts: item.bank_accounts.map((acc, i) => ({ ...acc, is_principal: i === index })) } : item)}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        <PromotoraFinancialConfigurations
+          value={item.financial_data || {
+            realiza_comissao: false,
+            solicitar_saque: false,
+            saque_dias: [],
+            saque_inicio: '',
+            saque_fim: '',
+            url_sistema: '',
+            prazo_pagamento: 1,
+            flag_dia_pagamento: false,
+            dia_semana_ativo: true,
+            dia_semana_valor: '',
+            dia_mes_valor: '',
+            empresa_contratada_id: '',
+            conta_recebimento_index: '',
+            forma_recebimento_id: '',
+            configurations: [],
+          }}
+          lookups={lookups}
+          availableRemunerationTypes={availableFinancialRemunerationTypes}
+          companyBankAccounts={companyBankAccounts}
+          disabled={isReadOnly}
+          onChange={(next) => updateItem(item ? { ...item, financial_data: next } : item)}
+        />
       )}
 
       {activeTab === 'sistemas' && (
@@ -1823,9 +1655,9 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>URL</th>
                   <th>Tipo de Sistema</th>
                   <th>Descrição</th>
-                  <th>URL</th>
                   <th>Observações</th>
                   <th>Status</th>
                   <th>Ações</th>
@@ -1837,12 +1669,40 @@ export default function PromotoraEditor({ promotoraId, readOnly = false, isNew =
                 ) : item.systems.map((row, index) => (
                   <tr key={row.id}>
                     <td>
-                      <select className="form-control" multiple size={4} disabled={isReadOnly} value={row.system_type_ids} onChange={(e) => updateSystem(index, { ...row, system_type_ids: Array.from(e.target.selectedOptions).map((opt) => opt.value) })}>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <input
+                          className="form-control"
+                          readOnly={isReadOnly}
+                          type="url"
+                          value={row.url || ''}
+                          onChange={(e) => updateSystem(index, { ...row, url: e.target.value })}
+                          placeholder="https://www.sistema.com.br"
+                          style={{ cursor: isReadOnly ? 'text' : undefined }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          disabled={!String(row.url || '').trim()}
+                          onClick={() => copyText(String(row.url || '').trim())}
+                          aria-label="Copiar URL do sistema"
+                          title="Copiar URL"
+                        >
+                          <Copy size={14} />
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <select
+                        className="form-control"
+                        disabled={isReadOnly}
+                        value={row.system_type_id || ''}
+                        onChange={(e) => updateSystem(index, { ...row, system_type_id: e.target.value })}
+                      >
+                        <option value="">Selecione</option>
                         {lookups?.systemTypes?.map((opt) => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
                       </select>
                     </td>
                     <td><input className="form-control" disabled={isReadOnly} value={row.descricao || ''} onChange={(e) => updateSystem(index, { ...row, descricao: e.target.value })} /></td>
-                    <td><input className="form-control" disabled={isReadOnly} value={row.url || ''} onChange={(e) => updateSystem(index, { ...row, url: e.target.value })} /></td>
                     <td><input className="form-control" disabled={isReadOnly} value={row.observacoes || ''} onChange={(e) => updateSystem(index, { ...row, observacoes: e.target.value })} /></td>
                     <td>
                       <span className={`badge ${row.is_active ? 'badge-success' : 'badge-gray'}`}>{row.is_active ? 'Ativo' : 'Inativo'}</span>

@@ -21,8 +21,45 @@ export type PromotoraLookupPayload = {
   commercialTypes: Array<{ id: string; name: string; is_active: boolean }>
   sectors: Array<{ id: string; name: string; is_active: boolean }>
   nfseEmissionTypes: Array<{ id: string; name: string; is_active: boolean }>
+  remunerationTypes: Array<{ id: string; name: string; is_active: boolean }>
   receiptMethods: Array<{ id: string; name: string; is_active: boolean }>
   systemTypes: Array<{ id: string; name: string; is_active: boolean }>
+  financialInstitutions: Array<{ id: string; name: string; logo_url: string; is_active: boolean }>
+}
+
+function validateFinancialConfigurations(payload: PromotoraRecord) {
+  const configurations = Array.isArray(payload.financial_data?.configurations) ? payload.financial_data.configurations : []
+  if (configurations.length === 0) {
+    throw new Error('Adicione pelo menos uma Configuração Financeira.')
+  }
+
+  const allowedRemunerationIds = new Set(
+    (payload.fiscal_data?.configurations || [])
+      .map((config) => String(config.remuneration_type_id || '').trim())
+      .filter(Boolean),
+  )
+  const seen = new Set<string>()
+
+  configurations.forEach((config, index) => {
+    const remunerationTypeId = String(config.remuneration_type_id || '').trim()
+    const institutionId = String(config.financial_institution_id || '').trim()
+
+    if (!remunerationTypeId) {
+      throw new Error(`Informe o Tipo de Remuneração na Configuração Financeira ${index + 1}.`)
+    }
+    if (!institutionId) {
+      throw new Error(`Informe a Instituição Financeira na Configuração Financeira ${index + 1}.`)
+    }
+    if (allowedRemunerationIds.size > 0 && !allowedRemunerationIds.has(remunerationTypeId)) {
+      throw new Error(`O Tipo de Remuneração da Configuração Financeira ${index + 1} precisa estar vinculado à aba Fiscal.`)
+    }
+
+    const key = `${remunerationTypeId}::${institutionId}`
+    if (seen.has(key)) {
+      throw new Error('Não é permitido salvar duas configurações financeiras com a mesma combinação de Tipo de Remuneração e Instituição Financeira.')
+    }
+    seen.add(key)
+  })
 }
 
 export async function getPromotoras() {
@@ -67,16 +104,18 @@ export async function getPromotoraLookups() {
   try {
     await requirePermission('promotoras')
 
-    const [companiesRes, commercialRes, sectorsRes, nfseRes, receiptRes, systemRes] = await Promise.all([
+    const [companiesRes, commercialRes, sectorsRes, nfseRes, remunerationRes, receiptRes, systemRes, financialInstitutionsRes] = await Promise.all([
       supabaseAdmin.from('company_profiles').select('id, nickname, cnpj, is_active, company_data').order('nickname', { ascending: true }),
       supabaseAdmin.from('commercial_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
       supabaseAdmin.from('company_sectors').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
       supabaseAdmin.from('nfse_emission_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
+      supabaseAdmin.from('remuneration_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
       supabaseAdmin.from('receipt_methods').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
       supabaseAdmin.from('system_types').select('id, name, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
+      supabaseAdmin.from('financial_institutions').select('id, name, logo_url, is_active').order('is_active', { ascending: false }).order('name', { ascending: true }),
     ])
 
-    const firstError = [companiesRes.error, commercialRes.error, sectorsRes.error, nfseRes.error, receiptRes.error, systemRes.error].find(Boolean)
+    const firstError = [companiesRes.error, commercialRes.error, sectorsRes.error, nfseRes.error, remunerationRes.error, receiptRes.error, systemRes.error, financialInstitutionsRes.error].find(Boolean)
     if (firstError) throw firstError
 
     const payload: PromotoraLookupPayload = {
@@ -84,8 +123,10 @@ export async function getPromotoraLookups() {
       commercialTypes: (commercialRes.data || []) as PromotoraLookupPayload['commercialTypes'],
       sectors: (sectorsRes.data || []) as PromotoraLookupPayload['sectors'],
       nfseEmissionTypes: (nfseRes.data || []) as PromotoraLookupPayload['nfseEmissionTypes'],
+      remunerationTypes: (remunerationRes.data || []) as PromotoraLookupPayload['remunerationTypes'],
       receiptMethods: (receiptRes.data || []) as PromotoraLookupPayload['receiptMethods'],
       systemTypes: (systemRes.data || []) as PromotoraLookupPayload['systemTypes'],
+      financialInstitutions: (financialInstitutionsRes.data || []) as PromotoraLookupPayload['financialInstitutions'],
     }
 
     return { success: true, lookups: payload }
@@ -102,6 +143,7 @@ export async function savePromotora(payload: PromotoraRecord) {
     const row = normalizePromotoraRecord(payload)
     if (!row.cnpj) return { success: false, error: 'O CNPJ é obrigatório.' }
     if (!row.razao_social) return { success: false, error: 'A razão social é obrigatória.' }
+    validateFinancialConfigurations(row)
 
     const dbRow: Record<string, any> = {
       cnpj: row.cnpj,
@@ -144,7 +186,7 @@ export async function savePromotora(payload: PromotoraRecord) {
       return {
         success: false,
         error:
-          "A tabela 'promotoras' ainda não existe. Aplique a migration do Supabase criada para Cadastro de Promotoras.",
+          "A tabela 'promotoras' ainda não existe. Aplique a migration do Supabase criada para Promotoras.",
       }
     }
     if ((error as any)?.code === '23505') {

@@ -24,6 +24,7 @@ import {
 import { normalizeCommercialTypeName, type CommercialTypeRecord } from '@/lib/commercial-types'
 import { normalizeCnaeCodeDigits, normalizeCnaeDescription, type CnaeRecord } from '@/lib/cnaes'
 import { normalizeCtnCodeDigits, normalizeCtnDescription, type CtnRecord } from '@/lib/ctns'
+import { normalizeFinancialInstitutionLogo, normalizeFinancialInstitutionName, type FinancialInstitutionRecord } from '@/lib/financial-institutions'
 import { normalizeNbsCodeDigits, normalizeNbsDescription, type NbsRecord } from '@/lib/nbs'
 import { normalizeCompanySectorName, type CompanySectorRecord } from '@/lib/company-sectors'
 import { normalizeNfseEmissionTypeName, type NfseEmissionTypeRecord } from '@/lib/nfse-emission-types'
@@ -1935,6 +1936,101 @@ export async function setSystemTypeStatus(id: string, isActive: boolean) {
     return { success: true }
   } catch (error: any) {
     console.error('Erro ao alterar status do tipo de sistema:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getFinancialInstitutions() {
+  try {
+    await requirePermission('sistema-config-instituicoes')
+
+    const { data, error } = await supabaseAdmin
+      .from('financial_institutions')
+      .select('*')
+      .order('is_active', { ascending: false })
+      .order('name', { ascending: true })
+    if (error) throw error
+    return { success: true, items: data || [] }
+  } catch (error: any) {
+    console.error('Erro ao buscar instituições financeiras:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function saveFinancialInstitution(payload: FinancialInstitutionRecord) {
+  try {
+    await requirePermission('sistema-config-instituicoes', payload.id ? 'can_edit' : 'can_include')
+
+    const name = normalizeFinancialInstitutionName(payload.name)
+    if (!name) {
+      return { success: false, error: 'O nome da instituição financeira é obrigatório.' }
+    }
+
+    const row = {
+      name,
+      logo_url: normalizeFinancialInstitutionLogo(payload.logo_url || ''),
+      is_active: payload.is_active !== false,
+      deleted_at: payload.is_active === false ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (payload.id) {
+      const { error } = await supabaseAdmin
+        .from('financial_institutions')
+        .update(row)
+        .eq('id', payload.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabaseAdmin
+        .from('financial_institutions')
+        .insert({
+          ...row,
+          created_at: new Date().toISOString(),
+        })
+      if (error) throw error
+    }
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/instituicoes-financeiras')
+    revalidatePath('/rh/parceiros/config/provedores/breve?api=Instituicoes')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao salvar instituição financeira:', error)
+    if (String(error?.message || '').includes("Could not find the 'financial_institutions'")) {
+      return {
+        success: false,
+        error:
+          "A tabela 'financial_institutions' ainda não existe. Aplique a migration do Supabase criada para Instituições Financeiras.",
+      }
+    }
+    if ((error as any)?.code === '23505') {
+      return { success: false, error: 'Já existe uma instituição financeira com esse nome.' }
+    }
+    return { success: false, error: error.message }
+  }
+}
+
+export async function setFinancialInstitutionStatus(id: string, isActive: boolean) {
+  try {
+    await requirePermission('sistema-config-instituicoes', 'can_activate_inactivate')
+
+    if (!id) return { success: false, error: 'ID inválido.' }
+    const { error } = await supabaseAdmin
+      .from('financial_institutions')
+      .update({
+        is_active: isActive,
+        deleted_at: isActive ? null : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/rh/parceiros/config/provedores')
+    revalidatePath('/instituicoes-financeiras')
+    revalidatePath('/rh/parceiros/config/provedores/breve?api=Instituicoes')
+    return { success: true }
+  } catch (error: any) {
+    console.error('Erro ao alterar status da instituição financeira:', error)
     return { success: false, error: error.message }
   }
 }

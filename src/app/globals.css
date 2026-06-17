@@ -242,6 +242,20 @@ body {
   cursor: not-allowed;
 }
 
+.promotora-readonly .form-control:disabled,
+.promotora-readonly .form-control[readonly] {
+  background: #fff;
+  color: var(--brs-gray-800);
+  opacity: 1;
+  cursor: default;
+}
+
+.promotora-readonly .form-control:disabled::placeholder,
+.promotora-readonly .form-control[readonly]::placeholder {
+  color: var(--brs-gray-400);
+  opacity: 1;
+}
+
 textarea.form-control { resize: vertical; min-height: 100px; }
 
 .form-hint { font-size: 0.75rem; color: var(--brs-gray-400); margin-top: 0.25rem; }

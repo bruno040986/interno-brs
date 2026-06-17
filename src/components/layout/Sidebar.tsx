@@ -108,6 +108,7 @@ export default function Sidebar() {
     'sistema-config-cnae',
     'sistema-config-ctn',
     'sistema-config-nbs',
+    'sistema-config-tipos-remuneracao',
     'sistema-config-quarkrh',
     'sistema-config-contaazul',
     'sistema-config-arw',
@@ -245,7 +246,9 @@ export default function Sidebar() {
         { label: 'Cadastro da Empresa', href: '/rh/parceiros/config/provedores/empresas', icon: Building2 },
         { label: 'Tipos de Comercial', href: '/rh/parceiros/config/provedores/tipos-comercial', icon: BriefcaseBusiness },
         { label: 'Setores', href: '/rh/parceiros/config/provedores/setores', icon: Building },
+        { label: 'Forma de Recebimento', href: '/rh/parceiros/config/provedores/formas-recebimento', icon: HandCoins },
         { label: 'Tipos de Sistemas', href: '/rh/parceiros/config/provedores/tipos-sistemas', icon: Cpu },
+        { label: 'Tipos de Remuneração', href: '/rh/parceiros/config/provedores/tipos-remuneracao', icon: HandCoins },
       ]),
     },
     {
