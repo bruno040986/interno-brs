@@ -153,29 +153,71 @@ function resolveRetentionField(
 function SectionValue({
   label,
   field,
+  editable = false,
+  onChange,
+  disabled = false,
 }: {
   label: string
   field: TaxRateField
+  editable?: boolean
+  onChange?: (next: string) => void
+  disabled?: boolean
 }) {
+  const canEdit = !disabled && editable && !!onChange
+
   return (
     <div style={{ minWidth: 100 }}>
       <div style={{ marginBottom: '0.35rem', fontSize: '0.72rem', fontWeight: 800, color: 'var(--brs-gray-600)', textTransform: 'uppercase' }}>
         {label}
       </div>
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', width: 100 }}>
         <input
           className="form-control"
-          readOnly
+          inputMode={canEdit ? 'numeric' : undefined}
+          readOnly={!canEdit}
+          disabled={disabled}
           value={formatPercentSequence(field.value)}
+          onKeyDown={(event) => {
+            if (!canEdit) return
+            const key = event.key
+            if (key === 'Backspace') {
+              event.preventDefault()
+              onChange?.(normalizeDigits(field.value.slice(0, -1)))
+              return
+            }
+            if (key === 'Delete') {
+              event.preventDefault()
+              onChange?.('')
+              return
+            }
+            if (key === 'Tab' || key.startsWith('Arrow') || key === 'Home' || key === 'End') return
+            if (/^\d$/.test(key)) {
+              event.preventDefault()
+              onChange?.(normalizeDigits(`${field.value}${key}`))
+              return
+            }
+            if (key.length === 1) event.preventDefault()
+          }}
+          onPaste={(event) => {
+            if (!canEdit) return
+            const digits = event.clipboardData.getData('text').replace(/\D/g, '')
+            if (!digits) return
+            event.preventDefault()
+            onChange?.(normalizeDigits(`${field.value}${digits}`))
+          }}
+          onChange={(event) => {
+            if (!canEdit) return
+            onChange?.(normalizeDigits(event.target.value))
+          }}
           style={{
-            width: 100,
+            width: '100%',
             minWidth: 100,
             maxWidth: 100,
             boxSizing: 'border-box',
-            paddingRight: '1.55rem',
+            paddingRight: '1.7rem',
             fontWeight: 800,
             textAlign: 'right',
-            background: '#F8FAFC',
+            background: canEdit ? '#fff' : '#F8FAFC',
           }}
         />
         <span
@@ -183,8 +225,10 @@ function SectionValue({
           style={{
             position: 'absolute',
             right: '0.55rem',
-            top: '50%',
-            transform: 'translateY(-50%)',
+            top: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
             color: 'var(--brs-gray-500)',
             fontSize: '0.9rem',
             fontWeight: 800,
@@ -248,12 +292,18 @@ function SectionPreview({
   fields,
   showTotal,
   acceptsCredit,
+  editable = false,
+  disabled = false,
+  onChangeField,
 }: {
   title: string
   description: string
   fields: SectionField[]
   showTotal?: boolean
   acceptsCredit?: boolean
+  editable?: boolean
+  disabled?: boolean
+  onChangeField?: (key: string, next: string) => void
 }) {
   if (fields.length === 0) return null
   const total = getTaxRegimeTotals({
@@ -288,7 +338,13 @@ function SectionPreview({
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.8rem', flexWrap: 'wrap' }}>
         {fields.map((field, index) => (
           <div key={field.key} style={{ display: 'flex', alignItems: 'flex-end', gap: '0.8rem', flexWrap: 'nowrap' }}>
-            <SectionValue label={field.label} field={field.field} />
+            <SectionValue
+              label={field.label}
+              field={field.field}
+              editable={editable}
+              disabled={disabled}
+              onChange={onChangeField ? (next) => onChangeField(field.key, next) : undefined}
+            />
             {showTotal && index < fields.length - 1 ? (
               <div style={{ paddingBottom: '0.95rem', color: 'var(--brs-gray-500)', fontSize: '1.15rem', fontWeight: 800 }}>+</div>
             ) : null}
@@ -326,7 +382,7 @@ function RetentionField({
   disabled: boolean
 }) {
   const resolved = resolveRetentionField(baseField, override)
-  const editable = !disabled && resolved.editable
+  const editable = !disabled
 
   return (
     <div style={{ minWidth: 118, maxWidth: 118 }}>
@@ -345,11 +401,12 @@ function RetentionField({
         <input type="checkbox" disabled={disabled} checked={!!override?.custom} onChange={(e) => onToggle(e.target.checked)} />
         <span>{label}</span>
       </label>
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', width: 118 }}>
         <input
           className="form-control"
           inputMode="numeric"
-          disabled={!editable}
+          readOnly={!editable}
+          disabled={disabled}
           value={formatPercentSequence(resolved.value)}
           onKeyDown={(event) => {
             if (!editable) return
@@ -384,11 +441,11 @@ function RetentionField({
             onChange(normalizeDigits(event.target.value))
           }}
           style={{
-            width: 118,
+            width: '100%',
             minWidth: 118,
             maxWidth: 118,
             boxSizing: 'border-box',
-            paddingRight: '1.55rem',
+            paddingRight: '1.7rem',
             fontWeight: 800,
             textAlign: 'right',
             background: editable ? '#fff' : '#F8FAFC',
@@ -399,8 +456,10 @@ function RetentionField({
           style={{
             position: 'absolute',
             right: '0.55rem',
-            top: '50%',
-            transform: 'translateY(-50%)',
+            top: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
             color: editable ? 'var(--brs-gray-500)' : 'var(--brs-gray-400)',
             fontSize: '0.9rem',
             fontWeight: 800,
@@ -542,7 +601,11 @@ function ConfigurationCard({
     return null
   }, [config.figure_id, config.figure_snapshot, figureOptions])
 
-  const configFigure = selectedFigure ? { ...selectedFigure, config: selectedFigure.config } : config.figure_snapshot
+  const configFigure = useMemo(() => {
+    if (config.figure_snapshot?.id) return config.figure_snapshot
+    if (selectedFigure) return cloneFigure(selectedFigure)
+    return createEmptyFiscalFigure()
+  }, [config.figure_snapshot, selectedFigure])
 
   const section1 = [
     { key: 'simples_nacional', label: 'Simples Nacional', field: configFigure.config.section_1.simples_nacional },
@@ -575,6 +638,21 @@ function ConfigurationCard({
         [key]: next,
       },
     }, false)
+  }
+
+  function updateFigureSnapshot(mutator: (draft: FiscalFigureRecord) => void) {
+    const nextFigure = cloneFigure(configFigure)
+    mutator(nextFigure)
+    update({
+      figure_snapshot: nextFigure,
+      figure_label: formatFigureLabel(nextFigure),
+    }, false)
+  }
+
+  function updateSection1Field(key: 'simples_nacional' | 'iss', next: string) {
+    updateFigureSnapshot((draft) => {
+      draft.config.section_1[key].value = normalizeDigits(next)
+    })
   }
 
   function selectFigure(nextFigureId: string) {
@@ -757,6 +835,9 @@ function ConfigurationCard({
             title="Alíquotas Fixas Sobre a Emissão de NFSe"
             description="Somente um dos campos pode ser habilitado de acordo com a legislação do regime tributário."
             fields={section1}
+            editable
+            disabled={disabled}
+            onChangeField={updateSection1Field}
           />
 
           <SectionPreview
