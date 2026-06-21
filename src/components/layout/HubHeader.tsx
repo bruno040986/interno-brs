@@ -12,7 +12,12 @@ import { useRouter } from 'next/navigation'
 import type { ThemePreference, UserProfile } from '@/types'
 import { createClient } from '@/lib/supabase/client'
 import { getMyEffectivePermissions } from '@/lib/auth/actions'
-import { hasAnyPermission, hasPermission, type EffectivePermission } from '@/lib/auth/permissions'
+import {
+  hasAnyPermission,
+  hasPermission,
+  systemConfigNavEntries,
+  type EffectivePermission,
+} from '@/lib/auth/permissions'
 import { getPraiseNotifications, getPraiseUnreadCount, markPraiseNotificationsRead } from '@/app/(dashboard)/praises/actions'
 import { setMyThemePreference } from '@/app/(dashboard)/theme/actions'
 import { applyResolvedTheme, readStoredThemePreference, resolveTheme, storeThemePreference } from '@/components/theme/theme'
@@ -244,27 +249,12 @@ export default function HubHeader({ user }: HubHeaderProps) {
     return hasPermission(permissions, resourceId)
   }
 
-  const configEntries = [
-    { resource: 'sistema-config-email', href: '/rh/parceiros/config/provedores/email' },
-    { resource: 'sistema-config-whatsapp', href: '/rh/parceiros/config/provedores/whatsapp' },
-    { resource: 'sistema-config-assinatura', href: '/rh/parceiros/config/provedores/assinatura' },
-    { resource: 'sistema-config-empresa', href: '/rh/parceiros/config/provedores/empresas' },
-    { resource: 'sistema-config-google', href: '/rh/parceiros/config/provedores/google' },
-    { resource: 'sistema-config-nbs', href: '/rh/parceiros/config/provedores/nbs' },
-    { resource: 'sistema-config-tipos-remuneracao', href: '/rh/parceiros/config/provedores/tipos-remuneracao' },
-    { resource: 'sistema-config-regimes-tributarios', href: '/rh/parceiros/config/provedores/regimes-tributarios' },
-    { resource: 'sistema-config-recalculo-tributario', href: '/rh/parceiros/config/provedores/recalculo-tributario' },
-    { resource: 'sistema-config-quarkrh', href: '/rh/parceiros/config/provedores/breve?api=QuarkRH' },
-    { resource: 'sistema-config-contaazul', href: '/rh/parceiros/config/provedores/breve?api=ContaAzul' },
-    { resource: 'sistema-config-arw', href: '/rh/parceiros/config/provedores/breve?api=ARW' },
-    { resource: 'sistema-config-instituicoes', href: '/rh/parceiros/config/provedores/breve?api=Instituicoes' },
-    { resource: 'sistema-config-crm', href: '/rh/parceiros/config/provedores/breve?api=CRM' },
-  ]
+  const configEntries = systemConfigNavEntries
 
   const systemApps = [
     { label: 'Home HUB', icon: LayoutGrid, href: '/', color: '#475569', id: 'home' },
     { label: 'Usuários', icon: User, href: '/usuarios', color: '#7c3aed', id: 'sistema-usuarios-root' },
-    { label: 'Configurações', icon: Settings, href: '/rh/parceiros/config/provedores', color: '#475569', id: 'sistema-config-root' },
+    { label: 'Configurações', icon: Settings, href: '/rh/parceiros/config', color: '#475569', id: 'sistema-config-root' },
     { label: 'Comunicados', icon: Megaphone, href: '/comunicados', color: '#dc2626', id: 'sistema-comunicados' },
     { label: 'Links', icon: ExternalLink, href: '/links', color: '#ea580c', id: 'sistema-links' },
     { label: 'Ajuda', icon: HelpCircle, href: '#', color: '#db2777', id: 'sistema-ajuda' },

@@ -65,6 +65,7 @@ const SYSTEM_MODULES = [
   { id: 'sistema-config-whatsapp', name: 'API WhatsApp', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-config-assinatura', name: 'API Assinatura Eletrônica', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-config-google', name: 'Google', parentId: 'sistema-config-root', level: 2 },
+  { id: 'sistema-config-cpf', name: 'API CPF', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-config-nbs', name: 'NBS', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-config-quarkrh', name: 'API QuarkRH', parentId: 'sistema-config-root', level: 2 },
   { id: 'sistema-config-contaazul', name: 'API Conta Azul', parentId: 'sistema-config-root', level: 2 },

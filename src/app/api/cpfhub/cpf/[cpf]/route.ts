@@ -1,9 +1,19 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getCpfHubApiKey } from '@/lib/cpfhub-config'
 
 export const runtime = 'nodejs'
 
 type CacheEntry = { expiresAt: number; status: number; body: unknown }
+type CpfHubCacheRow = {
+  cpf: string
+  success: boolean
+  response: unknown
+  last_error: unknown
+  cached_until: string | Date | null
+  hit_count: number | null
+  last_accessed_at: string
+}
 
 const CACHE_TTL_SUCCESS_MS = 1000 * 60 * 60 * 24 // 24h
 const CACHE_TTL_ERROR_MS = 1000 * 60 * 5 // 5min (evita gastar crédito em retries)
@@ -36,9 +46,9 @@ export async function GET(_: Request, ctx: { params: Promise<{ cpf: string }> | 
     return res
   }
 
-  const apiKey = process.env.CPFHUB_API_KEY
+  const apiKey = await getCpfHubApiKey()
   if (!apiKey) {
-    return NextResponse.json({ error: 'CPFHUB_API_KEY não configurada' }, { status: 500 })
+    return NextResponse.json({ error: 'CPFHub API key não configurada' }, { status: 500 })
   }
 
   // Layer 2: cache persistente no Supabase
@@ -50,7 +60,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ cpf: string }> | 
       .eq('cpf', cpf)
       .maybeSingle()
 
-    const cachedUntil = row?.cached_until ? new Date(row.cached_until as any).getTime() : 0
+    const cachedUntil = row?.cached_until ? new Date(String((row as CpfHubCacheRow).cached_until)).getTime() : 0
     if (row && cachedUntil > Date.now()) {
       await supabase
         .from('cpfhub_cache')
@@ -103,18 +113,16 @@ export async function GET(_: Request, ctx: { params: Promise<{ cpf: string }> | 
       // Persist best-effort no Supabase (cache de erro curto)
       try {
         const supabase = await createAdminClient()
-        await supabase.from('cpfhub_cache').upsert(
-          {
-            cpf,
-            success: false,
-            response: null,
-            last_error: payload,
-            cached_until: new Date(Date.now() + CACHE_TTL_ERROR_MS).toISOString(),
-            hit_count: 1,
-            last_accessed_at: new Date().toISOString(),
-          } as any,
-          { onConflict: 'cpf' },
-        )
+        const cacheRow: CpfHubCacheRow = {
+          cpf,
+          success: false,
+          response: null,
+          last_error: payload,
+          cached_until: new Date(Date.now() + CACHE_TTL_ERROR_MS).toISOString(),
+          hit_count: 1,
+          last_accessed_at: new Date().toISOString(),
+        }
+        await supabase.from('cpfhub_cache').upsert(cacheRow, { onConflict: 'cpf' })
       } catch {
         // ignore
       }
@@ -132,10 +140,9 @@ export async function GET(_: Request, ctx: { params: Promise<{ cpf: string }> | 
     }
 
     // Persist best-effort no Supabase (cache de sucesso longo)
-    try {
-      const supabase = await createAdminClient()
-      await supabase.from('cpfhub_cache').upsert(
-        {
+      try {
+        const supabase = await createAdminClient()
+        const cacheRow: CpfHubCacheRow = {
           cpf,
           success: true,
           response: body,
@@ -143,12 +150,11 @@ export async function GET(_: Request, ctx: { params: Promise<{ cpf: string }> | 
           cached_until: new Date(Date.now() + CACHE_TTL_SUCCESS_MS).toISOString(),
           hit_count: 1,
           last_accessed_at: new Date().toISOString(),
-        } as any,
-        { onConflict: 'cpf' },
-      )
-    } catch {
-      // ignore
-    }
+        }
+        await supabase.from('cpfhub_cache').upsert(cacheRow, { onConflict: 'cpf' })
+      } catch {
+        // ignore
+      }
 
     const out = NextResponse.json(body, { status: 200 })
     out.headers.set('x-cpfhub-cache', 'MISS')
@@ -164,18 +170,16 @@ export async function GET(_: Request, ctx: { params: Promise<{ cpf: string }> | 
 
     try {
       const supabase = await createAdminClient()
-      await supabase.from('cpfhub_cache').upsert(
-        {
-          cpf,
-          success: false,
-          response: null,
-          last_error: payload,
-          cached_until: new Date(Date.now() + CACHE_TTL_ERROR_MS).toISOString(),
-          hit_count: 1,
-          last_accessed_at: new Date().toISOString(),
-        } as any,
-        { onConflict: 'cpf' },
-      )
+      const cacheRow: CpfHubCacheRow = {
+        cpf,
+        success: false,
+        response: null,
+        last_error: payload,
+        cached_until: new Date(Date.now() + CACHE_TTL_ERROR_MS).toISOString(),
+        hit_count: 1,
+        last_accessed_at: new Date().toISOString(),
+      }
+      await supabase.from('cpfhub_cache').upsert(cacheRow, { onConflict: 'cpf' })
     } catch {
       // ignore
     }

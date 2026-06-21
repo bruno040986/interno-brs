@@ -133,6 +133,7 @@ export default function Sidebar() {
     if (href === '/rh/parceiros/config/provedores/whatsapp') return canView('sistema-config-whatsapp')
     if (href === '/rh/parceiros/config/provedores/assinatura') return canView('sistema-config-assinatura')
     if (href === '/rh/parceiros/config/provedores/empresas') return canView('sistema-config-empresa')
+    if (href === '/rh/parceiros/config/provedores/cpf') return canView('sistema-config-cpf')
     if (href === '/rh/parceiros/config/provedores/cnae') return canView('sistema-config-cnae')
     if (href === '/rh/parceiros/config/provedores/ctn') return canView('sistema-config-ctn')
     if (href === '/rh/parceiros/config/provedores/nbs') return canView('sistema-config-nbs')
@@ -260,6 +261,7 @@ export default function Sidebar() {
         { label: 'API WhatsApp', href: '/rh/parceiros/config/provedores/whatsapp', icon: MessageSquare },
         { label: 'API Assinatura Eletrônica', href: '/rh/parceiros/config/provedores/assinatura', icon: FileText },
         { label: 'Google', href: '/rh/parceiros/config/provedores/google', icon: Globe },
+        { label: 'API CPF', href: '/rh/parceiros/config/provedores/cpf', icon: Key },
       ]),
     },
     {
