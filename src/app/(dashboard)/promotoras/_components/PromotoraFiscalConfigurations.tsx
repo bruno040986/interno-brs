@@ -649,9 +649,11 @@ function ConfigurationCard({
     }, false)
   }
 
-  function updateSection1Field(key: 'simples_nacional' | 'iss', next: string) {
+  function updateSection1Field(key: string, next: string) {
     updateFigureSnapshot((draft) => {
-      draft.config.section_1[key].value = normalizeDigits(next)
+      if (key === 'simples_nacional' || key === 'iss') {
+        draft.config.section_1[key].value = normalizeDigits(next)
+      }
     })
   }
 

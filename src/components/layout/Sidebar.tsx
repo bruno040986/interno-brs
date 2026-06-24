@@ -168,6 +168,10 @@ export default function Sidebar() {
       if (item.href.startsWith('/rh/parceiros/config/provedores')) return canSeeProviderRoute(item.href)
 
       if (item.href === '/promotoras') return canView('promotoras')
+      if (item.href === '/agente-corban') return canView('agente-corban')
+      if (item.href === '/agente-corban/niveis-acesso') return canView('agente-corban-niveis-acesso')
+      if (item.href === '/agente-corban/tipos-agente') return canView('agente-corban-tipos-agente')
+      if (item.href === '/agente-corban/regras-fisico') return canView('agente-corban-regras-fisico')
       if (item.href === '/rh/parceiros') return canView('scp-crm')
       if (item.href === '/rh/parceiros/config/processos') return canView('scp-processos')
       if (item.href === '/rh/parceiros/config/formularios') return canView('scp-construtor')
@@ -387,6 +391,16 @@ export default function Sidebar() {
     navItems = [
       { type: 'section', label: 'Promotoras' },
       { label: 'Promotoras', href: '/promotoras', icon: Users },
+      { type: 'section', label: 'Sistema' },
+      { label: 'Voltar ao Workspace', href: '/', icon: LayoutDashboard },
+    ]
+  } else if (pathname.startsWith('/agente-corban')) {
+    navItems = [
+      { type: 'section', label: 'Agentes Corban' },
+      { label: 'Agentes Corban', href: '/agente-corban', icon: UserCog },
+      { label: 'Nível de Acesso', href: '/agente-corban/niveis-acesso', icon: Key },
+      { label: 'Tipo de Agente', href: '/agente-corban/tipos-agente', icon: BriefcaseBusiness },
+      { label: 'Regra de Físico', href: '/agente-corban/regras-fisico', icon: Scale },
       { type: 'section', label: 'Sistema' },
       { label: 'Voltar ao Workspace', href: '/', icon: LayoutDashboard },
     ]

@@ -144,6 +144,7 @@ export async function updateSession(request: NextRequest) {
     '/cadastro-parceiro',
     '/cartao',
     '/api/lookups',
+    '/api/cnpjws',
     '/api/cpfhub',
   ]
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))

@@ -127,11 +127,17 @@ export function formatBankAccountFromSeq(seq: string): string {
 }
 
 export function parseBankAgencySeq(value: string) {
-  return onlyDigits(value).slice(0, 5)
+  // Keep only the meaningful digits so masked placeholders like 0000-0 do not
+  // make the field start "full" and block further typing.
+  const digits = onlyDigits(value).slice(0, 5)
+  return digits.replace(/^0+/, '')
 }
 
 export function parseBankAccountSeq(value: string) {
-  return onlyDigits(value).slice(0, 11)
+  // Same rule for account numbers: return the editable sequence, not the
+  // fully padded display string.
+  const digits = onlyDigits(value).slice(0, 11)
+  return digits.replace(/^0+/, '')
 }
 
 export function getBankCode3(code: any): string {
@@ -141,7 +147,12 @@ export function getBankCode3(code: any): string {
 }
 
 export function formatBankLabel(bank: BankLookup) {
-  return `${String(bank.code || '').toString().padStart(3, '0')} - ${String(bank.name || bank.fullName || '').trim()}`.trim()
+  const code = getBankCode3(bank.code)
+  const name = String(bank.name || bank.fullName || '').trim()
+
+  if (!code && !name) return ''
+  if (code && name) return `${code} - ${name}`
+  return code || name
 }
 
 export function getBankBrandIcon(bankCode?: string, bankName?: string) {

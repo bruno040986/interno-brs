@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@supabase/supabase-js'
+import { buildAgenteCorbanLegacyPersistenceRow } from '@/lib/agente-corban'
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 const ALLOWED_UPLOAD_MIME_TYPES: string[] = ['application/pdf', 'image/jpeg', 'image/png']
@@ -217,6 +218,7 @@ export async function submitPartnerRegistration(payload: {
   rg_issuer?: string
   rg_state?: string
   birth_date?: string
+  gender?: string
   
   // Endereço
   cep?: string
@@ -263,50 +265,56 @@ export async function submitPartnerRegistration(payload: {
       : ''
 
     const cpfCnpjClean = String(payload.cpf_cnpj || '').trim()
+    const partnerInsertBase = buildAgenteCorbanLegacyPersistenceRow(
+      {
+        form_id: payload.form_id,
+        person_type: payload.person_type,
+        cpf_cnpj: cpfCnpjClean,
+        name: payload.name,
+        fantasy_name: payload.fantasy_name,
+        representante_legal: payload.representante_legal,
+        rg: payload.rg,
+        rg_expedition_date: payload.rg_expedition_date,
+        rg_issuer: payload.rg_issuer,
+        rg_state: payload.rg_state,
+        birth_date: payload.birth_date,
+        gender: payload.gender,
+        cep: payload.cep,
+        address_street: payload.address_street,
+        address_number: payload.address_number,
+        address_complement: payload.address_complement,
+        address_neighborhood: payload.address_neighborhood,
+        address_city: payload.address_city,
+        address_state: payload.address_state,
+        phone_whatsapp: payload.phone_whatsapp,
+        phone_whatsapp_financeiro: payload.phone_whatsapp_financeiro,
+        phone_commercial: payload.phone_commercial,
+        phone_residential: payload.phone_residential,
+        phone_support: payload.phone_support,
+        email_comissao: payload.email_comissao,
+        email_informe: payload.email_informe,
+        email_formalizacao: payload.email_formalizacao,
+        email_proposta: payload.email_proposta,
+        email_mesa_liberacao: payload.email_mesa_liberacao,
+        email_juridico: payload.email_juridico,
+        email_proprio_cunho: payload.email_proprio_cunho,
+        commission_receive_type: payload.commission_receive_type,
+        bank_code: payload.bank_code,
+        bank_name: payload.bank_name,
+        bank_agency: payload.bank_agency,
+        bank_account: payload.bank_account,
+        bank_account_type: payload.bank_account_type,
+        pix_type: payload.pix_type,
+        pix_key: payload.pix_key,
+        additional_data: payload.additional_data ?? {},
+      },
+    )
 
     const partnerInsert: Record<string, any> = {
-      form_id: payload.form_id,
-      person_type: payload.person_type,
-      cpf_cnpj: cpfCnpjClean,
-      name: payload.name,
-      fantasy_name: payload.fantasy_name || null,
-      representante_legal: payload.representante_legal || null,
-      rg: payload.rg || null,
-      rg_expedition_date: payload.rg_expedition_date || null,
-      rg_issuer: payload.rg_issuer || null,
-      rg_state: payload.rg_state || null,
-      birth_date: payload.birth_date || null,
-      cep: payload.cep || null,
-      address_street: payload.address_street || null,
-      address_number: payload.address_number || null,
-      address_complement: payload.address_complement || null,
-      address_neighborhood: payload.address_neighborhood || null,
-      address_city: payload.address_city || null,
-      address_state: payload.address_state || null,
-      phone_whatsapp: payload.phone_whatsapp,
-      phone_whatsapp_financeiro: payload.phone_whatsapp_financeiro || null,
-      phone_commercial: payload.phone_commercial || null,
-      phone_residential: payload.phone_residential || null,
-      phone_support: payload.phone_support || null,
-      email_comissao: payload.email_comissao,
-      email_informe: payload.email_informe || null,
-      email_formalizacao: payload.email_formalizacao || null,
-      email_proposta: payload.email_proposta || null,
-      email_mesa_liberacao: payload.email_mesa_liberacao || null,
-      email_juridico: payload.email_juridico || null,
-      email_proprio_cunho: payload.email_proprio_cunho || null,
-      commission_receive_type: payload.commission_receive_type || null,
-      bank_code: payload.bank_code || null,
-      bank_name: payload.bank_name || null,
-      bank_agency: payload.bank_agency || null,
-      bank_account: payload.bank_account || null,
-      bank_account_type: payload.bank_account_type || null,
-      pix_type: payload.pix_type || null,
-      pix_key: payload.pix_key || null,
-      additional_data: payload.additional_data ?? {},
-      status: 'novo',
+      ...partnerInsertBase,
       created_at: now,
       updated_at: now,
+      status: 'novo',
     }
 
     let partner: any = null
@@ -338,11 +346,58 @@ export async function submitPartnerRegistration(payload: {
         }
 
         // Merge de additional_data (não apaga chaves existentes quando o payload vier parcial)
+        const nextAdditional = { ...(existing as any).additional_data, ...(payload.additional_data || {}) }
+        updateData.additional_data = nextAdditional
+
         try {
-          const nextAdditional = { ...(existing as any).additional_data, ...(payload.additional_data || {}) }
-          updateData.additional_data = nextAdditional
+          const mergedLegacy = buildAgenteCorbanLegacyPersistenceRow(
+            {
+              form_id: payload.form_id,
+              person_type: payload.person_type,
+              cpf_cnpj: cpfCnpjClean,
+              name: payload.name,
+              fantasy_name: payload.fantasy_name,
+              representante_legal: payload.representante_legal,
+              rg: payload.rg,
+              rg_expedition_date: payload.rg_expedition_date,
+              rg_issuer: payload.rg_issuer,
+              rg_state: payload.rg_state,
+              birth_date: payload.birth_date,
+              gender: payload.gender,
+              cep: payload.cep,
+              address_street: payload.address_street,
+              address_number: payload.address_number,
+              address_complement: payload.address_complement,
+              address_neighborhood: payload.address_neighborhood,
+              address_city: payload.address_city,
+              address_state: payload.address_state,
+              phone_whatsapp: payload.phone_whatsapp,
+              phone_whatsapp_financeiro: payload.phone_whatsapp_financeiro,
+              phone_commercial: payload.phone_commercial,
+              phone_residential: payload.phone_residential,
+              phone_support: payload.phone_support,
+              email_comissao: payload.email_comissao,
+              email_informe: payload.email_informe,
+              email_formalizacao: payload.email_formalizacao,
+              email_proposta: payload.email_proposta,
+              email_mesa_liberacao: payload.email_mesa_liberacao,
+              email_juridico: payload.email_juridico,
+              email_proprio_cunho: payload.email_proprio_cunho,
+              commission_receive_type: payload.commission_receive_type,
+              bank_code: payload.bank_code,
+              bank_name: payload.bank_name,
+              bank_agency: payload.bank_agency,
+              bank_account: payload.bank_account,
+              bank_account_type: payload.bank_account_type,
+              pix_type: payload.pix_type,
+              pix_key: payload.pix_key,
+              additional_data: nextAdditional,
+            },
+            (existing as any).corban_data || {},
+          )
+          updateData.corban_data = mergedLegacy.corban_data
         } catch {
-          // ignore
+          updateData.corban_data = (partnerInsertBase as any).corban_data || {}
         }
 
         const { data: updated, error: uErr } = await supabaseAdmin

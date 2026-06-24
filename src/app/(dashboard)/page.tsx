@@ -223,6 +223,7 @@ export default function HubPage() {
         { label: 'Links de Bancos', href: '#', disabled: true },
         { label: 'Instituições Financeiras', href: '/instituicoes-financeiras' },
         { label: 'Link de Averbadores', href: '#', disabled: true },
+        { label: 'Agente Corban', href: '/agente-corban' },
         { label: 'Promotoras', href: '/promotoras' },
         { label: 'Manual de Rotinas Operacionais', href: '#', disabled: true },
         { label: 'Propostas Digitadas Internamente', href: '#', disabled: true },
@@ -265,7 +266,6 @@ export default function HubPage() {
         { label: 'Sistema de Mailing', href: '#', disabled: true },
         { label: 'Reembolso Comercial', href: '#', disabled: true },
         { label: 'BRS Ajuda', href: '#', disabled: true },
-        { label: 'Agentes Parceiros', href: '#', disabled: true },
         { label: 'Negociações', href: '#', disabled: true },
         { label: 'Fechamento Mensal', href: '#', disabled: true },
       ]
@@ -291,6 +291,9 @@ export default function HubPage() {
         }
         if (link.href === '/rh/parceiros') {
           return canView('scp-crm')
+        }
+        if (link.href === '/agente-corban') {
+          return canView('agente-corban')
         }
         if (link.href === '/rh/parceiros/config/comercial') {
           return hasAnyPermission(permissions, [
